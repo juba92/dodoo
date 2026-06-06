@@ -120,7 +120,7 @@ dodoo/                          # main library package
 │   └── access.py               # ir.rule loader + domain injection
 ├── addons/
 │   └── base/
-│       ├── __manifest__.py     # {"name": "base", "version": "1.0", "depends": []}
+│       ├── __manifest__.py     # {"name": "base", "version": "1.0.0", "depends": []}
 │       ├── models/
 │       │   ├── __init__.py
 │       │   ├── res_users.py    # res.users model

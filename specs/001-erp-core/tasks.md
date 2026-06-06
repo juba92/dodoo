@@ -93,12 +93,15 @@ bootstrap sequence that creates core registry tables before any module can be in
   decision (ORM, async driver, module loader, migration strategy, password hashing, session
   storage, JSON-RPC dispatch, STI strategy, access rule enforcement); use format:
   title / status / context / decision / consequences
-- [ ] T014 Implement `dodoo/core/bootstrap.py`: `bootstrap(conn)` function that executes
-  hard-coded `CREATE TABLE IF NOT EXISTS` SQL for the four core registry tables
+- [ ] T014 [P] Implement `dodoo/core/bootstrap.py`: `bootstrap(ddl_conn, dml_conn)` function
+  that executes hard-coded `CREATE TABLE IF NOT EXISTS` SQL for the four core registry tables
   (`ir_module`, `ir_model`, `ir_model_field`, `ir_session`) using their canonical column
-  definitions; called from `Environment.create()` before any module install; this raw-SQL
-  phase runs before the ORM is operational, solving the bootstrapping chicken-and-egg
-  problem; wrap in a transaction so partial failures roll back cleanly
+  definitions via `ddl_conn`; called from `Environment.create()` before any module install;
+  this raw-SQL phase runs before the ORM is operational, solving the bootstrapping
+  chicken-and-egg problem; wrap DDL in a transaction so partial failures roll back cleanly;
+  after bootstrap, run `SELECT has_table_privilege(current_user, 'ir_module', 'TRIGGER')` on
+  `dml_conn` — if the result is TRUE, emit `logging.warning("SEC-005: DATABASE_URL user
+  holds DDL-level privileges; use a least-privilege credential in production")`
 - [ ] T015 [P] Implement Python model classes for core registry tables in
   `dodoo/addons/base/models/ir_meta.py`: `IrModule` (`_name = "ir.module"`, fields: name
   Char required, version Char, state Char default "uninstalled", installed_version Char,
@@ -120,6 +123,11 @@ table; CRUD + domain-filter queries work in-process; STI child models share pare
 
 **Independent Test**: Run `pytest tests/unit/ tests/integration/test_orm_crud.py
 tests/integration/test_migrations.py` with a live PostgreSQL; all pass.
+
+**OWASP Pre-check** (SEC-006): Before committing any US1 implementation task, review the OWASP
+Top 10 for the ORM/registry subsystem and document findings in `docs/adr/`; key areas:
+Injection (A03 — parameterised queries only, no string interpolation), Insecure Design
+(A04 — reserved field name guards), Security Misconfiguration (A05 — column type enforcement).
 
 ### Tests for User Story 1 ⚠️ Write FIRST — must FAIL before implementation
 
@@ -202,6 +210,11 @@ circular deps fail with clear errors.
 **Independent Test**: Run `pytest tests/unit/test_loader.py
 tests/integration/test_migrations.py -k "loader or module"` — all pass without US3/US4.
 
+**OWASP Pre-check** (SEC-006): Before committing any US2 implementation task, review the OWASP
+Top 10 for the module loader and document findings in `docs/adr/`; key areas: Insecure Design
+(A04 — manifest schema validation), Security Misconfiguration (A05 — ADDONS_PATH traversal
+guard), Vulnerable and Outdated Components (A06 — manifest `depends` allowlist).
+
 ### Tests for User Story 2 ⚠️ Write FIRST — must FAIL before implementation
 
 - [ ] T030 [P] [US2] Write unit tests for manifest parsing and discovery in
@@ -259,6 +272,11 @@ validates session token before handler is invoked (stub until US4 wires real ses
 **Independent Test**: Run `pytest tests/integration/test_http_jsonrpc.py` — all pass
 (uses httpx AsyncClient; PostgreSQL via testcontainers).
 
+**OWASP Pre-check** (SEC-006): Before committing any US3 implementation task, review the OWASP
+Top 10 for the HTTP layer and document findings in `docs/adr/`; key areas: Broken Access
+Control (A01 — auth middleware coverage), Injection (A03 — JSON-RPC param validation),
+Security Misconfiguration (A05 — CORS restricted to localhost).
+
 ### Tests for User Story 3 ⚠️ Write FIRST — must FAIL before implementation
 
 - [ ] T038 [P] [US3] Write integration tests for JSON-RPC 2.0 in
@@ -266,8 +284,10 @@ validates session token before handler is invoked (stub until US4 wires real ses
   returns `{"jsonrpc":"2.0","id":N,"result":{...}}`; assert missing `method` field returns
   error code `-32600`; assert unknown service returns `-32601`; assert wrong param count
   returns `-32602`; assert internal exception returns `-32603`; assert unauthenticated
-  `object.execute_kw` returns `-32000` AuthenticationError; assert a module-registered
-  REST route `GET /test/ping` (auth="public") returns 200
+  `object.execute_kw` returns `-32000` AuthenticationError; assert a
+  conftest-fixture-registered route `GET /test/ping` (auth="public", registered via
+  `RouteRegistry` in the test session's `conftest.py` setup and deregistered on teardown —
+  do NOT register this route in any production module) returns 200
 
 ### Implementation for User Story 3
 
@@ -305,8 +325,7 @@ validates session token before handler is invoked (stub until US4 wires real ses
   `dodoo/addons/base/http/__init__.py`: `POST /web/session/authenticate` (calls
   `common.authenticate`), `POST /web/session/logout` (calls `common.logout`),
   `GET /web/health` (pings DB connection, returns `{"status":"ok","db":"connected"}` or
-  503 `{"status":"degraded","db":"disconnected"}`); also register test-only route
-  `GET /test/ping` (auth="public", returns 200) used by T038
+  503 `{"status":"degraded","db":"disconnected"}`)
 - [ ] T046 [US3] Wire `python -m dodoo server --host --port` in `dodoo/__main__.py`:
   import uvicorn; call `create_app(env)`; run `uvicorn.run(app, host, port)` with JSON
   access logs enabled
@@ -325,6 +344,11 @@ restricts reads; write denial returns AccessError; logout immediately invalidate
 middleware wired to real session validator.
 
 **Independent Test**: Run `pytest tests/integration/test_access_rules.py` — all pass.
+
+**OWASP Pre-check** (SEC-006): Before committing any US4 implementation task, review the OWASP
+Top 10 for the auth/access subsystem and document findings in `docs/adr/`; key areas: Broken
+Access Control (A01 — ir.rule completeness), Cryptographic Failures (A02 — Argon2id config),
+Identification & Authentication Failures (A07 — session expiry and token entropy).
 
 ### Tests for User Story 4 ⚠️ Write FIRST — must FAIL before implementation
 
