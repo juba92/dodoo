@@ -211,8 +211,9 @@ invalidates the session immediately.
 
 - **SEC-001**: All input at system boundaries (HTTP request body, JSON-RPC params, domain filter
   tuples, file paths in add-on discovery) MUST be validated before processing.
-- **SEC-002**: Passwords MUST be stored as salted hashes (bcrypt or Argon2); plaintext passwords
-  MUST never be logged or persisted anywhere.
+- **SEC-002**: Passwords MUST be stored using Argon2id (argon2-cffi library); bcrypt is
+  explicitly excluded — see research.md decision #5. Plaintext passwords MUST never be
+  logged or persisted anywhere.
 - **SEC-003**: Session tokens MUST be cryptographically random with at least 128 bits of entropy;
   tokens MUST NOT be predictable or sequential.
 - **SEC-004**: The ORM MUST use parameterised queries exclusively; string interpolation into SQL
