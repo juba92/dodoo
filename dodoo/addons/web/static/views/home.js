@@ -2,32 +2,63 @@ import * as api from '/web/static/api.js';
 import { App } from '/web/static/app.js';
 
 const _MODULE_ICONS = {
-  base: '🧩',
-  web: '🌐',
-  mail: '✉️',
-  sale: '💰',
+  base:     '🧩',
+  web:      '🌐',
+  mail:     '✉️',
+  sale:     '💰',
   purchase: '🛒',
-  account: '📊',
-  hr: '👥',
-  project: '📋',
-  stock: '📦',
-  crm: '🤝',
+  account:  '📊',
+  hr:       '👥',
+  project:  '📋',
+  stock:    '📦',
+  crm:      '🤝',
 };
+
+// Odoo-style per-module colors (mirrors Odoo's app tile palette)
+const _MODULE_COLORS = {
+  base:     '#875A7B',
+  web:      '#5B9BD5',
+  mail:     '#E94F37',
+  sale:     '#00A09D',
+  purchase: '#F07B40',
+  account:  '#7C5295',
+  hr:       '#44B3A2',
+  project:  '#0083A9',
+  stock:    '#B64DA0',
+  crm:      '#D15E49',
+};
+
+const _COLOR_CYCLE = [
+  '#875A7B','#E94F37','#00A09D','#F07B40','#5B9BD5',
+  '#7C5295','#44B3A2','#0083A9','#B64DA0','#D15E49',
+  '#6B9E26','#C19D00',
+];
 
 function _iconFor(name) {
   return _MODULE_ICONS[name] ?? '📦';
 }
 
+function _colorFor(name) {
+  if (_MODULE_COLORS[name]) return _MODULE_COLORS[name];
+  // Deterministic color from module name hash
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0x7fffffff;
+  return _COLOR_CYCLE[h % _COLOR_CYCLE.length];
+}
+
 export async function render(container, params) {
   container.innerHTML = '';
 
-  // Module detail mode: #/module/:name
+  // Module detail mode: #/module/:name (sidebar is visible, no home-mode)
   if (params.mode === 'module' && params.name) {
+    document.getElementById('app')?.classList.remove('home-mode');
     await _renderModuleDetail(container, params.name);
     return;
   }
 
-  // Home mode: show all module tiles
+  // Home screen — full width like Odoo's app switcher (no sidebar)
+  document.getElementById('app')?.classList.add('home-mode');
+
   const loading = document.createElement('div');
   loading.className = 'loading';
   loading.textContent = 'Loading modules…';
@@ -80,10 +111,12 @@ export async function render(container, params) {
     tile.setAttribute('aria-label', `Open ${mod.name} module`);
     tile.onclick = () => App.navigate(`#/module/${mod.name}`);
 
-    const icon = document.createElement('span');
-    icon.className = 'tile-icon';
-    icon.setAttribute('aria-hidden', 'true');
-    icon.textContent = _iconFor(mod.name);
+    // Colored icon square (Odoo-style)
+    const iconWrap = document.createElement('div');
+    iconWrap.className = 'tile-icon';
+    iconWrap.style.setProperty('--tile-bg', _colorFor(mod.name));
+    iconWrap.setAttribute('aria-hidden', 'true');
+    iconWrap.textContent = _iconFor(mod.name);
 
     const name = document.createElement('span');
     name.className = 'tile-name';
@@ -93,7 +126,7 @@ export async function render(container, params) {
     version.className = 'tile-version';
     version.textContent = mod.version ?? '';
 
-    tile.appendChild(icon);
+    tile.appendChild(iconWrap);
     tile.appendChild(name);
     tile.appendChild(version);
     grid.appendChild(tile);

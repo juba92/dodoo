@@ -12,9 +12,25 @@ export function render(container, _params) {
   const card = document.createElement('div');
   card.className = 'login-card';
 
-  const h1 = document.createElement('h1');
-  h1.textContent = 'Dodoo ERP';
-  card.appendChild(h1);
+  // Logo section (Odoo-style: colored mark + app name + subtitle)
+  const logoDiv = document.createElement('div');
+  logoDiv.className = 'login-logo';
+
+  const logoMark = document.createElement('div');
+  logoMark.className = 'login-logo-mark';
+  logoMark.textContent = 'D';
+  logoDiv.appendChild(logoMark);
+
+  const logoText = document.createElement('div');
+  logoText.className = 'login-logo-text';
+  logoText.textContent = 'Dodoo ERP';
+  logoDiv.appendChild(logoText);
+  card.appendChild(logoDiv);
+
+  const subtitle = document.createElement('p');
+  subtitle.className = 'login-subtitle';
+  subtitle.textContent = 'Sign in to your account';
+  card.appendChild(subtitle);
 
   // Session-expired banner
   const qs = new URLSearchParams(window.location.hash.split('?')[1] ?? '');
@@ -70,7 +86,7 @@ export function render(container, _params) {
   const submitBtn = document.createElement('button');
   submitBtn.type = 'submit';
   submitBtn.className = 'btn btn-primary btn-full';
-  submitBtn.textContent = 'Sign In';
+  submitBtn.textContent = 'Log in';
   card.appendChild(submitBtn);
 
   container.appendChild(card);
@@ -108,7 +124,7 @@ export function render(container, _params) {
       errEl.style.display = 'block';
       document.getElementById('status').textContent = 'Sign in failed: ' + errEl.textContent;
       submitBtn.disabled = false;
-      submitBtn.textContent = 'Sign In';
+      submitBtn.textContent = 'Log in';
       pwInput.focus();
     }
   }

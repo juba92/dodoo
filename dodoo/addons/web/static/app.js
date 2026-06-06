@@ -37,20 +37,33 @@ function _labelFromHash(hash) {
 function _buildShell() {
   const app = document.getElementById('app');
   app.innerHTML = '';
+  app.classList.remove('home-mode');
 
-  // Header
+  // Navbar — white bar matching Odoo's top navigation
   const header = document.createElement('header');
   header.className = 'app-header';
   header.setAttribute('role', 'banner');
 
-  const logoBtn = document.createElement('button');
-  logoBtn.className = 'logo';
-  logoBtn.textContent = 'Dodoo ERP';
-  logoBtn.setAttribute('aria-label', 'Go to home');
-  logoBtn.onclick = () => App.navigate('#/home');
-  header.appendChild(logoBtn);
+  // Apps grid icon → navigate home
+  const homeBtn = document.createElement('button');
+  homeBtn.className = 'nav-home-btn';
+  homeBtn.setAttribute('aria-label', 'Go to home');
+  homeBtn.onclick = () => App.navigate('#/home');
+  homeBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+    <rect x="1" y="1" width="7" height="7" rx="1.5"/>
+    <rect x="12" y="1" width="7" height="7" rx="1.5"/>
+    <rect x="1" y="12" width="7" height="7" rx="1.5"/>
+    <rect x="12" y="12" width="7" height="7" rx="1.5"/>
+  </svg>`;
+  header.appendChild(homeBtn);
 
-  // Breadcrumb strip inside header
+  // App name
+  const appName = document.createElement('span');
+  appName.className = 'nav-app-name';
+  appName.textContent = 'Dodoo ERP';
+  header.appendChild(appName);
+
+  // Breadcrumb
   const bcNav = document.createElement('nav');
   bcNav.setAttribute('aria-label', 'breadcrumb');
   const bcOl = document.createElement('ol');
@@ -59,15 +72,17 @@ function _buildShell() {
   bcNav.appendChild(bcOl);
   header.appendChild(bcNav);
 
-  // User area
+  // User avatar (click to sign out)
   const userArea = document.createElement('div');
   userArea.className = 'user-area';
-  const logoutBtn = document.createElement('button');
-  logoutBtn.className = 'btn-logout';
-  logoutBtn.textContent = 'Logout';
-  logoutBtn.id = 'btn-logout';
-  logoutBtn.onclick = _handleLogout;
-  userArea.appendChild(logoutBtn);
+  const avatarBtn = document.createElement('button');
+  avatarBtn.className = 'o-user-avatar-btn';
+  avatarBtn.id = 'btn-logout';
+  avatarBtn.title = 'Sign out';
+  avatarBtn.setAttribute('aria-label', 'Sign out');
+  avatarBtn.textContent = 'A';  // generic initial; updated after login if name known
+  avatarBtn.onclick = _handleLogout;
+  userArea.appendChild(avatarBtn);
   header.appendChild(userArea);
 
   // Sidebar
