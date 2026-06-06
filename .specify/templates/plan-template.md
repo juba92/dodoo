@@ -40,7 +40,15 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+- [ ] **I. Code Quality**: Linting and formatting tools identified and configured for this stack
+- [ ] **II. Testing**: Coverage thresholds defined (≥ 80% unit, 100% critical paths); test layers planned (unit / integration / e2e)
+- [ ] **III. Security**: OWASP Top 10 checklist reviewed; input validation points identified; least-privilege roles scoped; ADR filed if architectural change
+- [ ] **IV. Performance**: Measurable latency/throughput targets entered in "Performance Goals" above; benchmark strategy identified
+- [ ] **V. Documentation**: ADR filed for every architectural decision in this plan; inline comment policy followed
+- [ ] **VI. Accessibility**: WCAG 2.1 AA targets confirmed if feature has UI; design system patterns specified
+- [ ] **VII. Dependencies**: All new dependencies justified; CVE audit planned; lock file strategy confirmed
+- [ ] **VIII. CI/CD**: CI gates cover all checks (lint, format, tests, security scan, coverage, benchmarks); no bypass paths
+- [ ] **IX. Observability**: Structured logging strategy defined; correlation ID propagation planned; alerting hooks identified for critical paths
 
 ## Project Structure
 

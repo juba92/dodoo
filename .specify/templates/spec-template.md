@@ -103,6 +103,25 @@
 - **[Entity 1]**: [What it represents, key attributes without implementation]
 - **[Entity 2]**: [What it represents, relationships to other entities]
 
+### Security Requirements *(include if feature touches auth, data, or external I/O)*
+
+- **SEC-001**: System MUST validate all inputs at system boundaries using whitelist-based validation
+- **SEC-002**: System MUST enforce least-privilege access for all service accounts and roles
+- **SEC-003**: System MUST comply with OWASP Top 10; checklist review REQUIRED before implementation
+- **SEC-004**: [Feature-specific security requirement, e.g., "All API endpoints MUST require authentication"]
+
+### Performance Requirements
+
+- **PERF-001**: [Latency target, e.g., "p95 response time MUST be < 200ms under normal load"]
+- **PERF-002**: [Throughput target, e.g., "System MUST sustain ≥ 1000 req/s without degradation"]
+- **PERF-003**: No known regressions permitted; benchmarks MUST run in CI for critical paths
+
+### Accessibility Requirements *(include if feature has user-facing UI)*
+
+- **ACC-001**: UI MUST meet WCAG 2.1 AA color contrast ratios (≥ 4.5:1 normal text, ≥ 3:1 large text)
+- **ACC-002**: All interactive elements MUST be keyboard-navigable
+- **ACC-003**: Error states MUST not rely on color alone; ARIA labels MUST be present
+
 ## Success Criteria *(mandatory)*
 
 <!--

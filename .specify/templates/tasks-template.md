@@ -64,11 +64,14 @@ description: "Task list template for feature implementation"
 Examples of foundational tasks (adjust based on your project):
 
 - [ ] T004 Setup database schema and migrations framework
-- [ ] T005 [P] Implement authentication/authorization framework
+- [ ] T005 [P] Implement authentication/authorization framework (Principle III)
 - [ ] T006 [P] Setup API routing and middleware structure
 - [ ] T007 Create base models/entities that all stories depend on
-- [ ] T008 Configure error handling and logging infrastructure
-- [ ] T009 Setup environment configuration management
+- [ ] T008 Configure structured logging with correlation ID support (Principle IX)
+- [ ] T009 Setup environment configuration management; ensure secrets not in source (Principle III)
+- [ ] T010 [P] Configure CVE audit tool in CI pipeline; verify lock file committed (Principle VII)
+- [ ] T011 [P] Configure linting, formatting, and coverage enforcement in CI (Principles I, II, VIII)
+- [ ] T012 File ADR for all architectural decisions made in this phase (Principle V)
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -151,12 +154,15 @@ Examples of foundational tasks (adjust based on your project):
 
 **Purpose**: Improvements that affect multiple user stories
 
-- [ ] TXXX [P] Documentation updates in docs/
-- [ ] TXXX Code cleanup and refactoring
-- [ ] TXXX Performance optimization across all stories
-- [ ] TXXX [P] Additional unit tests (if requested) in tests/unit/
-- [ ] TXXX Security hardening
-- [ ] TXXX Run quickstart.md validation
+- [ ] TXXX [P] Documentation updates in docs/; verify all ADRs filed for decisions made (Principle V)
+- [ ] TXXX Code cleanup and refactoring; remove dead code and unjustified comments (Principle I)
+- [ ] TXXX Performance benchmarking across all stories; verify no regressions > 10% (Principle IV)
+- [ ] TXXX [P] Additional unit tests (if requested) in tests/unit/; verify coverage thresholds (Principle II)
+- [ ] TXXX Security hardening: OWASP Top 10 review, input validation audit, secrets scan (Principle III)
+- [ ] TXXX Accessibility audit (WCAG 2.1 AA): contrast, keyboard nav, screen reader (Principle VI)
+- [ ] TXXX Dependency audit: remove unused deps, verify CVE clean, check license compatibility (Principle VII)
+- [ ] TXXX Observability review: verify structured logs, alerting hooks, health checks in place (Principle IX)
+- [ ] TXXX Run quickstart.md validation; confirm all CI gates pass with no bypasses (Principle VIII)
 
 ---
 
