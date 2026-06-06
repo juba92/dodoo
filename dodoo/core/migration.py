@@ -12,6 +12,8 @@ from dodoo.core.exceptions import SchemaConflictError
 if TYPE_CHECKING:
     from dodoo.core.models import BaseModel
 
+from dodoo.core.fields import Many2many
+
 _log = logging.getLogger(__name__)
 
 # SA type → PostgreSQL type name mapping for conflict detection
@@ -53,9 +55,26 @@ class MigrationRunner:
             if not existing:
                 await self._create_table(conn, table_name, columns)
                 _log.info("Created table %s", table_name)
-                return
+            else:
+                await self._migrate_table(conn, table_name, columns, existing)
 
-            await self._migrate_table(conn, table_name, columns, existing)
+            # Create Many2many junction tables
+            for field in model._fields.values():
+                if isinstance(field, Many2many) and field.relation_table:
+                    col1 = field.column1 or f"{model._table_name()}_id"
+                    col2 = field.column2 or f"{field.relation.replace('.', '_')}_id"
+                    rel_existing = await _existing_columns(conn, field.relation_table)
+                    if not rel_existing:
+                        await conn.execute(
+                            text(
+                                f"CREATE TABLE IF NOT EXISTS {field.relation_table} ("
+                                f"  {col1} INTEGER NOT NULL,"
+                                f"  {col2} INTEGER NOT NULL,"
+                                f"  PRIMARY KEY ({col1}, {col2})"
+                                f")"
+                            )
+                        )
+                        _log.info("Created junction table %s", field.relation_table)
 
     async def _create_table(
         self,

@@ -14,6 +14,9 @@ if TYPE_CHECKING:
 
 _SYSTEM_FIELDS = ("id", "create_date", "write_date")
 
+# Global set of all model classes created by _ModelMeta (used by installer)
+_ALL_MODELS: list[type] = []
+
 
 class _ModelMeta(type):
     def __new__(
@@ -44,6 +47,7 @@ class _ModelMeta(type):
         if not getattr(cls, "_name", None):
             cls._name = name.lower()  # type: ignore[attr-defined]
 
+        _ALL_MODELS.append(cls)
         return cls
 
 

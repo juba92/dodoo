@@ -45,7 +45,8 @@ class SessionManager:
 
         token = secrets.token_urlsafe(32)  # 256-bit entropy
         expiry_hours = int(os.environ.get("SESSION_EXPIRY_HOURS", "8"))
-        expire_date = datetime.now(UTC) + timedelta(hours=expiry_hours)
+        # Naive UTC datetime — PostgreSQL TIMESTAMP WITHOUT TIME ZONE
+        expire_date = (datetime.now(UTC) + timedelta(hours=expiry_hours)).replace(tzinfo=None)
 
         async with env.dml_conn() as conn:
             await conn.execute(

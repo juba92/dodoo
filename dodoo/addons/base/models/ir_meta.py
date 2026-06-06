@@ -1,4 +1,4 @@
-from dodoo.core.fields import Char, Many2one, Text
+from dodoo.core.fields import Boolean, Char, Many2one, Text
 from dodoo.core.models import BaseModel
 
 
@@ -28,8 +28,8 @@ class IrModelField(BaseModel):
     name = Char(size=64, required=True)
     field_type = Char(size=32, required=True)
     string = Char(size=128)
-    required = Char(size=8)  # "true"/"false" stored as text
-    readonly = Char(size=8)
+    required = Boolean()
+    readonly = Boolean()
     default_val = Text()
     relation = Char(size=128)
     relation_field = Char(size=64)

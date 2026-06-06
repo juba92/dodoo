@@ -53,9 +53,14 @@ CREATE TABLE IF NOT EXISTS ir_session (
 """
 
 
-async def bootstrap(ddl_conn: AsyncConnection, dml_conn: AsyncConnection) -> None:
-    await ddl_conn.execute(text(_DDL))
+async def bootstrap(ddl_conn: AsyncConnection) -> None:
+    for statement in _DDL.split(";"):
+        stmt = statement.strip()
+        if stmt:
+            await ddl_conn.execute(text(stmt))
 
+
+async def sec005_check(dml_conn: AsyncConnection) -> None:
     # SEC-005: warn if DML user holds DDL-level (TRIGGER) privileges
     result = await dml_conn.execute(
         text("SELECT has_table_privilege(current_user, 'ir_module', 'TRIGGER')")

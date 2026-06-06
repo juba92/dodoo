@@ -24,7 +24,12 @@ class ResUsers(BaseModel):
     password_hash = Char(size=256, readonly=True)
     name = Char(size=256, required=True)
     active = Boolean(default=True)
-    group_ids = Many2many("res.groups", relation_table="res_users_groups_rel")
+    group_ids = Many2many(
+        "res.groups",
+        relation_table="res_users_groups_rel",
+        column1="user_id",
+        column2="group_id",
+    )
 
     @classmethod
     async def read(

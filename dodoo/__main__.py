@@ -27,6 +27,7 @@ async def _run_server(args: argparse.Namespace) -> None:
     from dodoo.http.app import create_app
 
     env = await Environment.create(database_url=args.database_url)
+    await env.modules.load_installed()
     app = create_app(env)
     config = uvicorn.Config(
         app,

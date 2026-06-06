@@ -82,8 +82,12 @@ class Environment:
 
         from dodoo.core.bootstrap import bootstrap
 
-        async with ddl_engine.begin() as ddl_conn, dml_engine.begin() as dml_conn:
-            await bootstrap(ddl_conn, dml_conn)
+        async with ddl_engine.begin() as ddl_conn:
+            await bootstrap(ddl_conn)
+
+        async with dml_engine.begin() as dml_conn:
+            from dodoo.core.bootstrap import sec005_check
+            await sec005_check(dml_conn)
 
         env = cls(dml_engine, ddl_engine, registry)
 
@@ -118,3 +122,6 @@ class _ModuleFacade:
 
     async def install(self, name: str) -> None:
         await self._installer.install(name)
+
+    async def load_installed(self) -> None:
+        await self._installer.load_installed()

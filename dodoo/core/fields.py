@@ -113,10 +113,19 @@ class One2many(Field):
 class Many2many(Field):
     """Virtual field — no DB column. Relationship via a junction table."""
 
-    def __init__(self, relation: str, relation_table: str = "", **kwargs: Any) -> None:
+    def __init__(
+        self,
+        relation: str,
+        relation_table: str = "",
+        column1: str = "",
+        column2: str = "",
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         self.relation = relation
         self.relation_table = relation_table
+        self.column1 = column1  # FK column pointing to the source model
+        self.column2 = column2  # FK column pointing to the target model
 
     def to_sa_column(self) -> None:  # type: ignore[override]
         return None

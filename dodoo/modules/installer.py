@@ -52,6 +52,42 @@ class ModuleInstaller:
         for mod_name in order:
             await self._install_single(mod_name, paths)
 
+    async def load_installed(self) -> None:
+        """Import packages for all installed modules (server startup — no migrations)."""
+        import os
+
+        from sqlalchemy import text
+
+        addons_path = os.environ.get("ADDONS_PATH", "./addons")
+        builtin_addons = str(Path(__file__).parent.parent / "addons")
+        paths = [builtin_addons] + [p.strip() for p in addons_path.split(":") if p.strip()]
+
+        for path in paths:
+            discovered = self._loader.discover(path)
+            self._loader._manifests.update(discovered)
+
+        async with self._env.dml_conn() as conn:
+            result = await conn.execute(
+                text("SELECT name FROM ir_module WHERE state = 'installed'")
+            )
+            installed = [row[0] for row in result.fetchall()]
+
+        from dodoo.core.models import _ALL_MODELS
+
+        for name in installed:
+            for path in paths:
+                pkg_dir = Path(path) / name
+                if pkg_dir.is_dir() and (pkg_dir / "__manifest__.py").exists():
+                    before = set(id(m) for m in _ALL_MODELS)
+                    _import_package(pkg_dir)
+                    for model_cls in _ALL_MODELS:
+                        if id(model_cls) not in before:
+                            try:
+                                self._env.registry.register(model_cls)
+                            except Exception:
+                                pass
+                    break
+
     async def _install_single(self, name: str, paths: list[str]) -> None:
         # Find the package directory
         pkg_dir: Path | None = None
@@ -66,8 +102,20 @@ class ModuleInstaller:
 
         manifest = self._loader._manifests[name]
 
+        from dodoo.core.models import _ALL_MODELS
+
+        before = set(id(m) for m in _ALL_MODELS)
+
         # Import the package (makes models register themselves via metaclass)
         _import_package(pkg_dir)
+
+        # Register any models newly defined by this package
+        for model_cls in _ALL_MODELS:
+            if id(model_cls) not in before:
+                try:
+                    self._env.registry.register(model_cls)
+                except Exception:
+                    pass  # already registered (re-install scenario)
 
         # Run migration for all models registered by this package
         runner = self._get_runner()
@@ -81,13 +129,56 @@ class ModuleInstaller:
                 parent_cls = self._env.registry.lookup(model_cls._inherit)
                 await runner.add_discriminator(parent_cls._table_name())
 
-        _log.info("Installed module '%s' version %s", name, manifest.get("version", "?"))
+        from sqlalchemy import text
+
+        version = manifest.get("version", "1.0.0")
+        async with self._env.dml_conn() as conn:
+            await conn.execute(
+                text(
+                    "INSERT INTO ir_module (name, version, state, installed_version, depends)"
+                    " VALUES (:name, :version, 'installed', :version, :depends)"
+                    " ON CONFLICT (name) DO UPDATE SET"
+                    "   state = 'installed',"
+                    "   installed_version = :version,"
+                    "   write_date = now()"
+                ),
+                {
+                    "name": name,
+                    "version": version,
+                    "depends": ",".join(manifest.get("depends", [])),
+                },
+            )
+
+        # Call post_install hook if the package defines one
+        pkg_module = importlib.import_module(f"dodoo.addons.{name}") if (
+            Path(__file__).parent.parent / "addons" / name
+        ).is_dir() else sys.modules.get(name)
+
+        if pkg_module is not None:
+            post_install = getattr(pkg_module, "post_install", None)
+            if callable(post_install):
+                await post_install(self._env)
+
+        _log.info("Installed module '%s' version %s", name, version)
 
 
 def _import_package(pkg_dir: Path) -> None:
     pkg_name = pkg_dir.name
-    parent_dir = str(pkg_dir.parent)
+    dodoo_addons_dir = Path(__file__).parent.parent / "addons"
 
+    if pkg_dir.parent.resolve() == dodoo_addons_dir.resolve():
+        # Built-in addon — import as dodoo.addons.<name> so relative imports work
+        full_name = f"dodoo.addons.{pkg_name}"
+        if full_name in sys.modules:
+            return
+        try:
+            importlib.import_module(full_name)
+        except ImportError as exc:
+            raise ModuleLoadError(f"Failed to import built-in module '{full_name}': {exc}") from exc
+        return
+
+    # External addon — add parent dir to sys.path and import by bare name
+    parent_dir = str(pkg_dir.parent)
     if parent_dir not in sys.path:
         sys.path.insert(0, parent_dir)
 
