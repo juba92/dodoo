@@ -91,15 +91,26 @@ function _buildShell() {
   sidebar.setAttribute('aria-label', 'model navigation');
   sidebar.id = 'sidebar';
 
-  // Main
-  const main = document.createElement('main');
-  main.className = 'app-main';
-  main.id = 'main';
-  main.setAttribute('tabindex', '-1');
+  // Outer main wrapper (flex column: control-panel + content)
+  const outerMain = document.createElement('main');
+  outerMain.className = 'app-main';
+  outerMain.setAttribute('tabindex', '-1');
+
+  // Control panel: action buttons and search (populated by each view)
+  const cp = document.createElement('div');
+  cp.className = 'o-control-panel';
+  cp.id = 'control-panel';
+  outerMain.appendChild(cp);
+
+  // Scrollable content area (views render here)
+  const content = document.createElement('div');
+  content.className = 'o-content';
+  content.id = 'main';
+  outerMain.appendChild(content);
 
   app.appendChild(header);
   app.appendChild(sidebar);
-  app.appendChild(main);
+  app.appendChild(outerMain);
 }
 
 function _buildLoginShell() {

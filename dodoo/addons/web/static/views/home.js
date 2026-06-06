@@ -52,6 +52,8 @@ export async function render(container, params) {
   // Module detail mode: #/module/:name (sidebar is visible, no home-mode)
   if (params.mode === 'module' && params.name) {
     document.getElementById('app')?.classList.remove('home-mode');
+    const cp = document.getElementById('control-panel');
+    if (cp) cp.innerHTML = '';
     await _renderModuleDetail(container, params.name);
     return;
   }
@@ -86,13 +88,6 @@ export async function render(container, params) {
   }
 
   container.innerHTML = '';
-
-  const header = document.createElement('div');
-  header.className = 'page-header';
-  const h2 = document.createElement('h2');
-  h2.textContent = 'Applications';
-  header.appendChild(h2);
-  container.appendChild(header);
 
   if (App.state.modules.length === 0) {
     const empty = document.createElement('div');

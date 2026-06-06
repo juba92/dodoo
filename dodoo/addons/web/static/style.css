@@ -2,19 +2,19 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --brand:        #875A7B;   /* Odoo purple */
-  --brand-hover:  #714b67;
-  --brand-light:  rgba(135,90,123,.1);
+  --brand:        #71639e;   /* Odoo community purple */
+  --brand-hover:  #5d5187;
+  --brand-light:  rgba(113,99,158,.1);
   --danger:       #D9534F;
   --danger-hover: #C9302C;
   --success:      #5CB85C;
 
-  --bg:           #f0ede8;   /* Odoo's distinctive warm beige background */
+  --bg:           #f8f9fa;   /* Odoo $o-gray-100 */
   --surface:      #ffffff;
   --border:       rgba(0,0,0,.09);
   --border-hard:  rgba(0,0,0,.15);
 
-  --text:         #3d4154;   /* Odoo's slightly purplish dark gray */
+  --text:         #3d4154;
   --text-muted:   #8f8f8f;
   --text-light:   #c8c8c8;
 
@@ -28,7 +28,7 @@
   --radius:       8px;
   --radius-sm:    4px;
 
-  --font: 'Lato','Roboto',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;
+  --font: system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
 }
 
 /* ── Base ────────────────────────────────────────────────────────────────────── */
@@ -70,6 +70,7 @@ input, textarea, select { font-family: inherit; }
 /* Home screen: full width (no sidebar, like Odoo's app menu) */
 #app.home-mode { grid-template-columns: 0 1fr; }
 #app.home-mode .app-sidebar { display: none; }
+#app.home-mode .o-control-panel { display: none; }
 
 /* ── Navbar ──────────────────────────────────────────────────────────────────── */
 .app-header {
@@ -210,12 +211,36 @@ input, textarea, select { font-family: inherit; }
   background: var(--brand-light);
 }
 
-/* ── Main content ─────────────────────────────────────────────────────────────── */
+/* ── Main content area ────────────────────────────────────────────────────────── */
 .app-main {
   grid-area: main;
-  overflow-y: auto;
-  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--bg);
+}
+
+/* Odoo-style control panel: action buttons + search above content */
+.o-control-panel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  min-height: 44px;
+}
+.o-control-panel:empty { display: none; }
+
+/* Spacer to push items to opposite ends of control panel */
+.o-cp-spacer { flex: 1; }
+
+/* Scrollable view content */
+.o-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 24px;
 }
 
 /* ── Login page ──────────────────────────────────────────────────────────────── */
@@ -338,20 +363,6 @@ input, textarea, select { font-family: inherit; }
 
 .btn-full { width: 100%; justify-content: center; }
 
-/* ── Page header ─────────────────────────────────────────────────────────────── */
-.page-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 16px;
-}
-.page-header h2 {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: var(--text);
-  flex: 1;
-}
-
 /* ── Module / App tiles (home screen) ─────────────────────────────────────────── */
 .module-grid {
   display: grid;
@@ -403,22 +414,14 @@ input, textarea, select { font-family: inherit; }
 .tile-version { font-size: .7rem; color: var(--text-muted); margin-top: -6px; }
 
 /* ── List view ───────────────────────────────────────────────────────────────── */
-.list-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
 .search-input {
-  flex: 1;
-  max-width: 280px;
   border: 1px solid rgba(0,0,0,.15);
   border-radius: 20px;
-  padding: 6px 14px;
+  padding: 5px 14px;
   font-size: .84rem;
   color: var(--text);
   background: var(--surface);
+  width: 240px;
   transition: border-color .15s, box-shadow .15s;
 }
 .search-input:focus {
@@ -427,43 +430,40 @@ input, textarea, select { font-family: inherit; }
   outline: none;
 }
 
+/* Odoo-like table: flat, striped, hover */
 .data-table {
   width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
+  border-collapse: collapse;
+  font-size: .875rem;
   background: var(--surface);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
-  font-size: .84rem;
 }
 
 .data-table th {
   text-align: left;
-  padding: 10px 14px;
-  font-size: .76rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  color: var(--text-muted);
-  border-bottom: 1px solid rgba(0,0,0,.08);
+  padding: 8px 12px;
+  font-size: .84rem;
+  font-weight: 600;
+  color: var(--text);
+  border-bottom: 2px solid rgba(0,0,0,.1);
   white-space: nowrap;
   background: var(--surface);
 }
 
 .data-table td {
-  padding: 9px 14px;
-  border-bottom: 1px solid rgba(0,0,0,.05);
+  padding: 7px 12px;
+  border-bottom: 1px solid rgba(0,0,0,.06);
   color: var(--text);
   max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  vertical-align: middle;
 }
 
 .data-table tr:last-child td { border-bottom: none; }
-.data-table tbody tr { cursor: pointer; transition: background .1s; }
-.data-table tbody tr:hover { background: rgba(135,90,123,.05); }
+.data-table tbody tr:nth-child(even) { background: rgba(0,0,0,.025); }
+.data-table tbody tr { cursor: pointer; transition: background .08s; }
+.data-table tbody tr:hover { background: rgba(113,99,158,.07); }
 
 .empty-state {
   text-align: center;
@@ -482,13 +482,6 @@ input, textarea, select { font-family: inherit; }
 }
 
 /* ── Form view ───────────────────────────────────────────────────────────────── */
-.form-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
 .form-card {
   background: var(--surface);
   border-radius: var(--radius);
@@ -617,7 +610,7 @@ fieldset.form-group legend {
   }
   #app.home-mode { grid-template-columns: 1fr; }
   .app-sidebar { display: none; }
-  .app-main { padding: 12px; }
+  .o-content { padding: 12px; }
   .module-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; }
   .field-grid { grid-template-columns: 1fr; }
   .login-card { padding: 28px 20px 24px; }

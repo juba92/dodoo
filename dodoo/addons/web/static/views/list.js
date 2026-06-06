@@ -67,33 +67,30 @@ export async function render(container, params) {
   let searchTerm = '';
   const LIMIT = 50;
 
-  // ── Layout ─────────────────────────────────────────────────────────────────
-  const pageHeader = document.createElement('div');
-  pageHeader.className = 'page-header';
-  const h2 = document.createElement('h2');
-  h2.textContent = model;
-  pageHeader.appendChild(h2);
-  container.appendChild(pageHeader);
-
-  // Toolbar
-  const toolbar = document.createElement('div');
-  toolbar.className = 'list-toolbar';
-
+  // ── Control panel: New button + search ─────────────────────────────────────
+  const cp = document.getElementById('control-panel');
   const searchInput = document.createElement('input');
   searchInput.type = 'search';
   searchInput.className = 'search-input';
   searchInput.placeholder = 'Search…';
   searchInput.setAttribute('aria-label', `Search ${model} records`);
 
-  const newBtn = document.createElement('button');
-  newBtn.className = 'btn btn-primary';
-  newBtn.setAttribute('data-action', 'new');
-  newBtn.textContent = '+ New';
-  newBtn.onclick = () => App.navigate(`#/model/${model}/new`);
+  if (cp) {
+    cp.innerHTML = '';
 
-  toolbar.appendChild(searchInput);
-  toolbar.appendChild(newBtn);
-  container.appendChild(toolbar);
+    const newBtn = document.createElement('button');
+    newBtn.className = 'btn btn-primary';
+    newBtn.setAttribute('data-action', 'new');
+    newBtn.textContent = 'New';
+    newBtn.onclick = () => App.navigate(`#/model/${model}/new`);
+    cp.appendChild(newBtn);
+
+    const spacer = document.createElement('div');
+    spacer.className = 'o-cp-spacer';
+    cp.appendChild(spacer);
+
+    cp.appendChild(searchInput);
+  }
 
   // Table wrapper
   const tableWrapper = document.createElement('div');

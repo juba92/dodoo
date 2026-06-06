@@ -163,10 +163,7 @@ export async function render(container, params) {
   statusBanner.style.display = 'none';
   container.appendChild(statusBanner);
 
-  // ── Toolbar ─────────────────────────────────────────────────────────────────
-  const toolbar = document.createElement('div');
-  toolbar.className = 'form-toolbar';
-
+  // ── Control panel: Save / Discard / Delete ────────────────────────────────────
   const saveBtn = document.createElement('button');
   saveBtn.className = 'btn btn-primary';
   saveBtn.setAttribute('data-action', 'save');
@@ -177,29 +174,34 @@ export async function render(container, params) {
   discardBtn.setAttribute('data-action', 'discard');
   discardBtn.textContent = 'Discard';
 
-  toolbar.appendChild(saveBtn);
-  toolbar.appendChild(discardBtn);
+  const cp = document.getElementById('control-panel');
+  if (cp) {
+    cp.innerHTML = '';
+    cp.appendChild(saveBtn);
+    cp.appendChild(discardBtn);
 
-  if (!isNew) {
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'btn btn-danger';
-    deleteBtn.setAttribute('data-action', 'delete');
-    deleteBtn.style.marginLeft = 'auto';
-    deleteBtn.textContent = 'Delete';
-    toolbar.appendChild(deleteBtn);
+    if (!isNew) {
+      const spacer = document.createElement('div');
+      spacer.className = 'o-cp-spacer';
+      cp.appendChild(spacer);
 
-    deleteBtn.onclick = async () => {
-      if (!window.confirm(`Delete record #${id}? This cannot be undone.`)) return;
-      try {
-        await api.rpc(model, 'unlink', [[id]]);
-        App.navigate(`#/model/${model}`);
-      } catch (err) {
-        _showBanner(statusBanner, 'error', 'Delete failed: ' + err.message);
-      }
-    };
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'btn btn-danger';
+      deleteBtn.setAttribute('data-action', 'delete');
+      deleteBtn.textContent = 'Delete';
+      cp.appendChild(deleteBtn);
+
+      deleteBtn.onclick = async () => {
+        if (!window.confirm(`Delete record #${id}? This cannot be undone.`)) return;
+        try {
+          await api.rpc(model, 'unlink', [[id]]);
+          App.navigate(`#/model/${model}`);
+        } catch (err) {
+          _showBanner(statusBanner, 'error', 'Delete failed: ' + err.message);
+        }
+      };
+    }
   }
-
-  container.appendChild(toolbar);
 
   // ── Form card ────────────────────────────────────────────────────────────────
   const formCard = document.createElement('div');
