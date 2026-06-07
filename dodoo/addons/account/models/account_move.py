@@ -567,6 +567,8 @@ class AccountMove(BaseModel):
 
             reversal_type = _REVERSE_TYPE.get(rec["move_type"], "entry")
             reversal_date = date or datetime.date.today()
+            if isinstance(reversal_date, str):
+                reversal_date = datetime.date.fromisoformat(reversal_date)
 
             # Fetch original lines (exclude section/note)
             async with env.dml_conn() as conn:

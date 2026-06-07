@@ -9,7 +9,7 @@ export function render(container, _params) {
   }
 
   container.innerHTML = '';
-  const card = document.createElement('div');
+  const card = document.createElement('form');
   card.className = 'login-card';
 
   // Logo section (Odoo-style: colored mark + app name + subtitle)

@@ -18,7 +18,11 @@ export const App = {
     } else {
       App.breadcrumb.push({ label: _labelFromHash(hash), hash });
     }
-    window.location.hash = hash;
+    if (window.location.hash === hash) {
+      _route(); // same hash — hashchange won't fire, force re-render
+    } else {
+      window.location.hash = hash;
+    }
   },
 };
 
