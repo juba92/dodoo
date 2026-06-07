@@ -32,7 +32,7 @@ hooks:
   - extension: git
     command: speckit.git.commit
     enabled: true
-    optional: true
+    optional: false
     prompt: Commit outstanding changes before planning?
     description: Auto-commit before implementation planning
     condition: null
@@ -40,7 +40,7 @@ hooks:
   - extension: git
     command: speckit.git.commit
     enabled: true
-    optional: true
+    optional: false
     prompt: Commit outstanding changes before task generation?
     description: Auto-commit before task generation
     condition: null
@@ -48,7 +48,7 @@ hooks:
   - extension: git
     command: speckit.git.commit
     enabled: true
-    optional: true
+    optional: false
     prompt: Commit outstanding changes before implementation?
     description: Auto-commit before implementation
     condition: null
@@ -88,7 +88,7 @@ hooks:
   - extension: git
     command: speckit.git.commit
     enabled: true
-    optional: true
+    optional: false
     prompt: Commit specification changes?
     description: Auto-commit after specification
     condition: null
@@ -98,6 +98,13 @@ hooks:
     optional: true
     prompt: Execute speckit.agent-context.update?
     description: Refresh agent context after specification
+    condition: null
+  - extension: speckit
+    command: speckit.clarify
+    enabled: true
+    optional: false
+    prompt: Run clarification pass on the new specification?
+    description: Auto-run clarify after specification; all questions answered per constitution, architecture, and Odoo reference
     condition: null
   after_clarify:
   - extension: git
@@ -126,9 +133,16 @@ hooks:
   - extension: git
     command: speckit.git.commit
     enabled: true
-    optional: true
+    optional: false
     prompt: Commit task changes?
     description: Auto-commit after task generation
+    condition: null
+  - extension: speckit
+    command: speckit.analyze
+    enabled: true
+    optional: false
+    prompt: Run analysis pass on spec/plan/tasks for inconsistencies?
+    description: Auto-run analyze after tasks; all findings resolved automatically before implementation
     condition: null
   after_implement:
   - extension: git
