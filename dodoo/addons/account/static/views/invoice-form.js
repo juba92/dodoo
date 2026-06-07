@@ -32,7 +32,7 @@ export async function render(container, params) {
   if (cp) cp.innerHTML = '';
 
   if (isNew) {
-    await _renderNewInvoice(container, cp, params.moveType || 'out_invoice');
+    await _renderNewInvoice(container, cp, params.moveType || 'out_invoice', params.editId || null);
     return;
   }
 
@@ -85,16 +85,22 @@ function _buildCP(cp, move, id) {
   const { state, payment_state, move_type } = move;
 
   if (state === 'draft') {
-    const btn = document.createElement('button');
-    btn.className = 'btn btn-primary';
-    btn.textContent = 'Confirm';
-    btn.onclick = async () => {
-      btn.disabled = true; btn.textContent = 'Confirming…';
+    const editBtn = document.createElement('button');
+    editBtn.className = 'btn btn-primary';
+    editBtn.textContent = 'Edit';
+    editBtn.onclick = () => App.navigate(`#/accounting/move/new?type=${move_type}&edit=${id}`);
+    cp.appendChild(editBtn);
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = 'btn btn-secondary';
+    confirmBtn.textContent = 'Confirm';
+    confirmBtn.onclick = async () => {
+      confirmBtn.disabled = true; confirmBtn.textContent = 'Confirming…';
       const data = await _post(`/account/move/${id}/post`);
-      if (data.error) { alert(data.error); btn.disabled = false; btn.textContent = 'Confirm'; return; }
+      if (data.error) { alert(data.error); confirmBtn.disabled = false; confirmBtn.textContent = 'Confirm'; return; }
       App.navigate(`#/accounting/move/${id}`);
     };
-    cp.appendChild(btn);
+    cp.appendChild(confirmBtn);
   }
 
   if (state === 'posted' && ['not_paid', 'partial'].includes(payment_state) && move_type !== 'entry') {
@@ -125,7 +131,7 @@ function _buildCP(cp, move, id) {
     cp.appendChild(btn);
   }
 
-  if (state === 'draft' || (state === 'posted' && payment_state === 'not_paid')) {
+  if (state === 'posted' && payment_state === 'not_paid') {
     const spacer = document.createElement('div');
     spacer.className = 'o-cp-spacer';
     cp.appendChild(spacer);
@@ -133,7 +139,7 @@ function _buildCP(cp, move, id) {
     btn.className = 'btn btn-secondary';
     btn.textContent = 'Reset to Draft';
     btn.onclick = async () => {
-      if (state === 'posted' && !confirm('Reset to draft? This unlocks the entry.')) return;
+      if (!confirm('Reset to draft? This unlocks the entry.')) return;
       btn.disabled = true;
       const data = await _post(`/account/move/${id}/reset_to_draft`);
       if (data.error) { alert(data.error); btn.disabled = false; return; }
@@ -498,7 +504,7 @@ function _inlineSelect(options) {
   return sel;
 }
 
-async function _renderNewInvoice(container, cp, moveType) {
+async function _renderNewInvoice(container, cp, moveType, editId = null) {
   const typeLabel = TYPE_LABEL[moveType] ?? 'Invoice';
   const isEntry   = moveType === 'entry';
 
@@ -507,7 +513,7 @@ async function _renderNewInvoice(container, cp, moveType) {
   const titleEl = document.createElement('h2');
   titleEl.className = 'invoice-number';
   titleEl.style.padding = '12px 24px 0';
-  titleEl.textContent = `New ${typeLabel}`;
+  titleEl.textContent = editId ? `Edit ${typeLabel}` : `New ${typeLabel}`;
   container.appendChild(titleEl);
 
   const loadingEl = document.createElement('div');
@@ -521,8 +527,9 @@ async function _renderNewInvoice(container, cp, moveType) {
     cp.innerHTML = '';
     const saveBtn = document.createElement('button');
     saveBtn.className = 'btn btn-primary';
-    saveBtn.textContent = 'Save as Draft';
+    saveBtn.textContent = editId ? 'Save Changes' : 'Save as Draft';
     saveBtn.disabled = true;
+    const _saveBtnLabel = saveBtn.textContent;
     saveBtn.onclick = async () => {
       if (!_saveForm) return;
       saveBtn.disabled = true;
@@ -532,7 +539,7 @@ async function _renderNewInvoice(container, cp, moveType) {
       } catch (err) {
         alert(err.message);
         saveBtn.disabled = false;
-        saveBtn.textContent = 'Save as Draft';
+        saveBtn.textContent = _saveBtnLabel;
       }
     };
     const discardBtn = document.createElement('button');
@@ -571,6 +578,21 @@ async function _renderNewInvoice(container, cp, moveType) {
     ? (Array.isArray(company.currency_id) ? company.currency_id[0] : company.currency_id)
     : null;
 
+  let existingMove = null, existingLines = [];
+  if (editId) {
+    try {
+      [existingMove, existingLines] = await Promise.all([
+        api.rpc('account.move', 'read', [[editId]], {
+          fields: ['id', 'partner_id', 'journal_id', 'invoice_date', 'ref'],
+        }).then(r => r[0]),
+        api.rpc('account.move.line', 'search_read',
+          [[['move_id', '=', editId], ['display_type', 'in', ['product', 'line_section', 'line_note']]]],
+          { fields: ['id', 'name', 'account_id', 'debit', 'credit', 'display_type', 'sequence'], order: 'sequence asc' }
+        ),
+      ]);
+    } catch { /* fall back to empty */ }
+  }
+
   // ── Build form (replace loading indicator) ──
   loadingEl.remove();
 
@@ -598,6 +620,15 @@ async function _renderNewInvoice(container, cp, moveType) {
 
   const refInput = _inlineInput('text', 'Optional');
   grid.appendChild(_headerRow('Reference', refInput));
+
+  if (existingMove) {
+    const exPartnerId = Array.isArray(existingMove.partner_id) ? existingMove.partner_id[0] : existingMove.partner_id;
+    const exJournalId = Array.isArray(existingMove.journal_id) ? existingMove.journal_id[0] : existingMove.journal_id;
+    if (exPartnerId) partnerSel.value = String(exPartnerId);
+    if (exJournalId) journalSel.value = String(exJournalId);
+    if (existingMove.invoice_date) dateInput.value = String(existingMove.invoice_date).substring(0, 10);
+    if (existingMove.ref) refInput.value = existingMove.ref;
+  }
 
   headerCard.appendChild(grid);
   container.appendChild(headerCard);
@@ -666,11 +697,30 @@ async function _renderNewInvoice(container, cp, moveType) {
   }
 
   addBtn.onclick = addLine;
-  addLine();
+  if (existingLines.length > 0) {
+    existingLines.filter(l => l.display_type === 'product').forEach(el => {
+      const accId  = Array.isArray(el.account_id) ? el.account_id[0] : el.account_id;
+      const debit  = parseFloat(el.debit  || 0);
+      const credit = parseFloat(el.credit || 0);
+      const amount = isEntry ? '' : String(Math.max(debit, credit) || '');
+      const line   = {
+        name: el.name || '',
+        accountId: String(accId || ''),
+        amount,
+        debit:  isEntry && debit  ? String(debit)  : '',
+        credit: isEntry && credit ? String(credit) : '',
+      };
+      lines.push(line);
+      tbody.appendChild(_buildNewLineRow(line, accounts, lines, isEntry, updateTotals));
+      updateTotals();
+    });
+  } else {
+    addLine();
+  }
 
   // Wire save callback and enable the button
   _saveForm = () => _saveNewInvoice(moveType, companyId, currencyId,
-    partnerSel, journalSel, dateInput, refInput, lines, isEntry);
+    partnerSel, journalSel, dateInput, refInput, lines, isEntry, editId);
   if (cp) {
     const saveBtn = cp.querySelector('.btn-primary');
     if (saveBtn) saveBtn.disabled = false;
@@ -688,6 +738,7 @@ function _buildNewLineRow(line, accounts, lines, isEntry, onUpdate) {
   descInput.type = 'text';
   descInput.placeholder = 'Description';
   descInput.style.cssText = `width:100%;${tdStyle}`;
+  descInput.value = line.name || '';
   descInput.oninput = () => { line.name = descInput.value; };
   descTd.appendChild(descInput);
   tr.appendChild(descTd);
@@ -706,6 +757,7 @@ function _buildNewLineRow(line, accounts, lines, isEntry, onUpdate) {
     opt.textContent = `${a.code} ${a.name}`;
     accSel.appendChild(opt);
   });
+  if (line.accountId) accSel.value = String(line.accountId);
   accSel.onchange = () => { line.accountId = accSel.value; };
   accTd.appendChild(accSel);
   tr.appendChild(accTd);
@@ -720,6 +772,7 @@ function _buildNewLineRow(line, accounts, lines, isEntry, onUpdate) {
     debitInput.min = '0';
     debitInput.step = '0.01';
     debitInput.style.cssText = `width:90px;text-align:right;${tdStyle}`;
+    if (line.debit) debitInput.value = line.debit;
     debitInput.oninput = () => {
       line.debit = debitInput.value;
       if (debitInput.value) { line.credit = ''; creditInput.value = ''; }
@@ -737,6 +790,7 @@ function _buildNewLineRow(line, accounts, lines, isEntry, onUpdate) {
     creditInput.min = '0';
     creditInput.step = '0.01';
     creditInput.style.cssText = `width:90px;text-align:right;${tdStyle}`;
+    if (line.credit) creditInput.value = line.credit;
     creditInput.oninput = () => {
       line.credit = creditInput.value;
       if (creditInput.value) { line.debit = ''; debitInput.value = ''; }
@@ -754,6 +808,7 @@ function _buildNewLineRow(line, accounts, lines, isEntry, onUpdate) {
     amtInput.min = '0';
     amtInput.step = '0.01';
     amtInput.style.cssText = `width:110px;text-align:right;${tdStyle}`;
+    if (line.amount) amtInput.value = line.amount;
     amtInput.oninput = () => { line.amount = amtInput.value; onUpdate(); };
     amtTd.appendChild(amtInput);
     tr.appendChild(amtTd);
@@ -778,7 +833,7 @@ function _buildNewLineRow(line, accounts, lines, isEntry, onUpdate) {
   return tr;
 }
 
-async function _saveNewInvoice(moveType, companyId, currencyId, partnerSel, journalSel, dateInput, refInput, lines, isEntry) {
+async function _saveNewInvoice(moveType, companyId, currencyId, partnerSel, journalSel, dateInput, refInput, lines, isEntry, editId = null) {
   const partnerId   = parseInt(partnerSel.value, 10) || null;
   const journalId   = parseInt(journalSel.value, 10) || null;
   const invoiceDate = dateInput.value;
@@ -787,7 +842,7 @@ async function _saveNewInvoice(moveType, companyId, currencyId, partnerSel, jour
   if (!journalId)               throw new Error('Please select a journal.');
   if (!invoiceDate)             throw new Error('Please enter an invoice date.');
   if (!isEntry && !partnerId)   throw new Error('Please select a customer or vendor.');
-  if (!companyId || !currencyId) throw new Error('Company or currency not found. Check server setup.');
+  if (!editId && (!companyId || !currencyId)) throw new Error('Company or currency not found. Check server setup.');
 
   const validLines = lines.filter(l => l.accountId && (
     isEntry
@@ -796,6 +851,46 @@ async function _saveNewInvoice(moveType, companyId, currencyId, partnerSel, jour
   ));
   if (validLines.length === 0) {
     throw new Error('Please add at least one line with an account and amount.');
+  }
+
+  const isRevenue = ['out_invoice', 'out_refund'].includes(moveType);
+
+  async function _writeLines(targetId) {
+    for (const line of validLines) {
+      let debit, credit;
+      if (isEntry) {
+        debit  = parseFloat(line.debit  || 0);
+        credit = parseFloat(line.credit || 0);
+      } else {
+        debit  = isRevenue ? 0                       : parseFloat(line.amount);
+        credit = isRevenue ? parseFloat(line.amount) : 0;
+      }
+      await api.rpc('account.move.line', 'create', [{
+        move_id:      targetId,
+        display_type: 'product',
+        name:         line.name || 'Service',
+        account_id:   parseInt(line.accountId, 10),
+        date:         invoiceDate,
+        debit,
+        credit,
+      }]);
+    }
+  }
+
+  if (editId) {
+    await api.rpc('account.move', 'write', [[editId], {
+      journal_id:   journalId,
+      partner_id:   partnerId,
+      invoice_date: invoiceDate,
+      date:         invoiceDate,
+      ref,
+    }]);
+    const oldLineIds = await api.rpc('account.move.line', 'search',
+      [[['move_id', '=', editId], ['display_type', 'in', ['product', 'line_section', 'line_note']]]]);
+    if (oldLineIds.length) await api.rpc('account.move.line', 'unlink', [oldLineIds]);
+    await _writeLines(editId);
+    App.navigate(`#/accounting/move/${editId}`);
+    return;
   }
 
   const moveId = await api.rpc('account.move', 'create', [{
@@ -808,27 +903,6 @@ async function _saveNewInvoice(moveType, companyId, currencyId, partnerSel, jour
     date:         invoiceDate,
     ref,
   }]);
-
-  const isRevenue = ['out_invoice', 'out_refund'].includes(moveType);
-  for (const line of validLines) {
-    let debit, credit;
-    if (isEntry) {
-      debit  = parseFloat(line.debit  || 0);
-      credit = parseFloat(line.credit || 0);
-    } else {
-      debit  = isRevenue ? 0                       : parseFloat(line.amount);
-      credit = isRevenue ? parseFloat(line.amount) : 0;
-    }
-    await api.rpc('account.move.line', 'create', [{
-      move_id:      moveId,
-      display_type: 'product',
-      name:         line.name || 'Service',
-      account_id:   parseInt(line.accountId, 10),
-      date:         invoiceDate,
-      debit,
-      credit,
-    }]);
-  }
-
+  await _writeLines(moveId);
   App.navigate(`#/accounting/move/${moveId}`);
 }

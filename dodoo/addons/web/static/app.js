@@ -38,7 +38,7 @@ function _labelFromHash(hash) {
   if (hash === '#/home' || hash === '#/') return 'Home';
   if (hash === '#/login') return 'Login';
   let m;
-  if ((m = hash.match(/^#\/accounting\/move\/new$/)))           return 'New Invoice';
+  if ((m = hash.match(/^#\/accounting\/move\/new(\?.*)?$/)))    return 'New Invoice';
   if ((m = hash.match(/^#\/accounting\/move\/(\d+)$/)))         return `Invoice #${m[1]}`;
   if ((m = hash.match(/^#\/accounting\/reports\/([^/]+)$/)))    return m[1].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   if ((m = hash.match(/^#\/accounting\/model\/([^/]+)\/new$/))) return `New ${m[1]}`;
@@ -273,7 +273,7 @@ function _paramsFromHash(hash) {
   // Extract query params from hash (e.g. #/accounting/move/new?type=out_invoice)
   const qs = hash.includes('?') ? new URLSearchParams(hash.split('?')[1]) : new URLSearchParams();
   let m;
-  if ((m = base.match(/^#\/accounting\/move\/new$/)))                  return { id: 'new', moveType: qs.get('type') || 'out_invoice' };
+  if ((m = base.match(/^#\/accounting\/move\/new$/)))                  return { id: 'new', moveType: qs.get('type') || 'out_invoice', editId: qs.get('edit') ? parseInt(qs.get('edit'), 10) : null };
   if ((m = base.match(/^#\/accounting\/move\/(\d+)$/)))                return { id: parseInt(m[1], 10) };
   if ((m = base.match(/^#\/accounting\/reports\/([^/]+)$/)))           return { report: m[1] };
   if ((m = base.match(/^#\/accounting\/model\/([^/]+)\/new$/)))        return { model: m[1], id: 'new' };
