@@ -52,6 +52,8 @@ function _labelFromHash(hash) {
   return hash.replace(/^#\//, '');
 }
 
+let _activeMenuHash = null;
+
 // ── Layout shell ─────────────────────────────────────────────────────────────
 function _buildShell() {
   const app = document.getElementById('app');
@@ -208,6 +210,11 @@ async function _renderAccountingMenu(sidebar, currentHash) {
   // Guard: if a new navigation replaced this sidebar, bail out
   if (!document.body.contains(sidebar)) return;
   sidebar.innerHTML = '';
+
+  const allItems = ACCOUNTING_MENU.flatMap(s => s.items);
+  const directMatch = allItems.find(({ hash }) => currentHash === hash || currentHash.startsWith(hash + '/'));
+  if (directMatch) _activeMenuHash = directMatch.hash;
+
   ACCOUNTING_MENU.forEach(({ section, items }) => {
     const title = document.createElement('div');
     title.className = 'sidebar-section-title';
@@ -219,9 +226,10 @@ async function _renderAccountingMenu(sidebar, currentHash) {
       const li = document.createElement('li');
       const btn = document.createElement('button');
       btn.textContent = label;
-      if (currentHash === hash || currentHash.startsWith(hash + '/')) btn.className = 'active';
+      if (_activeMenuHash === hash) btn.className = 'active';
       btn.onclick = () => {
         // Reset breadcrumb when clicking a top-level menu item
+        _activeMenuHash = hash;
         App.breadcrumb = [];
         App.navigate(hash);
       };
