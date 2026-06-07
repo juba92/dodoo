@@ -132,20 +132,23 @@ class ModuleInstaller:
         from sqlalchemy import text
 
         version = manifest.get("version", "1.0.0")
+        application = bool(manifest.get("application", False))
         async with self._env.dml_conn() as conn:
             await conn.execute(
                 text(
-                    "INSERT INTO ir_module (name, version, state, installed_version, depends)"
-                    " VALUES (:name, :version, 'installed', :version, :depends)"
+                    "INSERT INTO ir_module (name, version, state, installed_version, depends, application)"
+                    " VALUES (:name, :version, 'installed', :version, :depends, :application)"
                     " ON CONFLICT (name) DO UPDATE SET"
                     "   state = 'installed',"
                     "   installed_version = :version,"
+                    "   application = :application,"
                     "   write_date = now()"
                 ),
                 {
                     "name": name,
                     "version": version,
                     "depends": ",".join(manifest.get("depends", [])),
+                    "application": application,
                 },
             )
 

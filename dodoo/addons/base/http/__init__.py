@@ -53,7 +53,7 @@ async def core_info(request: Request) -> JSONResponse:
     env = request.app.state.env
     async with env.dml_conn() as conn:
         modules = await conn.execute(
-            text("SELECT name, version, state FROM ir_module ORDER BY name")
+            text("SELECT name, version, state FROM ir_module WHERE application = TRUE ORDER BY name")
         )
         users = await conn.execute(text("SELECT COUNT(*) FROM res_users"))
         groups = await conn.execute(text("SELECT COUNT(*) FROM res_groups"))

@@ -13,9 +13,12 @@ CREATE TABLE IF NOT EXISTS ir_module (
     state            VARCHAR(32) NOT NULL DEFAULT 'uninstalled',
     installed_version VARCHAR(64),
     depends          TEXT,
+    application      BOOLEAN NOT NULL DEFAULT FALSE,
     create_date      TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
     write_date       TIMESTAMP WITHOUT TIME ZONE DEFAULT now()
 );
+
+ALTER TABLE ir_module ADD COLUMN IF NOT EXISTS application BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS ir_model (
     id          SERIAL PRIMARY KEY,
