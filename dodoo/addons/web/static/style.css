@@ -601,6 +601,175 @@ fieldset.form-group legend {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ── Status badges ───────────────────────────────────────────────────────────── */
+.badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: .75rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+.badge-draft   { background: #f0f0f0;   color: #555; }
+.badge-posted  { background: #EBF5FB;   color: #1A5276; }
+.badge-paid    { background: #E9F7EF;   color: #1E8449; }
+.badge-partial { background: #FEF9E7;   color: #B7950B; }
+.badge-cancel  { background: #FDEDEC;   color: #922B21; }
+
+/* ── Invoice status bar ──────────────────────────────────────────────────────── */
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: .82rem;
+}
+.status-step {
+  color: var(--text-muted);
+  padding: 2px 10px;
+  border-radius: 20px;
+}
+.status-step.active {
+  background: var(--brand-light);
+  color: var(--brand);
+  font-weight: 700;
+}
+.status-sep { color: var(--text-light); font-size: .8rem; }
+
+/* ── Invoice header card ─────────────────────────────────────────────────────── */
+.invoice-header-card { margin-bottom: 12px; }
+
+.invoice-header-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.invoice-number {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.header-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 8px 32px;
+}
+
+.header-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: .875rem;
+}
+
+.header-label {
+  color: var(--text-muted);
+  font-size: .8rem;
+  min-width: 130px;
+  flex-shrink: 0;
+}
+
+.header-value {
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* ── Invoice lines table ─────────────────────────────────────────────────────── */
+.lines-section { margin-bottom: 0; }
+
+.section-title {
+  font-size: .8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.invoice-lines-table th { background: var(--bg); }
+
+/* ── Totals card ─────────────────────────────────────────────────────────────── */
+.totals-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.totals-row {
+  display: flex;
+  gap: 24px;
+  align-items: baseline;
+  min-width: 320px;
+  justify-content: space-between;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border);
+}
+.totals-row:last-child { border-bottom: none; }
+.totals-due { padding-top: 8px; }
+.totals-label { font-size: .84rem; color: var(--text-muted); }
+.totals-value { font-size: .9rem; color: var(--text); font-variant-numeric: tabular-nums; }
+.totals-value.bold { font-weight: 700; font-size: 1rem; }
+.totals-due .totals-value { color: var(--brand); }
+
+/* ── Report summary ──────────────────────────────────────────────────────────── */
+.report-summary {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 12px 0;
+  margin-bottom: 16px;
+  font-size: .875rem;
+  border-bottom: 1px solid var(--border);
+}
+.report-summary strong { font-weight: 700; }
+
+/* ── text alignment helpers ──────────────────────────────────────────────────── */
+.text-right { text-align: right !important; }
+
+/* ── Modal ───────────────────────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-dialog {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 28px 32px 24px;
+  width: 400px;
+  max-width: 96vw;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.modal-btn-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
 /* ── Responsive ──────────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   #app {

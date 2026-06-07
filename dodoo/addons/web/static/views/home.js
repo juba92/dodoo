@@ -150,6 +150,12 @@ function _refreshSidebar(sidebar, models) {
 }
 
 async function _renderModuleDetail(container, moduleName) {
+  // Accounting has its own app — redirect directly
+  if (moduleName === 'account') {
+    App.navigate('#/accounting/invoices');
+    return;
+  }
+
   const header = document.createElement('div');
   header.className = 'page-header';
   const h2 = document.createElement('h2');

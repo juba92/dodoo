@@ -22,10 +22,22 @@ export const App = {
   },
 };
 
+const _ACC_LABELS = {
+  'invoices': 'Customer Invoices', 'credit-notes': 'Customer Credit Notes',
+  'customer-payments': 'Customer Payments', 'bills': 'Vendor Bills',
+  'vendor-credit-notes': 'Vendor Credit Notes', 'vendor-payments': 'Vendor Payments',
+  'journal-entries': 'Journal Entries', 'chart-of-accounts': 'Chart of Accounts',
+  'journals': 'Journals',
+};
+
 function _labelFromHash(hash) {
   if (hash === '#/home' || hash === '#/') return 'Home';
   if (hash === '#/login') return 'Login';
   let m;
+  if ((m = hash.match(/^#\/accounting\/move\/new$/))) return 'New Invoice';
+  if ((m = hash.match(/^#\/accounting\/move\/(\d+)$/))) return `Invoice #${m[1]}`;
+  if ((m = hash.match(/^#\/accounting\/reports\/([^/]+)$/))) return m[1].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  if ((m = hash.match(/^#\/accounting\/([^/]+)$/))) return _ACC_LABELS[m[1]] ?? m[1].replace(/-/g, ' ');
   if ((m = hash.match(/^#\/module\/(.+)$/))) return m[1];
   if ((m = hash.match(/^#\/model\/([^/]+)\/new$/))) return `New ${m[1]}`;
   if ((m = hash.match(/^#\/model\/([^/]+)\/(\d+)$/))) return `#${m[2]}`;
@@ -153,8 +165,21 @@ function _renderBreadcrumb() {
 function _renderSidebar() {
   const sidebar = document.getElementById('sidebar');
   if (!sidebar) return;
-  sidebar.innerHTML = '';
 
+  const hash = window.location.hash || '';
+
+  // Update app name in navbar
+  const appNameEl = document.querySelector('.nav-app-name');
+  if (appNameEl) {
+    appNameEl.textContent = hash.startsWith('#/accounting') ? 'Accounting' : 'Dodoo ERP';
+  }
+
+  if (hash.startsWith('#/accounting')) {
+    _renderAccountingMenu(sidebar, hash).catch(() => {});
+    return;
+  }
+
+  sidebar.innerHTML = '';
   const title = document.createElement('div');
   title.className = 'sidebar-section-title';
   title.textContent = 'Models';
@@ -173,6 +198,29 @@ function _renderSidebar() {
   sidebar.appendChild(ul);
 }
 
+async function _renderAccountingMenu(sidebar, currentHash) {
+  const { ACCOUNTING_MENU } = await import('/account/static/account-menu.js');
+  sidebar.innerHTML = '';
+  ACCOUNTING_MENU.forEach(({ section, items }) => {
+    const title = document.createElement('div');
+    title.className = 'sidebar-section-title';
+    title.textContent = section;
+    sidebar.appendChild(title);
+    const ul = document.createElement('ul');
+    ul.className = 'sidebar-list';
+    items.forEach(({ label, hash }) => {
+      const li = document.createElement('li');
+      const btn = document.createElement('button');
+      btn.textContent = label;
+      if (currentHash === hash || currentHash.startsWith(hash + '/')) btn.className = 'active';
+      btn.onclick = () => App.navigate(hash);
+      li.appendChild(btn);
+      ul.appendChild(li);
+    });
+    sidebar.appendChild(ul);
+  });
+}
+
 async function _handleLogout() {
   try { await api.logout(); } catch { /* ignore errors on logout */ }
   App.state.token = null;
@@ -187,6 +235,11 @@ const _ROUTES = [
   [/^#\/login(\?.*)?$/, () => import('/web/static/views/login.js')],
   [/^#\/home$/, () => import('/web/static/views/home.js')],
   [/^#\/module\/(.+)$/, () => import('/web/static/views/home.js')],
+  // Accounting-specific routes (must come before generic model routes)
+  [/^#\/accounting\/move\/(new|\d+)$/, () => import('/account/static/views/invoice-form.js')],
+  [/^#\/accounting\/reports\/([^/]+)$/, () => import('/account/static/views/report-view.js')],
+  [/^#\/accounting\/([^/]+)$/, () => import('/account/static/views/invoice-list.js')],
+  // Generic model routes
   [/^#\/model\/([^/]+)\/new$/, () => import('/web/static/views/form.js')],
   [/^#\/model\/([^/]+)\/(\d+)$/, () => import('/web/static/views/form.js')],
   [/^#\/model\/([^/]+)$/, () => import('/web/static/views/list.js')],
@@ -202,10 +255,14 @@ function _parseHash(hash) {
 
 function _paramsFromHash(hash) {
   let m;
-  if ((m = hash.match(/^#\/module\/(.+)$/))) return { mode: 'module', name: m[1] };
-  if ((m = hash.match(/^#\/model\/([^/]+)\/new$/))) return { model: m[1], id: 'new' };
-  if ((m = hash.match(/^#\/model\/([^/]+)\/(\d+)$/))) return { model: m[1], id: parseInt(m[2], 10) };
-  if ((m = hash.match(/^#\/model\/([^/]+)$/))) return { model: m[1] };
+  if ((m = hash.match(/^#\/accounting\/move\/new$/)))    return { id: 'new' };
+  if ((m = hash.match(/^#\/accounting\/move\/(\d+)$/)))  return { id: parseInt(m[1], 10) };
+  if ((m = hash.match(/^#\/accounting\/reports\/([^/]+)$/))) return { report: m[1] };
+  if ((m = hash.match(/^#\/accounting\/([^/]+)$/)))      return { route: m[1] };
+  if ((m = hash.match(/^#\/module\/(.+)$/)))  return { mode: 'module', name: m[1] };
+  if ((m = hash.match(/^#\/model\/([^/]+)\/new$/)))      return { model: m[1], id: 'new' };
+  if ((m = hash.match(/^#\/model\/([^/]+)\/(\d+)$/)))    return { model: m[1], id: parseInt(m[2], 10) };
+  if ((m = hash.match(/^#\/model\/([^/]+)$/)))           return { model: m[1] };
   return {};
 }
 

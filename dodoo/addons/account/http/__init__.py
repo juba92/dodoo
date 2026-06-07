@@ -1,11 +1,21 @@
 from __future__ import annotations
 
 import logging
+import pathlib
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
+from starlette.staticfiles import StaticFiles
 
-from dodoo.http.routing import route
+from dodoo.http.routing import MountRegistry, route
+
+_STATIC_DIR = pathlib.Path(__file__).parent.parent / "static"
+
+MountRegistry.get().add_mount(
+    "/account/static",
+    StaticFiles(directory=str(_STATIC_DIR)),
+    name="account_static",
+)
 
 _log = logging.getLogger(__name__)
 
