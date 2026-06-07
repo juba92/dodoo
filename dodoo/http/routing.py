@@ -60,6 +60,31 @@ class RouteRegistry:
             _log.debug("Registered route %s %s (auth=%s)", method, path, info["auth"])
 
 
+class MountRegistry:
+    _instance: MountRegistry | None = None
+
+    def __init__(self) -> None:
+        self._mounts: list[tuple[str, Any, str]] = []
+
+    @classmethod
+    def get(cls) -> MountRegistry:
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    @classmethod
+    def reset(cls) -> None:
+        cls._instance = None
+
+    def add_mount(self, path: str, mount_app: Any, name: str) -> None:
+        self._mounts.append((path, mount_app, name))
+
+    def register_with_app(self, app: FastAPI) -> None:
+        for path, mount_app, name in self._mounts:
+            app.mount(path, mount_app, name=name)
+            _log.debug("Mounted %s at %s", name, path)
+
+
 def route(path: str, methods: list[str], auth: str = "session") -> Callable:
     """Decorator for registering a REST route with the global RouteRegistry."""
 

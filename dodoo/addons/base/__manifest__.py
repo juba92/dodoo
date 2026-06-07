@@ -1,1 +1,1 @@
-{"name": "base", "version": "1.0.0", "depends": []}
+{"name": "base", "version": "1.0.0", "depends": [], "application": False}

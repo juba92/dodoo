@@ -46,3 +46,26 @@ async def health(request: Request) -> JSONResponse:
         return JSONResponse({"status": "ok", "db": "connected"})
     except Exception:
         return JSONResponse({"status": "degraded", "db": "disconnected"}, status_code=503)
+
+
+@route("/web/core/info", methods=["GET"], auth="public")
+async def core_info(request: Request) -> JSONResponse:
+    env = request.app.state.env
+    async with env.dml_conn() as conn:
+        modules = await conn.execute(
+            text("SELECT name, version, state FROM ir_module WHERE application = TRUE ORDER BY name")
+        )
+        users = await conn.execute(text("SELECT COUNT(*) FROM res_users"))
+        groups = await conn.execute(text("SELECT COUNT(*) FROM res_groups"))
+
+    models = sorted(env.registry._models.keys())
+    return JSONResponse(
+        {
+            "modules": [
+                {"name": r[0], "version": r[1], "state": r[2]} for r in modules.fetchall()
+            ],
+            "models": models,
+            "users": users.scalar_one(),
+            "groups": groups.scalar_one(),
+        }
+    )
