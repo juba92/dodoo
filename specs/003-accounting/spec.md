@@ -195,7 +195,7 @@ An accountant runs standard financial reports to review the company's financial 
 **Taxes**
 - **FR-021**: The system MUST support four tax computation methods: percentage of base, fixed amount, division (tax-inclusive extraction), and group (delegates to child taxes).
 - **FR-022**: The system MUST support tax repartition lines defining where tax amounts are posted for invoices and separately for credit notes, with configurable factor percentages to support reverse-charge scenarios.
-- **FR-023**: The system MUST auto-generate tax lines on invoice moves based on the taxes assigned to each product line when the invoice is saved or confirmed.
+- **FR-023**: The system MUST auto-generate tax lines on invoice moves based on the taxes assigned to each product line when the invoice is saved or confirmed. Tax amounts MUST be rounded globally (sum all tax amounts across lines first, then round the total once to the currency's smallest unit) to prevent per-line rounding gaps from violating the balance constraint.
 - **FR-024**: The system MUST support fiscal positions that automatically substitute taxes and accounts based on the partner's location.
 - **FR-025**: The system MUST prevent taxes from being assigned to accounts of type `off_balance`.
 
@@ -251,6 +251,10 @@ An accountant runs standard financial reports to review the company's financial 
 - **SEC-003**: All monetary inputs (amounts, tax rates, quantities) MUST be validated as non-negative numbers within reasonable bounds at the API boundary.
 - **SEC-004**: Reconciliation operations MUST verify that both lines belong to the same company before matching to prevent cross-company data leakage.
 
+### Observability Requirements
+
+- **OBS-001**: Every accounting state transition (draft→posted, posted→draft reset, reconciliation created, reconciliation undone) MUST emit a structured JSON log entry at INFO level containing: move ID, transition name, user ID, and UTC timestamp. No additional database table is required; server-level log infrastructure is used.
+
 ### Performance Requirements
 
 - **PERF-001**: Any single accounting model record (invoice, journal entry, payment) must be retrievable in under 500 ms under normal single-user load.
@@ -276,8 +280,8 @@ An accountant runs standard financial reports to review the company's financial 
 
 ## Assumptions
 
-- The company operates with a single functional currency (multi-currency reconciliation exchange entries are deferred to a later module).
-- A default chart of accounts (standard account codes for assets, liabilities, equity, income, expenses) is seeded at installation with at least one account of each category type.
+- The company operates with a single functional currency. The data model includes `amount_currency` and `currency_id` fields on move lines (nullable, defaulting to the company currency) so the schema is forward-compatible with a future multi-currency module; however, no exchange-rate computation, revaluation, or currency-difference journal entries are produced in this module. All business logic enforces that line amounts in company currency are always authoritative.
+- A default chart of accounts is seeded at installation containing approximately 25 accounts with conventional codes and names (e.g. 1100 Accounts Receivable, 1010 Bank, 2000 Accounts Payable, 2010 VAT Payable, 3000 Equity, 4000 Revenue, 5000 Expenses). The set covers every account type category with realistic names sufficient to run all user stories end-to-end. A full country-specific localisation chart is deferred to a future `account_l10n_*` addon following Odoo's pattern.
 - The `res.currency` table in the base module already contains currency data and is used directly; no new currency management is built in this module.
 - Products and product lines are out of scope; invoice product lines are free-text descriptions with a manually entered unit price and quantity (no product catalogue required at this stage).
 - A single company context is assumed throughout; the `company_id` field is stored but multi-company isolation enforcement is deferred.
@@ -285,3 +289,12 @@ An accountant runs standard financial reports to review the company's financial 
 - Fiscal year configuration is assumed to follow the calendar year (1 Jan – 31 Dec) by default; custom fiscal year periods are out of scope.
 - Bank statement import from external files (OFX, CSV, MT940) is out of scope.
 - PDF invoice generation and email sending are out of scope.
+
+## Clarifications
+
+### Session 2026-06-07
+
+- Q: Should `amount_currency` and `currency_id` be stored on move lines now (forward-compatible) or omitted until a multi-currency module is built? → A: Store as nullable fields (forward-compatible schema); enforce single-currency at business logic layer — no exchange-rate logic in this module.
+- Q: What is the scope of the default chart of accounts seeded at installation? → A: Minimal functional set (~25 accounts) with conventional codes and real names covering all 18 account types; full localisation charts deferred to future l10n addons.
+- Q: How should tax amounts be rounded on multi-line invoices? → A: Round globally — sum all tax amounts first, then round the total once (matching Odoo's `round_globally` default); eliminates per-line rounding gaps that would violate the balance constraint.
+- Q: Is per-transition audit logging in scope? → A: Structured server-log entries only (JSON, INFO level, every state transition); no dedicated DB audit table — satisfies constitution observability requirement without extra scope.

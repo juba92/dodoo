@@ -31,4 +31,4 @@
 
 ## Notes
 
-All items pass. The spec covers 8 user stories (P1–P3), 43 functional requirements, 5 security requirements, 3 performance requirements, 2 accessibility requirements, and 7 measurable success criteria. Scope boundaries are explicit (out-of-scope items listed in assumptions). Ready for `/speckit-plan`.
+All items pass. The spec covers 8 user stories (P1–P3), 43 functional requirements, 5 security requirements, 1 observability requirement (OBS-001), 3 performance requirements, 2 accessibility requirements, and 7 measurable success criteria. Four clarifications integrated (2026-06-07): multi-currency field storage strategy, default CoA scope, tax rounding method, audit trail approach. Scope boundaries are explicit. Ready for `/speckit-plan`.
