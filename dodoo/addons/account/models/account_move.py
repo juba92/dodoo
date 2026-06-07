@@ -240,6 +240,8 @@ class AccountMove(BaseModel):
 
         # Get accounting date from first product line
         acct_date = product_lines[0]["date"]
+        if isinstance(acct_date, str):
+            acct_date = datetime.date.fromisoformat(acct_date)
 
         # Insert tax lines
         for tid, amount in rounded.items():
@@ -354,6 +356,8 @@ class AccountMove(BaseModel):
         )
         dt_data = dt_row.fetchone()
         acct_date = dt_data[0] if dt_data else datetime.date.today()
+        if isinstance(acct_date, str):
+            acct_date = datetime.date.fromisoformat(acct_date)
 
         bal = debit - credit
         # Insert with amount_residual = balance (the full unpaid amount initially)
