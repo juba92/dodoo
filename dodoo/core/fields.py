@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import datetime
+from decimal import Decimal
 from typing import Any
 
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import JSONB, NUMERIC
 
 _RESERVED = frozenset({"id", "create_date", "write_date", "_type"})
 
@@ -21,6 +24,10 @@ class Field:
         self.required = required
         self.readonly = readonly
         self.default = default
+
+    def coerce(self, value: Any) -> Any:
+        """Coerce a value from JSON/external source to the Python type asyncpg expects."""
+        return value
 
     def to_sa_column(self) -> sa.Column:  # type: ignore[type-arg]
         raise NotImplementedError
@@ -44,6 +51,11 @@ class Integer(Field):
     def col_type(self) -> sa.Integer:
         return sa.Integer()
 
+    def coerce(self, value: Any) -> Any:
+        if value is None:
+            return None
+        return int(value)
+
     def to_sa_column(self) -> sa.Column:  # type: ignore[type-arg]
         return sa.Column(self.name, sa.Integer(), nullable=not self.required)
 
@@ -54,7 +66,10 @@ class Boolean(Field):
 
     def to_sa_column(self) -> sa.Column:  # type: ignore[type-arg]
         return sa.Column(
-            self.name, sa.Boolean(), nullable=False, server_default=str(self.default).upper()
+            self.name,
+            sa.Boolean(),
+            nullable=False,
+            server_default=str(self.default).upper(),
         )
 
 
@@ -64,11 +79,21 @@ class Float(Field):
 
 
 class Date(Field):
+    def coerce(self, value: Any) -> Any:
+        if value is None or isinstance(value, datetime.date):
+            return value
+        return datetime.date.fromisoformat(str(value))
+
     def to_sa_column(self) -> sa.Column:  # type: ignore[type-arg]
         return sa.Column(self.name, sa.Date(), nullable=not self.required)
 
 
 class Datetime(Field):
+    def coerce(self, value: Any) -> Any:
+        if value is None or isinstance(value, datetime.datetime):
+            return value
+        return datetime.datetime.fromisoformat(str(value))
+
     def to_sa_column(self) -> sa.Column:  # type: ignore[type-arg]
         return sa.Column(self.name, sa.DateTime(), nullable=not self.required)
 
@@ -129,3 +154,52 @@ class Many2many(Field):
 
     def to_sa_column(self) -> None:  # type: ignore[override]
         return None
+
+
+# --- Accounting field types ---
+
+
+class Selection(Field):
+    """Enum-like field stored as VARCHAR(64); validated against choices list."""
+
+    def __init__(self, choices: list[tuple[str, str]], **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.choices = choices  # [(value, label), ...]
+
+    @property
+    def valid_values(self) -> list[str]:
+        return [v for v, _ in self.choices]
+
+    def to_sa_column(self) -> sa.Column:  # type: ignore[type-arg]
+        kwargs: dict = {"nullable": not self.required}
+        if self.default is not None:
+            kwargs["server_default"] = f"'{self.default}'"
+        return sa.Column(self.name, sa.String(64), **kwargs)
+
+
+class Monetary(Field):
+    """Monetary amount stored as NUMERIC(20,6); always non-negative; default 0."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("default", Decimal("0"))
+        super().__init__(**kwargs)
+
+    def coerce(self, value: Any) -> Any:
+        if value is None:
+            return Decimal("0")
+        return Decimal(str(value))
+
+    def to_sa_column(self) -> sa.Column:  # type: ignore[type-arg]
+        return sa.Column(
+            self.name,
+            NUMERIC(precision=20, scale=6),
+            nullable=False,
+            server_default="0",
+        )
+
+
+class Json(Field):
+    """JSON field stored as PostgreSQL JSONB; nullable."""
+
+    def to_sa_column(self) -> sa.Column:  # type: ignore[type-arg]
+        return sa.Column(self.name, JSONB(), nullable=True)

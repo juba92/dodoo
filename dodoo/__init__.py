@@ -57,6 +57,21 @@ class _ModelProxy:
     async def fields_get(self, attributes: list[str] | None = None) -> dict[str, dict[str, Any]]:
         return await self._model.fields_get(self._env, attributes)
 
+    def __getattr__(self, name: str) -> Any:
+        """Fall through to underlying model classmethod with env injected."""
+        if name.startswith("_"):
+            raise AttributeError(name)
+        model_method = getattr(self._model, name, None)
+        if model_method is None:
+            raise AttributeError(f"'{self._model._name}' has no method '{name}'")
+        import functools
+
+        @functools.wraps(model_method)
+        async def _wrapper(*args: Any, **kwargs: Any) -> Any:
+            return await model_method(self._env, *args, **kwargs)
+
+        return _wrapper
+
 
 class Environment:
     def __init__(

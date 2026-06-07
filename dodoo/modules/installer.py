@@ -35,7 +35,9 @@ class ModuleInstaller:
 
         # Include built-in addons path
         builtin_addons = str(Path(__file__).parent.parent / "addons")
-        paths = [builtin_addons] + [p.strip() for p in addons_path.split(":") if p.strip()]
+        paths = [builtin_addons] + [
+            p.strip() for p in addons_path.split(":") if p.strip()
+        ]
 
         # Discover from all paths
         all_manifests: dict[str, dict] = {}
@@ -60,7 +62,9 @@ class ModuleInstaller:
 
         addons_path = os.environ.get("ADDONS_PATH", "./addons")
         builtin_addons = str(Path(__file__).parent.parent / "addons")
-        paths = [builtin_addons] + [p.strip() for p in addons_path.split(":") if p.strip()]
+        paths = [builtin_addons] + [
+            p.strip() for p in addons_path.split(":") if p.strip()
+        ]
 
         for path in paths:
             discovered = self._loader.discover(path)
@@ -81,7 +85,11 @@ class ModuleInstaller:
                     before = set(id(m) for m in _ALL_MODELS)
                     _import_package(pkg_dir)
                     for model_cls in _ALL_MODELS:
-                        if id(model_cls) not in before:
+                        if (
+                            id(model_cls) not in before
+                            and not getattr(model_cls, "_abstract", False)
+                            and model_cls._name
+                        ):
                             try:
                                 self._env.registry.register(model_cls)
                             except Exception:
@@ -109,9 +117,13 @@ class ModuleInstaller:
         # Import the package (makes models register themselves via metaclass)
         _import_package(pkg_dir)
 
-        # Register any models newly defined by this package
+        # Register any models newly defined by this package (skip abstract ones)
         for model_cls in _ALL_MODELS:
-            if id(model_cls) not in before:
+            if (
+                id(model_cls) not in before
+                and not getattr(model_cls, "_abstract", False)
+                and model_cls._name
+            ):
                 try:
                     self._env.registry.register(model_cls)
                 except Exception:
@@ -153,9 +165,11 @@ class ModuleInstaller:
             )
 
         # Call post_install hook if the package defines one
-        pkg_module = importlib.import_module(f"dodoo.addons.{name}") if (
-            Path(__file__).parent.parent / "addons" / name
-        ).is_dir() else sys.modules.get(name)
+        pkg_module = (
+            importlib.import_module(f"dodoo.addons.{name}")
+            if (Path(__file__).parent.parent / "addons" / name).is_dir()
+            else sys.modules.get(name)
+        )
 
         if pkg_module is not None:
             post_install = getattr(pkg_module, "post_install", None)
@@ -177,7 +191,9 @@ def _import_package(pkg_dir: Path) -> None:
         try:
             importlib.import_module(full_name)
         except ImportError as exc:
-            raise ModuleLoadError(f"Failed to import built-in module '{full_name}': {exc}") from exc
+            raise ModuleLoadError(
+                f"Failed to import built-in module '{full_name}': {exc}"
+            ) from exc
         return
 
     # External addon — add parent dir to sys.path and import by bare name

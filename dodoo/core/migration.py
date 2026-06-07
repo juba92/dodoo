@@ -12,6 +12,8 @@ from dodoo.core.exceptions import SchemaConflictError
 if TYPE_CHECKING:
     from dodoo.core.models import BaseModel
 
+from sqlalchemy.dialects.postgresql import JSONB, NUMERIC
+
 from dodoo.core.fields import Many2many
 
 _log = logging.getLogger(__name__)
@@ -25,6 +27,8 @@ _SA_TO_PG: dict[type, str] = {
     sa.Date: "date",
     sa.DateTime: "timestamp without time zone",
     sa.Text: "text",
+    NUMERIC: "numeric",
+    JSONB: "jsonb",
 }
 
 
@@ -46,6 +50,8 @@ class MigrationRunner:
         self._engine = ddl_engine
 
     async def install(self, model: type[BaseModel]) -> None:
+        if model._abstract:
+            return
         table_name = model._table_name()
         columns = model._sa_columns()
 
@@ -85,7 +91,16 @@ class MigrationRunner:
         col_defs = ["id SERIAL PRIMARY KEY"]
         for col in columns:
             nullable = "NOT NULL" if not col.nullable else "NULL"
-            col_defs.append(f"{col.name} {col.type.compile(conn.dialect)} {nullable}")
+            server_default = col.server_default
+            default_clause = ""
+            if server_default is not None:
+                if hasattr(server_default, "arg"):
+                    default_clause = f" DEFAULT {server_default.arg}"
+                elif isinstance(server_default, str):
+                    default_clause = f" DEFAULT {server_default}"
+            col_defs.append(
+                f"{col.name} {col.type.compile(conn.dialect)}{default_clause} {nullable}"
+            )
         col_defs += [
             "create_date TIMESTAMP WITHOUT TIME ZONE DEFAULT now()",
             "write_date TIMESTAMP WITHOUT TIME ZONE DEFAULT now()",
@@ -125,5 +140,7 @@ class MigrationRunner:
             existing = await _existing_columns(conn, table_name)
             if "_type" not in existing:
                 await conn.execute(
-                    text(f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS _type VARCHAR(128)")
+                    text(
+                        f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS _type VARCHAR(128)"
+                    )
                 )

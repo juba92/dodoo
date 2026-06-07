@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+import datetime
 import logging
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from dodoo.core.exceptions import AccessError, AuthenticationError, DomainError
+from dodoo.core.exceptions import (
+    AccessError,
+    AuthenticationError,
+    DodooError,
+    DomainError,
+)
 
 if TYPE_CHECKING:
     from dodoo import Environment
@@ -17,8 +24,23 @@ SERVER_VERSION = "0.1.0"
 PROTOCOL_VERSION = "1"
 
 
+def _jsonify(obj: Any) -> Any:
+    """Recursively coerce non-JSON-serializable objects to JSON-safe primitives."""
+    if isinstance(obj, dict):
+        return {k: _jsonify(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_jsonify(v) for v in obj]
+    if isinstance(obj, Decimal):
+        return float(obj)
+    if isinstance(obj, datetime.datetime):
+        return obj.isoformat()
+    if isinstance(obj, datetime.date):
+        return obj.isoformat()
+    return obj
+
+
 def _ok(id_: Any, result: Any) -> dict:
-    return {"jsonrpc": "2.0", "id": id_, "result": result}
+    return {"jsonrpc": "2.0", "id": id_, "result": _jsonify(result)}
 
 
 def _err(id_: Any, code: int, message: str, exc_type: str = "") -> dict:
@@ -81,8 +103,12 @@ async def jsonrpc_handler(request: Request) -> JSONResponse:
         return JSONResponse(_err(req_id, -32000, str(exc), "AccessError"))
     except DomainError as exc:
         return JSONResponse(_err(req_id, -32602, str(exc), "DomainError"))
+    except DodooError as exc:
+        return JSONResponse(_err(req_id, -32602, str(exc), "DodooError"))
     except TypeError as exc:
-        return JSONResponse(_err(req_id, -32602, f"Invalid params: {exc}", "InvalidParams"))
+        return JSONResponse(
+            _err(req_id, -32602, f"Invalid params: {exc}", "InvalidParams")
+        )
     except Exception as exc:
         _log.exception("Internal error in JSON-RPC handler")
         return JSONResponse(_err(req_id, -32603, "Internal error", type(exc).__name__))
@@ -120,7 +146,9 @@ async def _object_execute_kw(env: Any, uid: Any, args: list, kwargs: dict) -> An
     method_kwargs: dict = args[3] if len(args) > 3 else kwargs
 
     if method_name.startswith("_"):
-        raise AccessError(f"Method '{method_name}' is private and cannot be called via JSON-RPC")
+        raise AccessError(
+            f"Method '{method_name}' is private and cannot be called via JSON-RPC"
+        )
 
     model_proxy = env[model_name]
     method = getattr(model_proxy, method_name, None)

@@ -54,6 +54,7 @@ class _ModelMeta(type):
 class BaseModel(metaclass=_ModelMeta):
     _name: str = ""
     _inherit: str = ""
+    _abstract: bool = False  # True → no DB table; skip migration
     _fields: dict[str, Field] = {}
 
     @classmethod
@@ -90,7 +91,11 @@ class BaseModel(metaclass=_ModelMeta):
     @classmethod
     def _all_field_names(cls) -> list[str]:
         names = list(_SYSTEM_FIELDS)
-        names += [n for n in cls._fields if not isinstance(cls._fields[n], One2many | Many2many)]
+        names += [
+            n
+            for n in cls._fields
+            if not isinstance(cls._fields[n], One2many | Many2many)
+        ]
         return names
 
     # ---- CRUD ----
@@ -99,10 +104,14 @@ class BaseModel(metaclass=_ModelMeta):
     async def create(cls, env: Environment, vals: dict[str, Any]) -> int:
         table = cls._sa_table()
         async with env.dml_conn() as conn:
-            row = {k: v for k, v in vals.items() if k in cls._fields}
+            row = {
+                k: cls._fields[k].coerce(v) for k, v in vals.items() if k in cls._fields
+            }
             if cls._inherit:
                 row["_type"] = cls._name
-            result = await conn.execute(table.insert().values(**row).returning(table.c.id))
+            result = await conn.execute(
+                table.insert().values(**row).returning(table.c.id)
+            )
             await conn.commit()
             return result.scalar_one()
 
@@ -126,9 +135,11 @@ class BaseModel(metaclass=_ModelMeta):
         return [dict(r) for r in rows]
 
     @classmethod
-    async def write(cls, env: Environment, ids: list[int], vals: dict[str, Any]) -> bool:
+    async def write(
+        cls, env: Environment, ids: list[int], vals: dict[str, Any]
+    ) -> bool:
         table = cls._sa_table()
-        row = {k: v for k, v in vals.items() if k in cls._fields}
+        row = {k: cls._fields[k].coerce(v) for k, v in vals.items() if k in cls._fields}
         row["write_date"] = sa.func.now()
         query = sa.update(table).where(table.c.id.in_(ids)).values(**row)
         if cls._inherit:
@@ -172,7 +183,9 @@ class BaseModel(metaclass=_ModelMeta):
             rule_domain = await _get_access_domain(env, cls._name, uid, "read")
             if rule_domain:
                 rule_clause = compile_domain(
-                    table, {**cls._fields, **{f: None for f in _SYSTEM_FIELDS}}, rule_domain
+                    table,
+                    {**cls._fields, **{f: None for f in _SYSTEM_FIELDS}},
+                    rule_domain,
                 )
                 where = sa.and_(where, rule_clause)
 

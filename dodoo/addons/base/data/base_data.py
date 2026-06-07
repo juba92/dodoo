@@ -53,3 +53,36 @@ async def seed_base_data(env: Environment) -> None:
         await conn.commit()
 
     _log.info("Seeded base data: admin user and Administrator group")
+
+    await _seed_currency_and_company(env)
+
+
+async def _seed_currency_and_company(env: Environment) -> None:
+    from dodoo.addons.base.models.res_company import ResCompany
+    from dodoo.addons.base.models.res_currency import ResCurrency
+
+    async with env.dml_conn() as conn:
+        result = await conn.execute(text("SELECT id FROM res_currency WHERE code = 'EUR' LIMIT 1"))
+        row = result.fetchone()
+        if row:
+            _log.info("Currency EUR already exists; skipping")
+            return
+        currency_id = None
+
+    currency_id = await ResCurrency.create(
+        env,
+        {"code": "EUR", "name": "Euro", "symbol": "€", "rounding": 2, "active": True},
+    )
+
+    async with env.dml_conn() as conn:
+        result = await conn.execute(text("SELECT id FROM res_company LIMIT 1"))
+        if result.fetchone():
+            _log.info("Default company already exists; skipping")
+            return
+
+    await ResCompany.create(
+        env,
+        {"name": "My Company", "currency_id": currency_id},
+    )
+
+    _log.info("Seeded base data: EUR currency and default company")
