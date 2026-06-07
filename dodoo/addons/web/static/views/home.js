@@ -14,6 +14,18 @@ const _MODULE_ICONS = {
   crm:      '🤝',
 };
 
+const _MODULE_DISPLAY_NAMES = {
+  account:  'Accounting',
+  base:     'Base',
+  web:      'Web Client',
+  sale:     'Sales',
+  purchase: 'Purchase',
+  hr:       'Employees',
+  project:  'Project',
+  stock:    'Inventory',
+  crm:      'CRM',
+};
+
 // Odoo-style per-module colors (mirrors Odoo's app tile palette)
 const _MODULE_COLORS = {
   base:     '#875A7B',
@@ -103,7 +115,8 @@ export async function render(container, params) {
   App.state.modules.forEach(mod => {
     const tile = document.createElement('button');
     tile.className = 'module-tile';
-    tile.setAttribute('aria-label', `Open ${mod.name} module`);
+    const displayName = _MODULE_DISPLAY_NAMES[mod.name] ?? mod.name;
+    tile.setAttribute('aria-label', `Open ${displayName} module`);
     tile.onclick = () => App.navigate(`#/module/${mod.name}`);
 
     // Colored icon square (Odoo-style)
@@ -115,7 +128,7 @@ export async function render(container, params) {
 
     const name = document.createElement('span');
     name.className = 'tile-name';
-    name.textContent = mod.name;  // textContent — safe
+    name.textContent = displayName;
 
     const version = document.createElement('span');
     version.className = 'tile-version';

@@ -246,23 +246,27 @@ const _ROUTES = [
 ];
 
 function _parseHash(hash) {
+  const base = hash.split('?')[0]; // strip query string embedded in hash
   for (const [pattern, loader] of _ROUTES) {
-    const m = hash.match(pattern);
+    const m = base.match(pattern);
     if (m) return { loader, groups: m.slice(1) };
   }
   return null;
 }
 
 function _paramsFromHash(hash) {
+  const base = hash.split('?')[0];
+  // Extract query params from hash (e.g. #/accounting/move/new?type=out_invoice)
+  const qs = hash.includes('?') ? new URLSearchParams(hash.split('?')[1]) : new URLSearchParams();
   let m;
-  if ((m = hash.match(/^#\/accounting\/move\/new$/)))    return { id: 'new' };
-  if ((m = hash.match(/^#\/accounting\/move\/(\d+)$/)))  return { id: parseInt(m[1], 10) };
-  if ((m = hash.match(/^#\/accounting\/reports\/([^/]+)$/))) return { report: m[1] };
-  if ((m = hash.match(/^#\/accounting\/([^/]+)$/)))      return { route: m[1] };
-  if ((m = hash.match(/^#\/module\/(.+)$/)))  return { mode: 'module', name: m[1] };
-  if ((m = hash.match(/^#\/model\/([^/]+)\/new$/)))      return { model: m[1], id: 'new' };
-  if ((m = hash.match(/^#\/model\/([^/]+)\/(\d+)$/)))    return { model: m[1], id: parseInt(m[2], 10) };
-  if ((m = hash.match(/^#\/model\/([^/]+)$/)))           return { model: m[1] };
+  if ((m = base.match(/^#\/accounting\/move\/new$/)))    return { id: 'new', moveType: qs.get('type') || 'out_invoice' };
+  if ((m = base.match(/^#\/accounting\/move\/(\d+)$/)))  return { id: parseInt(m[1], 10) };
+  if ((m = base.match(/^#\/accounting\/reports\/([^/]+)$/))) return { report: m[1] };
+  if ((m = base.match(/^#\/accounting\/([^/]+)$/)))      return { route: m[1] };
+  if ((m = base.match(/^#\/module\/(.+)$/)))  return { mode: 'module', name: m[1] };
+  if ((m = base.match(/^#\/model\/([^/]+)\/new$/)))      return { model: m[1], id: 'new' };
+  if ((m = base.match(/^#\/model\/([^/]+)\/(\d+)$/)))    return { model: m[1], id: parseInt(m[2], 10) };
+  if ((m = base.match(/^#\/model\/([^/]+)$/)))           return { model: m[1] };
   return {};
 }
 
