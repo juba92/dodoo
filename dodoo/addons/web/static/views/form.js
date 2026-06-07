@@ -314,21 +314,11 @@ export async function render(container, params) {
 
   // ── Discard ──────────────────────────────────────────────────────────────────
   discardBtn.onclick = () => {
-    _clearErrors();
-    _showBanner(statusBanner, null, '');
-    form.querySelectorAll('[data-field]').forEach(el => {
-      const name = el.getAttribute('data-field');
-      const meta = fields[name];
-      if (!meta || meta.readonly) return;
-      const orig = originalValues[name];
-      if (meta.type === 'boolean') {
-        el.checked = Boolean(orig);
-      } else if (meta.type === 'many2one') {
-        el.value = Array.isArray(orig) ? String(orig[0] ?? '') : String(orig ?? '');
-      } else {
-        el.value = _displayValue(orig);
-      }
-    });
+    const h = window.location.hash;
+    const listHash = h.startsWith('#/accounting/model/')
+      ? `#/accounting/model/${model}`
+      : `#/model/${model}`;
+    App.navigate(listHash);
   };
 }
 
