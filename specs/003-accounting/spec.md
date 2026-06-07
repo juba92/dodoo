@@ -225,7 +225,7 @@ An accountant runs standard financial reports to review the company's financial 
 **Integration**
 - **FR-041**: The system MUST extend the partner record with default receivable account, default payable account, default customer payment term, and default supplier payment term.
 - **FR-042**: All accounting models MUST be accessible via the existing JSON-RPC execute_kw interface (fields_get, search_read, read, create, write, unlink) so the existing web UI can render them without modification.
-- **FR-043**: The system MUST provide five document sequences: INV/YYYY/ (customer invoices), BILL/YYYY/ (vendor bills), RINV/YYYY/ (customer credit notes), RBILL/YYYY/ (vendor credit notes), PAY/YYYY/ (payments), MISC/YYYY/ (manual entries).
+- **FR-043**: The system MUST provide six document sequences: INV/YYYY/ (customer invoices), BILL/YYYY/ (vendor bills), RINV/YYYY/ (customer credit notes), RBILL/YYYY/ (vendor credit notes), PAY/YYYY/ (payments), MISC/YYYY/ (manual entries).
 
 ### Key Entities
 
