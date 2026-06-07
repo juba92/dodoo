@@ -8,6 +8,15 @@ const TYPE_LABEL = {
   in_receipt:  'Vendor Receipt',
 };
 
+const _TYPE_LIST_HASH = {
+  out_invoice: '#/accounting/invoices',
+  out_refund:  '#/accounting/credit-notes',
+  in_invoice:  '#/accounting/bills',
+  in_refund:   '#/accounting/vendor-credit-notes',
+  entry:       '#/accounting/journal-entries',
+};
+function _listHashForType(moveType) { return _TYPE_LIST_HASH[moveType] ?? '#/accounting/invoices'; }
+
 function _fmt(v) {
   if (v === null || v === undefined) return '—';
   return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(parseFloat(v));
@@ -560,7 +569,14 @@ async function _renderNewInvoice(container, cp, moveType, editId = null) {
     const discardBtn = document.createElement('button');
     discardBtn.className = 'btn btn-secondary';
     discardBtn.textContent = 'Discard';
-    discardBtn.onclick = () => history.back();
+    discardBtn.onclick = () => {
+      if (editId) {
+        App.navigate(`#/accounting/move/${editId}`);
+      } else {
+        const prev = App.breadcrumb.length >= 2 ? App.breadcrumb[App.breadcrumb.length - 2].hash : null;
+        App.navigate(prev ?? _listHashForType(moveType));
+      }
+    };
     cp.appendChild(saveBtn);
     cp.appendChild(discardBtn);
   }
