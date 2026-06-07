@@ -443,6 +443,8 @@ class AccountMove(BaseModel):
                 # Assign sequence name
                 prefix = _JOURNAL_PREFIX.get(move_type, "MISC")
                 date_val = rec.get("date")
+                if isinstance(date_val, str):
+                    date_val = datetime.date.fromisoformat(date_val)
                 year = date_val.year if date_val else datetime.date.today().year
                 seq_no = await get_next_sequence(conn, prefix, year)
                 name = f"{prefix}/{year}/{seq_no:04d}"
