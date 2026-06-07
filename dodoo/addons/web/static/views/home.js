@@ -83,11 +83,9 @@ export async function render(container, params) {
     App.state.modules = info.modules ?? [];
     App.state.models = info.models ?? [];
 
-    // Refresh sidebar
+    // Refresh sidebar — only when still on a non-accounting route (guard against race condition)
     const sidebar = document.getElementById('sidebar');
-    if (sidebar) {
-      const { App: AppM } = await import('/web/static/app.js');
-      // Re-render sidebar via the app module's internals — use DOM directly
+    if (sidebar && !window.location.hash.startsWith('#/accounting')) {
       _refreshSidebar(sidebar, info.models ?? []);
     }
   } catch (err) {

@@ -34,14 +34,17 @@ function _labelFromHash(hash) {
   if (hash === '#/home' || hash === '#/') return 'Home';
   if (hash === '#/login') return 'Login';
   let m;
-  if ((m = hash.match(/^#\/accounting\/move\/new$/))) return 'New Invoice';
-  if ((m = hash.match(/^#\/accounting\/move\/(\d+)$/))) return `Invoice #${m[1]}`;
-  if ((m = hash.match(/^#\/accounting\/reports\/([^/]+)$/))) return m[1].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-  if ((m = hash.match(/^#\/accounting\/([^/]+)$/))) return _ACC_LABELS[m[1]] ?? m[1].replace(/-/g, ' ');
-  if ((m = hash.match(/^#\/module\/(.+)$/))) return m[1];
-  if ((m = hash.match(/^#\/model\/([^/]+)\/new$/))) return `New ${m[1]}`;
-  if ((m = hash.match(/^#\/model\/([^/]+)\/(\d+)$/))) return `#${m[2]}`;
-  if ((m = hash.match(/^#\/model\/([^/]+)$/))) return m[1];
+  if ((m = hash.match(/^#\/accounting\/move\/new$/)))           return 'New Invoice';
+  if ((m = hash.match(/^#\/accounting\/move\/(\d+)$/)))         return `Invoice #${m[1]}`;
+  if ((m = hash.match(/^#\/accounting\/reports\/([^/]+)$/)))    return m[1].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  if ((m = hash.match(/^#\/accounting\/model\/([^/]+)\/new$/))) return `New ${m[1]}`;
+  if ((m = hash.match(/^#\/accounting\/model\/([^/]+)\/(\d+)$/))) return `${m[1]} #${m[2]}`;
+  if ((m = hash.match(/^#\/accounting\/model\/([^/]+)$/)))      return m[1];
+  if ((m = hash.match(/^#\/accounting\/([^/]+)$/)))             return _ACC_LABELS[m[1]] ?? m[1].replace(/-/g, ' ');
+  if ((m = hash.match(/^#\/module\/(.+)$/)))                    return m[1];
+  if ((m = hash.match(/^#\/model\/([^/]+)\/new$/)))             return `New ${m[1]}`;
+  if ((m = hash.match(/^#\/model\/([^/]+)\/(\d+)$/)))           return `#${m[2]}`;
+  if ((m = hash.match(/^#\/model\/([^/]+)$/)))                  return m[1];
   return hash.replace(/^#\//, '');
 }
 
@@ -162,11 +165,9 @@ function _renderBreadcrumb() {
   });
 }
 
-function _renderSidebar() {
+function _renderSidebar(hash) {
   const sidebar = document.getElementById('sidebar');
   if (!sidebar) return;
-
-  const hash = window.location.hash || '';
 
   // Update app name in navbar
   const appNameEl = document.querySelector('.nav-app-name');
@@ -200,6 +201,8 @@ function _renderSidebar() {
 
 async function _renderAccountingMenu(sidebar, currentHash) {
   const { ACCOUNTING_MENU } = await import('/account/static/account-menu.js');
+  // Guard: if a new navigation replaced this sidebar, bail out
+  if (!document.body.contains(sidebar)) return;
   sidebar.innerHTML = '';
   ACCOUNTING_MENU.forEach(({ section, items }) => {
     const title = document.createElement('div');
@@ -213,7 +216,11 @@ async function _renderAccountingMenu(sidebar, currentHash) {
       const btn = document.createElement('button');
       btn.textContent = label;
       if (currentHash === hash || currentHash.startsWith(hash + '/')) btn.className = 'active';
-      btn.onclick = () => App.navigate(hash);
+      btn.onclick = () => {
+        // Reset breadcrumb when clicking a top-level menu item
+        App.breadcrumb = [];
+        App.navigate(hash);
+      };
       li.appendChild(btn);
       ul.appendChild(li);
     });
@@ -238,6 +245,9 @@ const _ROUTES = [
   // Accounting-specific routes (must come before generic model routes)
   [/^#\/accounting\/move\/(new|\d+)$/, () => import('/account/static/views/invoice-form.js')],
   [/^#\/accounting\/reports\/([^/]+)$/, () => import('/account/static/views/report-view.js')],
+  [/^#\/accounting\/model\/([^/]+)\/new$/, () => import('/web/static/views/form.js')],
+  [/^#\/accounting\/model\/([^/]+)\/(\d+)$/, () => import('/web/static/views/form.js')],
+  [/^#\/accounting\/model\/([^/]+)$/, () => import('/web/static/views/list.js')],
   [/^#\/accounting\/([^/]+)$/, () => import('/account/static/views/invoice-list.js')],
   // Generic model routes
   [/^#\/model\/([^/]+)\/new$/, () => import('/web/static/views/form.js')],
@@ -259,14 +269,17 @@ function _paramsFromHash(hash) {
   // Extract query params from hash (e.g. #/accounting/move/new?type=out_invoice)
   const qs = hash.includes('?') ? new URLSearchParams(hash.split('?')[1]) : new URLSearchParams();
   let m;
-  if ((m = base.match(/^#\/accounting\/move\/new$/)))    return { id: 'new', moveType: qs.get('type') || 'out_invoice' };
-  if ((m = base.match(/^#\/accounting\/move\/(\d+)$/)))  return { id: parseInt(m[1], 10) };
-  if ((m = base.match(/^#\/accounting\/reports\/([^/]+)$/))) return { report: m[1] };
-  if ((m = base.match(/^#\/accounting\/([^/]+)$/)))      return { route: m[1] };
-  if ((m = base.match(/^#\/module\/(.+)$/)))  return { mode: 'module', name: m[1] };
-  if ((m = base.match(/^#\/model\/([^/]+)\/new$/)))      return { model: m[1], id: 'new' };
-  if ((m = base.match(/^#\/model\/([^/]+)\/(\d+)$/)))    return { model: m[1], id: parseInt(m[2], 10) };
-  if ((m = base.match(/^#\/model\/([^/]+)$/)))           return { model: m[1] };
+  if ((m = base.match(/^#\/accounting\/move\/new$/)))                  return { id: 'new', moveType: qs.get('type') || 'out_invoice' };
+  if ((m = base.match(/^#\/accounting\/move\/(\d+)$/)))                return { id: parseInt(m[1], 10) };
+  if ((m = base.match(/^#\/accounting\/reports\/([^/]+)$/)))           return { report: m[1] };
+  if ((m = base.match(/^#\/accounting\/model\/([^/]+)\/new$/)))        return { model: m[1], id: 'new' };
+  if ((m = base.match(/^#\/accounting\/model\/([^/]+)\/(\d+)$/)))      return { model: m[1], id: parseInt(m[2], 10) };
+  if ((m = base.match(/^#\/accounting\/model\/([^/]+)$/)))             return { model: m[1] };
+  if ((m = base.match(/^#\/accounting\/([^/]+)$/)))                    return { route: m[1] };
+  if ((m = base.match(/^#\/module\/(.+)$/)))                           return { mode: 'module', name: m[1] };
+  if ((m = base.match(/^#\/model\/([^/]+)\/new$/)))                    return { model: m[1], id: 'new' };
+  if ((m = base.match(/^#\/model\/([^/]+)\/(\d+)$/)))                  return { model: m[1], id: parseInt(m[2], 10) };
+  if ((m = base.match(/^#\/model\/([^/]+)$/)))                         return { model: m[1] };
   return {};
 }
 
@@ -297,7 +310,7 @@ async function _route() {
 
   _buildShell();
   _renderBreadcrumb();
-  _renderSidebar();
+  _renderSidebar(hash);
 
   const { render } = await parsed.loader();
   render(document.getElementById('main'), _paramsFromHash(hash));

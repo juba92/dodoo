@@ -165,7 +165,7 @@ export async function render(container, params) {
           const tr = document.createElement('tr');
           tr.onclick = () => {
             if (model === 'account.move') App.navigate(`#/accounting/move/${rec.id}`);
-            else App.navigate(`#/model/${model}/${rec.id}`);
+            else App.navigate(`#/accounting/model/${model}/${rec.id}`);
           };
           cols.forEach(col => {
             const td = document.createElement('td');
