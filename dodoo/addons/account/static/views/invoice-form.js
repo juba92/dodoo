@@ -573,8 +573,7 @@ async function _renderNewInvoice(container, cp, moveType, editId = null) {
       if (editId) {
         App.navigate(`#/accounting/move/${editId}`);
       } else {
-        const prev = App.breadcrumb.length >= 2 ? App.breadcrumb[App.breadcrumb.length - 2].hash : null;
-        App.navigate(prev ?? _listHashForType(moveType));
+        App.navigate(_listHashForType(moveType));
       }
     };
     cp.appendChild(saveBtn);
