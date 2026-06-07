@@ -6,7 +6,7 @@ at `specs/002-web-ui/plan.md`.
 
 ## Odoo Reference Implementation
 
-The goal of this project is to produce an Odoo-like product. The Odoo source code is cloned at `../odoo` and **must be studied before designing any feature** — UI layout, ORM patterns, module structure, HTTP routing, field types, access rules, and view architecture should all be modelled after how Odoo implements them. When in doubt about how something should work, read the equivalent in `../odoo` first.
+The goal of this project is to produce an Odoo-like product. The Odoo source code is cloned at `../odoo-19.0` and **must be studied before designing any feature** — UI layout, ORM patterns, module structure, HTTP routing, field types, access rules, and view architecture should all be modelled after how Odoo implements them. When in doubt about how something should work, read the equivalent in `../odoo-19.0` first.
 
 ## Branching Workflow
 
