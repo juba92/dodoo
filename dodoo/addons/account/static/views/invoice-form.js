@@ -500,72 +500,109 @@ async function _renderNewInvoice(container, cp, moveType) {
   const typeLabel = TYPE_LABEL[moveType] ?? 'Invoice';
   const isEntry   = moveType === 'entry';
 
-  // Load data in parallel
-  let partners = [], journals = [], accounts = [];
-  try {
-    [partners, journals, accounts] = await Promise.all([
-      api.rpc('res.partner', 'search_read', [[['active', '=', true]]],
-        { fields: ['id', 'name'], limit: 200, order: 'name asc' }),
-      api.rpc('account.journal', 'search_read', [[['type', 'in', _journalTypes(moveType)]]],
-        { fields: ['id', 'name', 'type'] }),
-      api.rpc('account.account', 'search_read',
-        [[['active', '=', true], ..._accountDomain(moveType)]],
-        { fields: ['id', 'code', 'name'], order: 'code asc', limit: 500 }),
-    ]);
-    // Fall back to all accounts if filter yields nothing
-    if (accounts.length === 0) {
-      accounts = await api.rpc('account.account', 'search_read',
-        [[['active', '=', true]]], { fields: ['id', 'code', 'name'], order: 'code asc', limit: 500 });
-    }
-  } catch (err) {
-    const el = document.createElement('div');
-    el.className = 'alert-error';
-    el.textContent = 'Failed to load form data: ' + err.message;
-    container.appendChild(el);
-    return;
-  }
-
-  const lines = [];
-
-  // ── Title ──
+  // ── Title + loading (immediate) ──
+  container.innerHTML = '';
   const titleEl = document.createElement('h2');
   titleEl.className = 'invoice-number';
   titleEl.style.padding = '12px 24px 0';
   titleEl.textContent = `New ${typeLabel}`;
   container.appendChild(titleEl);
 
-  // ── Header card ──
+  const loadingEl = document.createElement('div');
+  loadingEl.className = 'loading';
+  loadingEl.textContent = 'Loading form…';
+  container.appendChild(loadingEl);
+
+  // ── Control panel (immediate, before any await) ──
+  let _saveForm = null;
+  if (cp) {
+    cp.innerHTML = '';
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'btn btn-primary';
+    saveBtn.textContent = 'Save as Draft';
+    saveBtn.disabled = true;
+    saveBtn.onclick = async () => {
+      if (!_saveForm) return;
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+      try {
+        await _saveForm();
+      } catch (err) {
+        alert(err.message);
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save as Draft';
+      }
+    };
+    const discardBtn = document.createElement('button');
+    discardBtn.className = 'btn btn-secondary';
+    discardBtn.textContent = 'Discard';
+    discardBtn.onclick = () => history.back();
+    cp.appendChild(saveBtn);
+    cp.appendChild(discardBtn);
+  }
+
+  // ── Load data ──
+  let partners = [], journals = [], accounts = [], companies = [];
+  try {
+    [partners, journals, accounts, companies] = await Promise.all([
+      api.rpc('res.partner', 'search_read', [[]], { fields: ['id', 'name'], limit: 200 }),
+      api.rpc('account.journal', 'search_read', [[['type', 'in', _journalTypes(moveType)]]], { fields: ['id', 'name'] }),
+      api.rpc('account.account', 'search_read',
+        [[['active', '=', true], ..._accountDomain(moveType)]],
+        { fields: ['id', 'code', 'name'], order: 'code asc', limit: 500 }),
+      api.rpc('res.company', 'search_read', [[]], { fields: ['id', 'currency_id'], limit: 1 }),
+    ]);
+    // Fall back to all accounts if type-filtered list is empty
+    if (accounts.length === 0) {
+      accounts = await api.rpc('account.account', 'search_read',
+        [[['active', '=', true]]], { fields: ['id', 'code', 'name'], order: 'code asc', limit: 500 });
+    }
+  } catch (err) {
+    loadingEl.className = 'alert-error';
+    loadingEl.textContent = 'Failed to load form data: ' + err.message;
+    return;
+  }
+
+  const company    = companies[0];
+  const companyId  = company?.id ?? null;
+  const currencyId = company
+    ? (Array.isArray(company.currency_id) ? company.currency_id[0] : company.currency_id)
+    : null;
+
+  // ── Build form (replace loading indicator) ──
+  loadingEl.remove();
+
+  const lines = [];
+
+  // Header card
   const headerCard = document.createElement('div');
   headerCard.className = 'form-card invoice-header-card';
   const grid = document.createElement('div');
   grid.className = 'header-grid';
 
-  // Partner
   const partnerSel = _inlineSelect(
     [['', isEntry ? '— Optional —' : '— Select partner —'], ...partners.map(p => [p.id, p.name])]
   );
   grid.appendChild(_headerRow(isEntry ? 'Partner (optional)' : 'Customer / Vendor', partnerSel));
 
-  // Journal
-  const journalSel = _inlineSelect(journals.map(j => [j.id, j.name]));
+  const journalSel = _inlineSelect(journals.length
+    ? journals.map(j => [j.id, j.name])
+    : [['', '— No journals found —']]);
   grid.appendChild(_headerRow('Journal', journalSel));
 
-  // Date
   const dateInput = _inlineInput('date', '');
   dateInput.value = new Date().toISOString().substring(0, 10);
   grid.appendChild(_headerRow('Invoice Date', dateInput));
 
-  // Reference
   const refInput = _inlineInput('text', 'Optional');
   grid.appendChild(_headerRow('Reference', refInput));
 
   headerCard.appendChild(grid);
   container.appendChild(headerCard);
 
-  // ── Lines card ──
+  // Lines card
   const linesCard = document.createElement('div');
   linesCard.className = 'form-card';
-
   const linesTitle = document.createElement('h3');
   linesTitle.className = 'section-title';
   linesTitle.textContent = isEntry ? 'Journal Entry Lines' : 'Invoice Lines';
@@ -597,7 +634,7 @@ async function _renderNewInvoice(container, cp, moveType) {
   linesCard.appendChild(addBtn);
   container.appendChild(linesCard);
 
-  // ── Totals ──
+  // Totals
   const totalsCard = document.createElement('div');
   totalsCard.className = 'form-card totals-card';
   const totalsRow = document.createElement('div');
@@ -614,49 +651,31 @@ async function _renderNewInvoice(container, cp, moveType) {
   container.appendChild(totalsCard);
 
   function updateTotals() {
-    const total = lines.reduce((s, l) => {
-      return s + (isEntry ? parseFloat(l.debit || 0) : parseFloat(l.amount || 0));
-    }, 0);
+    const total = lines.reduce((s, l) =>
+      s + (isEntry ? parseFloat(l.debit || 0) : parseFloat(l.amount || 0)), 0);
     subtotalEl.textContent = _fmt(total);
   }
 
   function addLine() {
     const line = { name: '', accountId: '', amount: '', debit: '', credit: '' };
     lines.push(line);
-    tbody.appendChild(_buildNewLineRow(line, accounts, lines, tbody, isEntry, updateTotals));
+    tbody.appendChild(_buildNewLineRow(line, accounts, lines, isEntry, updateTotals));
     updateTotals();
   }
 
   addBtn.onclick = addLine;
-  addLine(); // start with one empty row
+  addLine();
 
-  // ── Control panel ──
+  // Wire save callback and enable the button
+  _saveForm = () => _saveNewInvoice(moveType, companyId, currencyId,
+    partnerSel, journalSel, dateInput, refInput, lines, isEntry);
   if (cp) {
-    cp.innerHTML = '';
-    const saveBtn = document.createElement('button');
-    saveBtn.className = 'btn btn-primary';
-    saveBtn.textContent = 'Save as Draft';
-    saveBtn.onclick = async () => {
-      saveBtn.disabled = true;
-      saveBtn.textContent = 'Saving…';
-      try {
-        await _saveNewInvoice(moveType, partnerSel, journalSel, dateInput, refInput, lines, isEntry);
-      } catch (err) {
-        alert(err.message);
-        saveBtn.disabled = false;
-        saveBtn.textContent = 'Save as Draft';
-      }
-    };
-    const discardBtn = document.createElement('button');
-    discardBtn.className = 'btn btn-secondary';
-    discardBtn.textContent = 'Discard';
-    discardBtn.onclick = () => history.back();
-    cp.appendChild(saveBtn);
-    cp.appendChild(discardBtn);
+    const saveBtn = cp.querySelector('.btn-primary');
+    if (saveBtn) saveBtn.disabled = false;
   }
 }
 
-function _buildNewLineRow(line, accounts, lines, tbody, isEntry, onUpdate) {
+function _buildNewLineRow(line, accounts, lines, isEntry, onUpdate) {
   const tr = document.createElement('tr');
 
   const tdStyle = 'padding:4px 6px;border:1px solid rgba(0,0,0,.12);border-radius:3px;font-size:.875rem';
@@ -757,15 +776,16 @@ function _buildNewLineRow(line, accounts, lines, tbody, isEntry, onUpdate) {
   return tr;
 }
 
-async function _saveNewInvoice(moveType, partnerSel, journalSel, dateInput, refInput, lines, isEntry) {
-  const partnerId  = parseInt(partnerSel.value, 10) || false;
-  const journalId  = parseInt(journalSel.value, 10);
+async function _saveNewInvoice(moveType, companyId, currencyId, partnerSel, journalSel, dateInput, refInput, lines, isEntry) {
+  const partnerId   = parseInt(partnerSel.value, 10) || null;
+  const journalId   = parseInt(journalSel.value, 10) || null;
   const invoiceDate = dateInput.value;
-  const ref        = refInput.value.trim();
+  const ref         = refInput.value.trim() || null;
 
-  if (!journalId)   throw new Error('Please select a journal.');
-  if (!invoiceDate) throw new Error('Please enter an invoice date.');
-  if (!isEntry && !partnerId) throw new Error('Please select a customer or vendor.');
+  if (!journalId)               throw new Error('Please select a journal.');
+  if (!invoiceDate)             throw new Error('Please enter an invoice date.');
+  if (!isEntry && !partnerId)   throw new Error('Please select a customer or vendor.');
+  if (!companyId || !currencyId) throw new Error('Company or currency not found. Check server setup.');
 
   const validLines = lines.filter(l => l.accountId && (
     isEntry
@@ -779,10 +799,12 @@ async function _saveNewInvoice(moveType, partnerSel, journalSel, dateInput, refI
   const moveId = await api.rpc('account.move', 'create', [{
     move_type:    moveType,
     journal_id:   journalId,
-    partner_id:   partnerId || false,
+    company_id:   companyId,
+    currency_id:  currencyId,
+    partner_id:   partnerId,
     invoice_date: invoiceDate,
     date:         invoiceDate,
-    ref:          ref || false,
+    ref,
   }]);
 
   const isRevenue = ['out_invoice', 'out_refund'].includes(moveType);
@@ -792,14 +814,15 @@ async function _saveNewInvoice(moveType, partnerSel, journalSel, dateInput, refI
       debit  = parseFloat(line.debit  || 0);
       credit = parseFloat(line.credit || 0);
     } else {
-      debit  = isRevenue ? 0                         : parseFloat(line.amount);
-      credit = isRevenue ? parseFloat(line.amount)   : 0;
+      debit  = isRevenue ? 0                       : parseFloat(line.amount);
+      credit = isRevenue ? parseFloat(line.amount) : 0;
     }
     await api.rpc('account.move.line', 'create', [{
       move_id:      moveId,
       display_type: 'product',
       name:         line.name || 'Service',
       account_id:   parseInt(line.accountId, 10),
+      date:         invoiceDate,
       debit,
       credit,
     }]);
