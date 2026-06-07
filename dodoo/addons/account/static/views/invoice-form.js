@@ -44,7 +44,7 @@ export async function render(container, params) {
         'journal_id', 'invoice_date', 'invoice_date_due', 'date',
         'invoice_payment_term_id', 'ref', 'narration',
         'amount_untaxed', 'amount_tax', 'amount_total', 'amount_residual',
-        'currency_id', 'reversed_entry_id'],
+        'currency_id', 'company_id', 'reversed_entry_id'],
     });
     move = rows[0];
     if (!move) { container.textContent = 'Record not found.'; return; }
@@ -401,17 +401,19 @@ async function _paymentDialog(move, moveId) {
 
     try {
       const isOut    = ['in_invoice', 'in_refund'].includes(move.move_type);
-      const partnerId = Array.isArray(move.partner_id) ? move.partner_id[0] : move.partner_id;
+      const partnerId  = Array.isArray(move.partner_id)  ? move.partner_id[0]  : move.partner_id;
       const currencyId = Array.isArray(move.currency_id) ? move.currency_id[0] : move.currency_id;
+      const companyId  = Array.isArray(move.company_id)  ? move.company_id[0]  : move.company_id;
 
       const paymentId = await api.rpc('account.payment', 'create', [{
         payment_type: isOut ? 'outbound' : 'inbound',
         partner_type: isOut ? 'supplier'  : 'customer',
         partner_id:   partnerId,
         journal_id:   journalId,
+        currency_id:  currencyId,
+        company_id:   companyId,
         amount,
         date,
-        currency_id: currencyId,
       }]);
 
       const tok = _tok();
