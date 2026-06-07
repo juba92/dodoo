@@ -96,9 +96,14 @@ function _buildCP(cp, move, id) {
     confirmBtn.textContent = 'Confirm';
     confirmBtn.onclick = async () => {
       confirmBtn.disabled = true; confirmBtn.textContent = 'Confirming…';
-      const data = await _post(`/account/move/${id}/post`);
-      if (data.error) { alert(data.error); confirmBtn.disabled = false; confirmBtn.textContent = 'Confirm'; return; }
-      App.navigate(`#/accounting/move/${id}`);
+      try {
+        const data = await _post(`/account/move/${id}/post`);
+        if (!data.result) { alert(data.error || 'Confirm failed'); confirmBtn.disabled = false; confirmBtn.textContent = 'Confirm'; return; }
+        App.navigate(`#/accounting/move/${id}`);
+      } catch (err) {
+        alert('Error: ' + err.message);
+        confirmBtn.disabled = false; confirmBtn.textContent = 'Confirm';
+      }
     };
     cp.appendChild(confirmBtn);
   }
@@ -118,15 +123,20 @@ function _buildCP(cp, move, id) {
     btn.onclick = async () => {
       if (!confirm('Create a reversal/credit note?')) return;
       btn.disabled = true;
-      const res = await fetch(`/account/move/${id}/reverse`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Session-Token': _tok() },
-        body: JSON.stringify({ date: new Date().toISOString().substring(0, 10) }),
-      });
-      const data = await res.json();
-      btn.disabled = false;
-      if (data.result?.length) App.navigate(`#/accounting/move/${data.result[0]}`);
-      else alert(data.error ?? 'Failed');
+      try {
+        const res = await fetch(`/account/move/${id}/reverse`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Session-Token': _tok() },
+          body: JSON.stringify({ date: new Date().toISOString().substring(0, 10) }),
+        });
+        const data = await res.json();
+        if (data.result?.length) App.navigate(`#/accounting/move/${data.result[0]}`);
+        else alert(data.error ?? 'Failed to create credit note');
+      } catch (err) {
+        alert('Error: ' + err.message);
+      } finally {
+        btn.disabled = false;
+      }
     };
     cp.appendChild(btn);
   }
@@ -141,9 +151,14 @@ function _buildCP(cp, move, id) {
     btn.onclick = async () => {
       if (!confirm('Reset to draft? This unlocks the entry.')) return;
       btn.disabled = true;
-      const data = await _post(`/account/move/${id}/reset_to_draft`);
-      if (data.error) { alert(data.error); btn.disabled = false; return; }
-      App.navigate(`#/accounting/move/${id}`);
+      try {
+        const data = await _post(`/account/move/${id}/reset_to_draft`);
+        if (!data.result) { alert(data.error || 'Reset to draft failed'); btn.disabled = false; return; }
+        App.navigate(`#/accounting/move/${id}`);
+      } catch (err) {
+        alert('Error: ' + err.message);
+        btn.disabled = false;
+      }
     };
     cp.appendChild(btn);
   }
