@@ -23,10 +23,7 @@ Expected: install logs show `seed res.lang (ar, en)`, `seed res.country (…)`,
 ## 2. Automated test suite
 
 ```bash
-pytest tests/unit/test_i18n.py tests/unit/test_localization_packs.py \
-       tests/integration/test_localization_settings.py \
-       tests/integration/test_country_localization.py \
-       tests/integration/test_i18n_endpoint.py -v
+pytest tests/localization/ -v          # unit + integration for this feature
 
 pytest tests/e2e/test_localization_ui.py -v      # requires: python -m dodoo server --port 8069
 ```
@@ -93,7 +90,7 @@ Create a non-admin user, authenticate as them, call `set_values` → JSON-RPC er
 ## 4. Country change with existing posted data (FR-026, FR-028)
 
 ```bash
-pytest tests/integration/test_country_localization.py::test_currency_conflict_blocks_without_confirm -v
+pytest tests/localization/test_country_localization.py::test_currency_conflict_blocks_without_confirm -v
 ```
 
 The test: applies Egypt, posts a journal entry in EGP, then calls `set_values` with

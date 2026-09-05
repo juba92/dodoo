@@ -2,8 +2,13 @@
 
 Abstract model (ADR-010). All calls go through the existing `/jsonrpc` endpoint,
 `params.service = "object"`, `params.method = "execute_kw"`,
-`args = [model, method, method_args]`. Session token in `X-Session-Token`. `uid` is injected by the
-dispatcher after session validation.
+`args = [model, method, method_args]`. Session token in `X-Session-Token`.
+
+**Caller identity**: `_object_execute_kw` injects `uid` into `kwargs` only for `search` / `search_read`.
+These methods therefore take **no `uid` argument** — they read the caller via
+`dodoo.core.context.get_uid()`, which `LanguageMiddleware` populates from the validated session token
+before the RPC handler runs (ADR-006). An unauthenticated call fails session validation before reaching
+the method.
 
 ## `get_values() -> object`
 
@@ -51,16 +56,20 @@ mutating controls only for admins.
 | `confirm_currency_change` | bool | no (default `false`) | Pass `true` to proceed past a currency-conflict warning. |
 | `company_write_date` | string | **yes** | Echo of the value from `get_values`. Optimistic-concurrency token. |
 
-**Behaviour**:
-1. Admin check → `AccessError` if not admin.
+**Behaviour** (dodoo's ORM commits per `write` — no multi-statement transaction; order is chosen so the
+only "decline" path performs zero writes):
+1. Admin check via `get_uid()` → `AccessError` if not admin.
 2. Whitelist `lang` / `country_code` → `DodooError` (code `-32602`) on unknown value.
 3. `company_write_date` ≠ current `res_company.write_date` → `DodooError("settings_stale")`; **no writes**.
-4. If `lang` present → write `res_company.lang`.
-5. If `country_code` present and differs from current → call
-   `apply_country_localization(env, company_id, country_code, confirm_currency_change=…)`.
-   - If it returns a `warning` → `set_values` returns that warning object; **no writes** (lang write in
-     step 4 is rolled back / not committed with it — the whole call is one transaction).
-6. On success, return the fresh `get_values()` payload plus `"applied"` summary:
+4. If `country_code` present and differs from current → **first** run the currency-conflict pre-check
+   inside `apply_country_localization(..., confirm_currency_change=…)`. If it returns a `warning`,
+   `set_values` returns that warning object immediately — **nothing has been written yet** (no `lang`
+   write, no `country_id` write). Otherwise `apply_country_localization` seeds the idempotent pack rows
+   and returns the company-field values to write.
+5. Apply **all** `res.company` changes (`lang` if present, plus `country_id` / `currency_id` /
+   `tax_label` / `tax_rounding_method` / `default_*` from step 4) in a **single `res_company.write(...)`
+   call** — company-row-level atomicity.
+6. On success, return the fresh `get_values()` payload plus the `"applied"` summary:
 
 ```json
 {

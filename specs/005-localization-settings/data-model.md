@@ -44,7 +44,9 @@ inherited from the `account` addon unchanged.
 **Seed**: a minimal Egyptian governorate set (Cairo, Giza, Alexandria, Dakahlia, Sharqia, Qalyubia).
 Idempotent on `(country_id, code)`.
 
-## Extended model: `res.company` (add columns)
+## Extended model: `res.company`
+
+### Columns on the base `res.company` model class (base-only references)
 
 | Field | Type | Notes |
 |-------|------|-------|
@@ -52,11 +54,23 @@ Idempotent on `(country_id, code)`.
 | `country_id` | `Many2one('res.country')` | Selected company country. Set to Egypt on fresh install (FR-016). |
 | `tax_label` | `Char(16)`, default `"VAT"` | Label shown on documents (FR-022). Egypt → "VAT". |
 | `tax_rounding_method` | `Selection([('round_globally','Round Globally'),('round_per_line','Round per Line')])`, default `"round_globally"` | Egypt → round globally (FR-034). Mirrors ADR-003 of the accounting module. |
-| `default_sale_tax_id` | `Many2one('account.tax')` | Default sale tax for new products (FR-022). Egypt → "VAT 14%" sale. |
-| `default_purchase_tax_id` | `Many2one('account.tax')` | Default purchase tax for new products. Egypt → "VAT 14%" purchase. |
-| `default_fiscal_position_id` | `Many2one('account.fiscal.position')` | Active default (domestic) fiscal position (FR-023). |
 
-`write_date` (already present) is the **optimistic-concurrency token** for Settings saves (FR-033).
+### Columns added by the `localization` addon as plain `INTEGER` via DDL
+
+`ADD COLUMN IF NOT EXISTS … INTEGER`, mirroring `account_data.py::_PARTNER_FK_COLUMNS`. They are **not**
+declared on the base `res.company` model class, keeping `base` free of `account.*` references (ADR-005).
+`res.config.settings.get_values` / `set_values` read and write them by raw column; `apply_country_localization`
+sets them.
+
+| Column | Meaning |
+|--------|---------|
+| `default_sale_tax_id` | Default sale tax for new products (FR-022). Egypt → "VAT 14%" sale. |
+| `default_purchase_tax_id` | Default purchase tax for new products. Egypt → "VAT 14%" purchase. |
+| `default_fiscal_position_id` | Active default (domestic) fiscal position (FR-023). |
+
+`write_date` (already present) is the **optimistic-concurrency token** for Settings saves (FR-033). All
+`res.company` field changes from a single Settings save are applied in **one `res_company.write(...)`
+call** (company-row-level atomicity; dodoo's ORM has no multi-statement transaction — see ADR-010).
 
 ## Extended model: `res.users` (add column)
 
@@ -66,7 +80,11 @@ Idempotent on `(country_id, code)`.
 
 ## New abstract model: `res.config.settings` (in `dodoo/addons/localization/models/`)
 
-`_abstract = True` — no table. Classmethods callable via `execute_kw` (ADR-010). See
+`_abstract = True` — no table. Classmethods callable via `execute_kw` (ADR-010): `get_values(env)`,
+`set_values(env, vals)`, `set_user_lang(env, lang)`. The caller `uid` is **not** an argument — the
+`_object_execute_kw` dispatcher injects `uid` only for `search`/`search_read`, so these methods read the
+caller via `dodoo.core.context.get_uid()`, which `LanguageMiddleware` sets from the validated session
+token (ADR-006). `is_admin()` and the personal-language write both use `get_uid()`. See
 `contracts/res_config_settings.md`.
 
 | Logical field (in `get_values` payload) | Source |

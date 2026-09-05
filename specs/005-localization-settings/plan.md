@@ -87,17 +87,22 @@ string keys.
 
 ## Architecture Decision Records
 
-**ADR-006: Request-scoped language via `contextvars`**
-- Decision: A `dodoo/core/context.py` module exposes a `ContextVar[str] lang_var` (default `"en"`).
-  `CorrelationMiddleware` (or a sibling middleware) resolves the effective language once per request from
-  the session token (`uid → res_users.lang → res_company.lang`) and sets `lang_var`. `BaseModel.fields_get`
-  and a `translate()` helper read `lang_var`.
-- Rationale: dodoo's `Environment` is process-wide, not per-request; threading a `lang` argument through
-  every ORM method and every `execute_kw` dispatch would touch the entire codebase. A context var is the
-  minimal, Odoo-analogous mechanism (Odoo propagates `context['lang']` through `env`).
-- Alternatives rejected: (a) inject `uid` into `fields_get` like `search` — still leaves menu/system
-  strings unsolved and spreads lang plumbing; (b) per-request `Environment` clone — large refactor,
-  breaks existing singletons.
+**ADR-006: Request-scoped language + uid via `contextvars`**
+- Decision: A `dodoo/core/context.py` module exposes `ContextVar[str] lang_var` (default `"en"`) and
+  `ContextVar[int | None] uid_var` (default `None`), with `get_lang()/set_lang()` and
+  `get_uid()/set_uid()`. A sibling middleware (`LanguageMiddleware`, registered after
+  `CorrelationMiddleware`) validates the session token once per request, sets `uid_var`, then resolves the
+  effective language (`uid → res_users.lang → res_company.lang`) and sets `lang_var`.
+  `BaseModel.fields_get` and `translate()` read `lang_var`; `res.config.settings.set_values` /
+  `set_user_lang` / `is_admin` read `get_uid()`.
+- Rationale: dodoo's `Environment` is process-wide, not per-request; threading `lang`/`uid` through every
+  ORM method and the `execute_kw` dispatch would touch the entire codebase. The `_object_execute_kw`
+  dispatcher currently injects `uid` **only** for `search`/`search_read`, so custom model methods invoked
+  via JSON-RPC have no other way to learn the caller. A context var is the minimal, Odoo-analogous
+  mechanism (Odoo propagates both through `env`).
+- Alternatives rejected: (a) inject `uid` into `fields_get`/every method in the dispatcher — spreads
+  plumbing and still leaves menu/system strings unsolved; (b) per-request `Environment` clone — large
+  refactor, breaks existing singletons.
 
 **ADR-007: In-memory static JSON translation catalogs (no `ir.translation`)**
 - Decision: `dodoo/addons/localization/data/i18n/{ar,en}.json` (`{"key": "value"}`) are parsed once at
@@ -129,10 +134,14 @@ string keys.
 
 **ADR-010: `res.config.settings` as an abstract RPC facade**
 - Decision: `res.config.settings` is an **abstract** model (`_abstract = True`, no table) exposing
-  `get_values(env)` and `set_values(env, vals, base_write_date)` classmethods called via `execute_kw`,
-  mirroring Odoo's transient settings model. `set_values` performs the admin check, whitelist validation,
-  optimistic-concurrency check against `res_company.write_date`, the `res.company` write, and (on country
-  change) the pack application.
+  `get_values(env)` and `set_values(env, vals)` classmethods called via `execute_kw`, mirroring Odoo's
+  transient settings model. `set_values` reads the caller via `get_uid()` (ADR-006), performs the admin
+  check, whitelist validation, the optimistic-concurrency check against `res_company.write_date` (echoed
+  in `vals["company_write_date"]`), then applies **all `res.company` field changes in a single
+  `res_company.write(...)` call** and, on a country change, the pack application. dodoo's ORM commits per
+  `create`/`write` (no multi-statement transaction primitive), so atomicity is guaranteed at the
+  company-row level; the currency-conflict guard is a **pre-check that performs zero writes** (ADR-011),
+  and pack seed rows are idempotent, so a partial pack apply converges on re-run.
 - Rationale: Reuses the existing JSON-RPC surface (the SPA already speaks `execute_kw`); no new bespoke
   REST route; transient-like semantics without a transient-model framework.
 - Alternatives rejected: dedicated `POST /web/settings` route (account-addon style) — a second
@@ -169,19 +178,25 @@ specs/005-localization-settings/
 
 ```text
 dodoo/core/
-├── context.py                         # NEW: ContextVar lang_var + get_lang()/set_lang()
+├── context.py                         # NEW: ContextVar lang_var + uid_var; get_lang/set_lang, get_uid/set_uid
 └── models.py                          # EDIT: fields_get() runs field.string through translate(lang_var)
 
 dodoo/http/
-└── middleware.py                      # EDIT: LanguageMiddleware resolves effective lang → lang_var
+├── middleware.py                      # EDIT: LanguageMiddleware validates token → uid_var, resolves effective lang → lang_var
+└── app.py                             # EDIT: register LanguageMiddleware after CorrelationMiddleware
 
 dodoo/addons/base/models/
 ├── res_lang.py                        # NEW: res.lang (code, name, direction, decimal/thousands/grouping, date_format, active)
 ├── res_country.py                     # NEW: res.country (code, name, currency_code, phone_code, active)
 ├── res_country_state.py               # NEW: res.country.state (code, name, country_id)
-├── res_company.py                     # EDIT: + lang, country_id, tax_label, tax_rounding_method,
-│                                      #        default_sale_tax_id, default_purchase_tax_id, default_fiscal_position_id
+├── res_company.py                     # EDIT: + lang (Char), country_id (Many2one res.country), tax_label (Char),
+│                                      #        tax_rounding_method (Selection) — base-only refs, no account coupling
 └── res_users.py                       # EDIT: + lang (Char, nullable)
+
+# The three account-referencing company columns are added by the localization addon as plain
+# INTEGER columns via DDL (ADR-005 pattern, mirrors account_data.py _PARTNER_FK_COLUMNS) — the base
+# res.company model class stays free of account.* references:
+#   default_sale_tax_id, default_purchase_tax_id, default_fiscal_position_id
 
 dodoo/addons/localization/
 ├── __init__.py                        # imports http, models; post_install → seed_localization_data
@@ -205,22 +220,21 @@ dodoo/addons/localization/
 │   ├── res_lang.py                    # seed ar + en
 │   ├── res_country.py                 # seed ~20 countries incl. EG, GB
 │   ├── res_country_state.py           # seed Egyptian governorates (minimal set)
-│   └── seed.py                        # seed_localization_data: langs, countries, set company country=EG (fresh), apply EG pack
+│   ├── company_columns.py            # DDL: add default_sale_tax_id/default_purchase_tax_id/default_fiscal_position_id INTEGER cols
+│   └── seed.py                        # seed_localization_data: langs, countries, company columns, set company country=EG (fresh), apply EG pack
 └── static/
-    ├── views/
-    │   └── settings.js                # #/settings screen (language + country + read-only derived config)
-    └── settings-menu.js               # optional: settings entry point metadata
+    └── views/
+        └── settings.js               # #/settings screen (language + country + read-only derived config)
 
 dodoo/addons/web/static/
-├── i18n.js                            # NEW: loadCatalog(), t(key), formatNumber/Date/Currency, applyDirection()
-├── app.js                             # EDIT: bootstrap loads catalog, sets <html dir/lang>, wraps chrome strings in t()
-├── api.js                             # EDIT: getTranslations(lang) helper
+├── i18n.js                            # NEW: loadCatalog() (own fetch), t(key), formatNumber/Date/Currency, applyDirection()
+├── app.js                             # EDIT: bootstrap loads catalog, sets <html dir/lang>, wraps chrome strings in t(), + #/settings route
 ├── style.css                         # EDIT: [dir=rtl] overrides for header/sidebar/breadcrumb; logical props
 └── views/{home,login,list,form}.js    # EDIT: user-facing literals → t('key')
 
 dodoo/addons/account/static/
 ├── account-menu.js                    # EDIT: labels via t('key') (keys added to catalogs)
-└── static/views/*.js                  # EDIT: user-facing literals → t('key') where present
+└── views/*.js                         # EDIT: user-facing literals → t('key') where present
 
 docs/adr/
 ├── 006-language-contextvar.md
@@ -231,23 +245,32 @@ docs/adr/
 └── 011-currency-conflict-guard.md
 
 tests/
-├── unit/test_i18n.py                  # catalog lookup, fallback chain, locale formatters
-├── unit/test_localization_packs.py    # Egypt pack builder shape, idempotency helper
-├── integration/test_localization_settings.py  # migrations, get/set_values, admin guard, optimistic concurrency
-├── integration/test_country_localization.py   # apply EG pack; re-apply idempotent; currency-conflict guard with posted move
-├── integration/test_i18n_endpoint.py  # /web/i18n/{lang}.json payload; translated fields_get over JSON-RPC
-└── e2e/test_localization_ui.py        # Playwright: Arabic RTL on login/home/list/form; language switch; Settings apply
+├── localization/test_i18n.py                    # catalog lookup, fallback chain, locale formatters
+├── localization/test_localization_packs.py      # Egypt pack builder shape, idempotency helper
+├── localization/test_migrations.py              # new tables + res_company/res_users columns present
+├── localization/test_localization_settings.py   # get/set_values, admin guard, optimistic concurrency, personal lang
+├── localization/test_country_localization.py    # apply EG pack; re-apply idempotent; currency-conflict guard with posted move
+├── localization/test_i18n_endpoint.py           # /web/i18n/{lang}.json payload; translated fields_get over JSON-RPC; <50ms budget
+├── e2e/test_localization_ui.py                  # Playwright: Arabic RTL on login/home/list/form; language switch; Settings apply
+└── e2e/test_web_ui_a11y.py                      # EXTEND: lang/dir attrs, RTL tab order, keyboard nav
+
+(unit+integration localization tests grouped under tests/localization/ per the tests/accounting/ precedent)
 ```
 
 **Structure Decision**: New self-contained `dodoo/addons/localization/` addon (depends on `account` + `web`)
 holds the packs, i18n catalogs/loader, settings facade, and Settings screen. Reference data models
 (`res.lang`, `res.country`, `res.country.state`) go in `base` alongside the other `res.*` models, matching
-Odoo and ADR-005's "fundamental business objects live in base" precedent. The only `core` change is the
-language `ContextVar` and the `fields_get` translation hook (ADR-006).
+Odoo and ADR-005's "fundamental business objects live in base" precedent. The base `res.company` model
+gains only base-referencing columns (`lang`, `country_id`, `tax_label`, `tax_rounding_method`); the three
+`account.*`-referencing company columns are added by the localization addon as plain `INTEGER` via DDL
+(ADR-005 pattern). The only `core` changes are the `lang_var` + `uid_var` `ContextVar`s and the
+`fields_get` translation hook (ADR-006).
 
 ## Complexity Tracking
 
-No constitution violations. The single `core` change (`fields_get` translation hook + `ContextVar`) is the
-minimal way to translate server-originated field labels without threading a `lang` parameter through every
-ORM entry point; it is covered by ADR-006 and is inert when the `localization` addon is not installed
-(catalog empty → `translate()` returns the source string).
+No constitution violations. The `core` changes (`fields_get` translation hook + `lang_var`/`uid_var`
+`ContextVar`s) are the minimal way to (a) translate server-originated field labels without threading a
+`lang` parameter through every ORM entry point, and (b) give JSON-RPC-invoked custom model methods the
+caller `uid` that `_object_execute_kw` injects only for `search`/`search_read`. Both are covered by
+ADR-006. The translation hook is inert when the `localization` addon is not installed (catalog empty →
+`translate()` returns the source string); `uid_var` simply stays `None` outside an authenticated request.

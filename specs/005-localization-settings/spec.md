@@ -279,8 +279,12 @@ any currency change.
 
 #### Settings screen
 
-- **FR-032**: The Settings screen MUST present the system language and the company country together
-  and persist a save atomically (all requested changes apply together or none do).
+- **FR-032**: The Settings screen MUST present the system language and the company country together.
+  A save MUST apply all changed company-configuration fields (language, country, and the
+  pack-derived currency / tax label / rounding / default taxes) together as one update to the company
+  configuration record; and a save that is declined at the currency-conflict confirmation (FR-028)
+  MUST leave every setting unchanged. (Country-package reference records — taxes, fiscal positions,
+  currency — are seeded idempotently, so a re-run converges rather than duplicating.)
 - **FR-033**: The Settings save MUST carry the company record's last write timestamp; if that
   timestamp no longer matches the stored value (a concurrent change by another administrator), the
   save MUST be rejected and the administrator told to reload and retry, rather than silently
