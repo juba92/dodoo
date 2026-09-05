@@ -1,5 +1,6 @@
 import * as api from '/web/static/api.js';
 import { App } from '/web/static/app.js';
+import { t } from '/web/static/i18n.js';
 
 const _EDITABLE_TYPES = new Set(['char', 'text', 'integer', 'float', 'boolean', 'date', 'datetime', 'many2one']);
 
@@ -116,7 +117,7 @@ export async function render(container, params) {
   const isNew = id === 'new';
 
   if (!model) {
-    container.textContent = 'No model specified.';
+    container.textContent = t('No model specified.');
     return;
   }
 
@@ -167,12 +168,12 @@ export async function render(container, params) {
   const saveBtn = document.createElement('button');
   saveBtn.className = 'btn btn-primary';
   saveBtn.setAttribute('data-action', 'save');
-  saveBtn.textContent = 'Save';
+  saveBtn.textContent = t('Save');
 
   const discardBtn = document.createElement('button');
   discardBtn.className = 'btn btn-secondary';
   discardBtn.setAttribute('data-action', 'discard');
-  discardBtn.textContent = 'Discard';
+  discardBtn.textContent = t('Discard');
 
   const cp = document.getElementById('control-panel');
   if (cp) {
@@ -188,7 +189,7 @@ export async function render(container, params) {
       const deleteBtn = document.createElement('button');
       deleteBtn.className = 'btn btn-danger';
       deleteBtn.setAttribute('data-action', 'delete');
-      deleteBtn.textContent = 'Delete';
+      deleteBtn.textContent = t('Delete');
       cp.appendChild(deleteBtn);
 
       deleteBtn.onclick = async () => {
@@ -279,7 +280,7 @@ export async function render(container, params) {
       if (!meta || meta.readonly) return;
       const errEl = document.getElementById(`ff-err-${name}`);
       if (meta.required && (el.value === '' || el.value === null)) {
-        if (errEl) errEl.textContent = 'This field is required.';
+        if (errEl) errEl.textContent = t('This field is required.');
         el.setAttribute('aria-invalid', 'true');
         valid = false;
       }
@@ -305,7 +306,7 @@ export async function render(container, params) {
       } else {
         await api.rpc(model, 'write', [[id], vals]);
         originalValues = { ...originalValues, ...vals };
-        _showBanner(statusBanner, 'success', 'Saved successfully.');
+        _showBanner(statusBanner, 'success', t('Settings saved.'));
       }
     } catch (err) {
       _showBanner(statusBanner, 'error', 'Save failed: ' + err.message);

@@ -1,5 +1,6 @@
 import * as api from '/web/static/api.js';
 import { App } from '/web/static/app.js';
+import { t } from '/web/static/i18n.js';
 
 export function render(container, _params) {
   // Already authenticated → skip to home
@@ -29,7 +30,7 @@ export function render(container, _params) {
 
   const subtitle = document.createElement('p');
   subtitle.className = 'login-subtitle';
-  subtitle.textContent = 'Sign in to your account';
+  subtitle.textContent = t('Sign in to your account');
   card.appendChild(subtitle);
 
   // Session-expired banner
@@ -38,7 +39,7 @@ export function render(container, _params) {
     const banner = document.createElement('div');
     banner.className = 'error-banner';
     banner.setAttribute('role', 'alert');
-    banner.textContent = 'Your session has expired. Please sign in again.';
+    banner.textContent = t('Your session has expired. Please sign in again.');
     card.appendChild(banner);
   }
 
@@ -55,7 +56,7 @@ export function render(container, _params) {
   loginField.className = 'field';
   const loginLabel = document.createElement('label');
   loginLabel.htmlFor = 'f-login';
-  loginLabel.textContent = 'Login';
+  loginLabel.textContent = t('Login');
   const loginInput = document.createElement('input');
   loginInput.type = 'text';
   loginInput.id = 'f-login';
@@ -71,7 +72,7 @@ export function render(container, _params) {
   pwField.className = 'field';
   const pwLabel = document.createElement('label');
   pwLabel.htmlFor = 'f-password';
-  pwLabel.textContent = 'Password';
+  pwLabel.textContent = t('Password');
   const pwInput = document.createElement('input');
   pwInput.type = 'password';
   pwInput.id = 'f-password';
@@ -86,7 +87,7 @@ export function render(container, _params) {
   const submitBtn = document.createElement('button');
   submitBtn.type = 'submit';
   submitBtn.className = 'btn btn-primary btn-full';
-  submitBtn.textContent = 'Log in';
+  submitBtn.textContent = t('Log in');
   card.appendChild(submitBtn);
 
   container.appendChild(card);
@@ -99,7 +100,7 @@ export function render(container, _params) {
     e.preventDefault();
     errEl.style.display = 'none';
     submitBtn.disabled = true;
-    submitBtn.textContent = 'Signing in…';
+    submitBtn.textContent = t('Signing in…');
     try {
       const data = await api.authenticate(loginInput.value.trim(), pwInput.value);
       App.state.token = data.session_token;
@@ -107,24 +108,26 @@ export function render(container, _params) {
       sessionStorage.setItem('session_token', data.session_token);
       sessionStorage.setItem('session_uid', String(data.uid));
 
-      // Announce for screen readers
-      document.getElementById('status').textContent = 'Signed in successfully.';
-
-      // Load info for sidebar
+      // Re-resolve language for the now-authenticated user (personal preference may
+      // differ from the system default) and refresh sidebar data.
+      await App.reloadLanguage();
       try {
         const info = await api.getInfo();
         App.state.modules = info.modules ?? [];
         App.state.models = info.models ?? [];
       } catch { /* non-fatal */ }
 
-      App.breadcrumb = [{ label: 'Home', hash: '#/home' }];
+      // Announce for screen readers
+      document.getElementById('status').textContent = t('Signing in…');
+
+      App.breadcrumb = [{ label: t('Home'), hash: '#/home' }];
       App.navigate('#/home');
     } catch (err) {
-      errEl.textContent = err.message ?? 'Authentication failed';
+      errEl.textContent = err.message ?? t('Authentication failed');
       errEl.style.display = 'block';
       document.getElementById('status').textContent = 'Sign in failed: ' + errEl.textContent;
       submitBtn.disabled = false;
-      submitBtn.textContent = 'Log in';
+      submitBtn.textContent = t('Log in');
       pwInput.focus();
     }
   }

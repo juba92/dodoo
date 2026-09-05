@@ -1,13 +1,14 @@
 # Contract: `res.config.settings` (JSON-RPC via `execute_kw`)
 
-Abstract model (ADR-010). All calls go through the existing `/jsonrpc` endpoint,
+Concrete model with a vestigial `id`-only table, never populated (ADR-022; dodoo's installer does not
+register `_abstract` models). All calls go through the existing `/jsonrpc` endpoint,
 `params.service = "object"`, `params.method = "execute_kw"`,
 `args = [model, method, method_args]`. Session token in `X-Session-Token`.
 
 **Caller identity**: `_object_execute_kw` injects `uid` into `kwargs` only for `search` / `search_read`.
 These methods therefore take **no `uid` argument** — they read the caller via
 `dodoo.core.context.get_uid()`, which `LanguageMiddleware` populates from the validated session token
-before the RPC handler runs (ADR-006). An unauthenticated call fails session validation before reaching
+before the RPC handler runs (ADR-018). An unauthenticated call fails session validation before reaching
 the method.
 
 ## `get_values() -> object`

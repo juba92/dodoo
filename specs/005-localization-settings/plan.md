@@ -87,7 +87,7 @@ string keys.
 
 ## Architecture Decision Records
 
-**ADR-006: Request-scoped language + uid via `contextvars`**
+**ADR-018: Request-scoped language + uid via `contextvars`**
 - Decision: A `dodoo/core/context.py` module exposes `ContextVar[str] lang_var` (default `"en"`) and
   `ContextVar[int | None] uid_var` (default `None`), with `get_lang()/set_lang()` and
   `get_uid()/set_uid()`. A sibling middleware (`LanguageMiddleware`, registered after
@@ -104,7 +104,7 @@ string keys.
   plumbing and still leaves menu/system strings unsolved; (b) per-request `Environment` clone — large
   refactor, breaks existing singletons.
 
-**ADR-007: In-memory static JSON translation catalogs (no `ir.translation`)**
+**ADR-019: In-memory static JSON translation catalogs (no `ir.translation`)**
 - Decision: `dodoo/addons/localization/data/i18n/{ar,en}.json` (`{"key": "value"}`) are parsed once at
   addon import into a module-level dict. `translate(key, lang)` returns the value, falling back to `en`,
   then to `key`. No DB table, no translation CRUD.
@@ -113,7 +113,7 @@ string keys.
 - Alternatives rejected: `ir.translation`-style DB model (Odoo's approach) — unjustified scope for two
   fixed languages; gettext `.po` + compilation — adds tooling with no benefit here.
 
-**ADR-008: RTL via a direction flag + `[dir=rtl]` CSS overrides**
+**ADR-020: RTL via a direction flag + `[dir=rtl]` CSS overrides**
 - Decision: The SPA sets `document.documentElement.dir` / `lang` from the catalog payload. `style.css`
   uses CSS logical properties where practical and a small block of `[dir="rtl"] …` overrides for the
   sidebar, header, and breadcrumb that currently assume LTR. No build step, no second stylesheet.
@@ -121,7 +121,7 @@ string keys.
 - Alternatives rejected: separate `style.rtl.css` (duplication, drift); PostCSS logical-property plugin
   (new tooling, violates Principle VII).
 
-**ADR-009: Localization packages as in-process pack definitions, not installable modules**
+**ADR-021: Localization packages as in-process pack definitions, not installable modules**
 - Decision: A package is a Python definition (dataclass/dict) in
   `dodoo/addons/localization/packs/egypt.py` registered in a `PACKS = {"EG": ...}` map. Applying it is a
   service function that idempotently seeds records into the existing `account`/`base` models. Odoo's
@@ -132,22 +132,23 @@ string keys.
 - Alternatives rejected: one dodoo addon per country auto-installed on selection — needs an
   end-user-triggered installer and dependency resolution at runtime; heavy for one country.
 
-**ADR-010: `res.config.settings` as an abstract RPC facade**
-- Decision: `res.config.settings` is an **abstract** model (`_abstract = True`, no table) exposing
-  `get_values(env)` and `set_values(env, vals)` classmethods called via `execute_kw`, mirroring Odoo's
-  transient settings model. `set_values` reads the caller via `get_uid()` (ADR-006), performs the admin
+**ADR-022: `res.config.settings` as an RPC facade**
+- Decision: `res.config.settings` is a concrete model with a vestigial `id`-only table that is never
+  populated (dodoo's installer does not register `_abstract` models). It exposes `get_values(env)`,
+  `set_values(env, vals)`, and `set_user_lang(env, lang)` classmethods called via `execute_kw`,
+  mirroring Odoo's transient settings model. `set_values` reads the caller via `get_uid()` (ADR-018), performs the admin
   check, whitelist validation, the optimistic-concurrency check against `res_company.write_date` (echoed
   in `vals["company_write_date"]`), then applies **all `res.company` field changes in a single
   `res_company.write(...)` call** and, on a country change, the pack application. dodoo's ORM commits per
   `create`/`write` (no multi-statement transaction primitive), so atomicity is guaranteed at the
-  company-row level; the currency-conflict guard is a **pre-check that performs zero writes** (ADR-011),
+  company-row level; the currency-conflict guard is a **pre-check that performs zero writes** (ADR-023),
   and pack seed rows are idempotent, so a partial pack apply converges on re-run.
 - Rationale: Reuses the existing JSON-RPC surface (the SPA already speaks `execute_kw`); no new bespoke
   REST route; transient-like semantics without a transient-model framework.
 - Alternatives rejected: dedicated `POST /web/settings` route (account-addon style) — a second
   auth/validation path; a real (non-abstract) settings table — pointless persistence.
 
-**ADR-011: Currency-conflict guard keyed on posted `account.move.line` count**
+**ADR-023: Currency-conflict guard keyed on posted `account.move.line` count**
 - Decision: Before a pack changes `res_company.currency_id`, `set_values` counts `account_move_line`
   joined to `account_move` with `state = 'posted'`. If > 0 and the caller did not pass
   `confirm_currency_change=True`, it returns `{"warning": "currency_change_requires_confirmation", …}` and
@@ -264,7 +265,7 @@ Odoo and ADR-005's "fundamental business objects live in base" precedent. The ba
 gains only base-referencing columns (`lang`, `country_id`, `tax_label`, `tax_rounding_method`); the three
 `account.*`-referencing company columns are added by the localization addon as plain `INTEGER` via DDL
 (ADR-005 pattern). The only `core` changes are the `lang_var` + `uid_var` `ContextVar`s and the
-`fields_get` translation hook (ADR-006).
+`fields_get` translation hook (ADR-018).
 
 ## Complexity Tracking
 
@@ -272,5 +273,5 @@ No constitution violations. The `core` changes (`fields_get` translation hook + 
 `ContextVar`s) are the minimal way to (a) translate server-originated field labels without threading a
 `lang` parameter through every ORM entry point, and (b) give JSON-RPC-invoked custom model methods the
 caller `uid` that `_object_execute_kw` injects only for `search`/`search_read`. Both are covered by
-ADR-006. The translation hook is inert when the `localization` addon is not installed (catalog empty →
+ADR-018. The translation hook is inert when the `localization` addon is not installed (catalog empty →
 `translate()` returns the source string); `uid_var` simply stays `None` outside an authenticated request.

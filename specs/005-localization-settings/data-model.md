@@ -70,7 +70,7 @@ sets them.
 
 `write_date` (already present) is the **optimistic-concurrency token** for Settings saves (FR-033). All
 `res.company` field changes from a single Settings save are applied in **one `res_company.write(...)`
-call** (company-row-level atomicity; dodoo's ORM has no multi-statement transaction — see ADR-010).
+call** (company-row-level atomicity; dodoo's ORM has no multi-statement transaction — see ADR-022).
 
 ## Extended model: `res.users` (add column)
 
@@ -78,13 +78,15 @@ call** (company-row-level atomicity; dodoo's ORM has no multi-statement transact
 |-------|------|-------|
 | `lang` | `Char(16)`, nullable, default `None` | Personal language preference. Empty/NULL ⇒ use `res.company.lang` (FR-003, FR-005, FR-006). Set to the system default at user-create time when omitted. |
 
-## New abstract model: `res.config.settings` (in `dodoo/addons/localization/models/`)
+## New model: `res.config.settings` (in `dodoo/addons/localization/models/`)
 
-`_abstract = True` — no table. Classmethods callable via `execute_kw` (ADR-010): `get_values(env)`,
-`set_values(env, vals)`, `set_user_lang(env, lang)`. The caller `uid` is **not** an argument — the
+Concrete model with a vestigial `id`-only table that is never populated — dodoo's installer does not
+register `_abstract` models, so the methods live on a normal model and are stateless. Classmethods
+callable via `execute_kw` (ADR-022): `get_values(env)`, `set_values(env, vals)`,
+`set_user_lang(env, lang)`. The caller `uid` is **not** an argument — the
 `_object_execute_kw` dispatcher injects `uid` only for `search`/`search_read`, so these methods read the
 caller via `dodoo.core.context.get_uid()`, which `LanguageMiddleware` sets from the validated session
-token (ADR-006). `is_admin()` and the personal-language write both use `get_uid()`. See
+token (ADR-018). `is_admin()` and the personal-language write both use `get_uid()`. See
 `contracts/res_config_settings.md`.
 
 | Logical field (in `get_values` payload) | Source |

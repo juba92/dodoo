@@ -1,15 +1,31 @@
 import * as api from '/web/static/api.js';
+import { loadCatalog, applyDirection, t, currentLang } from '/web/static/i18n.js';
 
 // ── Global state ─────────────────────────────────────────────────────────────
 export const App = {
   state: {
     token: null,
     uid: null,
+    isAdmin: false,
+    lang: 'en',
     modules: [],
     models: [],
     fieldCache: {},
   },
   breadcrumb: [],
+  t,
+
+  /** Re-resolve the effective language from the server and re-apply it. Call after
+   *  login, logout, a system-language change, or a personal-language change. */
+  async reloadLanguage() {
+    try {
+      const info = await api.getInfo();
+      App.state.lang = info.lang || 'en';
+      App.state.isAdmin = !!info.is_admin;
+      await loadCatalog(App.state.lang);
+      applyDirection(info.direction);
+    } catch { /* keep current catalog */ }
+  },
 
   navigate(hash) {
     const existing = App.breadcrumb.findIndex(b => b.hash === hash);
@@ -35,8 +51,9 @@ const _ACC_LABELS = {
 };
 
 function _labelFromHash(hash) {
-  if (hash === '#/home' || hash === '#/') return 'Home';
-  if (hash === '#/login') return 'Login';
+  if (hash === '#/home' || hash === '#/') return t('Home');
+  if (hash === '#/login') return t('Login');
+  if (hash === '#/settings') return t('Settings');
   let m;
   if ((m = hash.match(/^#\/accounting\/move\/new(\?.*)?$/)))    return 'New Invoice';
   if ((m = hash.match(/^#\/accounting\/move\/(\d+)$/)))         return `Invoice #${m[1]}`;
@@ -44,7 +61,7 @@ function _labelFromHash(hash) {
   if ((m = hash.match(/^#\/accounting\/model\/([^/]+)\/new$/))) return `New ${m[1]}`;
   if ((m = hash.match(/^#\/accounting\/model\/([^/]+)\/(\d+)$/))) return `${m[1]} #${m[2]}`;
   if ((m = hash.match(/^#\/accounting\/model\/([^/]+)$/)))      return m[1];
-  if ((m = hash.match(/^#\/accounting\/([^/]+)$/)))             return _ACC_LABELS[m[1]] ?? m[1].replace(/-/g, ' ');
+  if ((m = hash.match(/^#\/accounting\/([^/]+)$/)))             return _ACC_LABELS[m[1]] ? t(_ACC_LABELS[m[1]]) : m[1].replace(/-/g, ' ');
   if ((m = hash.match(/^#\/module\/(.+)$/)))                    return m[1];
   if ((m = hash.match(/^#\/model\/([^/]+)\/new$/)))             return `New ${m[1]}`;
   if ((m = hash.match(/^#\/model\/([^/]+)\/(\d+)$/)))           return `#${m[2]}`;
@@ -68,7 +85,7 @@ function _buildShell() {
   // Apps grid icon → navigate home
   const homeBtn = document.createElement('button');
   homeBtn.className = 'nav-home-btn';
-  homeBtn.setAttribute('aria-label', 'Go to home');
+  homeBtn.setAttribute('aria-label', t('Go to home'));
   homeBtn.onclick = () => App.navigate('#/home');
   homeBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
     <rect x="1" y="1" width="7" height="7" rx="1.5"/>
@@ -81,7 +98,7 @@ function _buildShell() {
   // App name
   const appName = document.createElement('span');
   appName.className = 'nav-app-name';
-  appName.textContent = 'Dodoo ERP';
+  appName.textContent = t('Dodoo ERP');
   header.appendChild(appName);
 
   // Breadcrumb
@@ -96,11 +113,20 @@ function _buildShell() {
   // User avatar (click to sign out)
   const userArea = document.createElement('div');
   userArea.className = 'user-area';
+  const settingsBtn = document.createElement('button');
+  settingsBtn.className = 'o-user-avatar-btn';
+  settingsBtn.id = 'btn-settings';
+  settingsBtn.title = t('Settings');
+  settingsBtn.setAttribute('aria-label', t('Settings'));
+  settingsBtn.textContent = '⚙';
+  settingsBtn.onclick = () => App.navigate('#/settings');
+  userArea.appendChild(settingsBtn);
+
   const avatarBtn = document.createElement('button');
   avatarBtn.className = 'o-user-avatar-btn';
   avatarBtn.id = 'btn-logout';
-  avatarBtn.title = 'Sign out';
-  avatarBtn.setAttribute('aria-label', 'Sign out');
+  avatarBtn.title = t('Sign out');
+  avatarBtn.setAttribute('aria-label', t('Sign out'));
   avatarBtn.textContent = 'A';  // generic initial; updated after login if name known
   avatarBtn.onclick = _handleLogout;
   userArea.appendChild(avatarBtn);
@@ -178,7 +204,7 @@ function _renderSidebar(hash) {
   // Update app name in navbar
   const appNameEl = document.querySelector('.nav-app-name');
   if (appNameEl) {
-    appNameEl.textContent = hash.startsWith('#/accounting') ? 'Accounting' : 'Dodoo ERP';
+    appNameEl.textContent = hash.startsWith('#/accounting') ? t('Accounting') : t('Dodoo ERP');
   }
 
   if (hash.startsWith('#/accounting')) {
@@ -189,7 +215,7 @@ function _renderSidebar(hash) {
   sidebar.innerHTML = '';
   const title = document.createElement('div');
   title.className = 'sidebar-section-title';
-  title.textContent = 'Models';
+  title.textContent = t('Models');
   sidebar.appendChild(title);
 
   const ul = document.createElement('ul');
@@ -218,14 +244,14 @@ async function _renderAccountingMenu(sidebar, currentHash) {
   ACCOUNTING_MENU.forEach(({ section, items }) => {
     const title = document.createElement('div');
     title.className = 'sidebar-section-title';
-    title.textContent = section;
+    title.textContent = t(section);
     sidebar.appendChild(title);
     const ul = document.createElement('ul');
     ul.className = 'sidebar-list';
     items.forEach(({ label, hash }) => {
       const li = document.createElement('li');
       const btn = document.createElement('button');
-      btn.textContent = label;
+      btn.textContent = t(label);
       if (_activeMenuHash === hash) btn.className = 'active';
       btn.onclick = () => {
         // Reset breadcrumb when clicking a top-level menu item
@@ -244,8 +270,10 @@ async function _handleLogout() {
   try { await api.logout(); } catch { /* ignore errors on logout */ }
   App.state.token = null;
   App.state.uid = null;
+  App.state.isAdmin = false;
   sessionStorage.clear();
   App.breadcrumb = [];
+  await App.reloadLanguage();  // back to the system default language
   App.navigate('#/login');
 }
 
@@ -253,6 +281,7 @@ async function _handleLogout() {
 const _ROUTES = [
   [/^#\/login(\?.*)?$/, () => import('/web/static/views/login.js')],
   [/^#\/home$/, () => import('/web/static/views/home.js')],
+  [/^#\/settings$/, () => import('/localization/static/views/settings.js')],
   [/^#\/module\/(.+)$/, () => import('/web/static/views/home.js')],
   // Accounting-specific routes (must come before generic model routes)
   [/^#\/accounting\/move\/(new|\d+)$/, () => import('/account/static/views/invoice-form.js')],
@@ -338,13 +367,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     App.state.uid = uid ? parseInt(uid, 10) : null;
   }
 
-  // Pre-fetch model list for sidebar (non-blocking)
-  if (App.state.token) {
-    try {
-      const info = await api.getInfo();
-      App.state.modules = info.modules ?? [];
-      App.state.models = info.models ?? [];
-    } catch { /* continue without sidebar data */ }
+  // Resolve the effective language (works logged-out too) and load its catalog before
+  // the first render so every screen — including login — starts in the right language.
+  try {
+    const info = await api.getInfo();
+    App.state.lang = info.lang || 'en';
+    App.state.isAdmin = !!info.is_admin;
+    App.state.modules = info.modules ?? [];
+    App.state.models = info.models ?? [];
+    await loadCatalog(App.state.lang);
+    applyDirection(info.direction);
+  } catch {
+    await loadCatalog('en');
+    applyDirection('ltr');
   }
 
   // Seed breadcrumb from current hash

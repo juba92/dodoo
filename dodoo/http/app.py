@@ -5,10 +5,10 @@ from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
 
 from dodoo.http.jsonrpc import jsonrpc_handler
-from dodoo.http.middleware import CorrelationMiddleware
+from dodoo.http.middleware import CorrelationMiddleware, LanguageMiddleware
 from dodoo.http.routing import MountRegistry, RouteRegistry
 
 if TYPE_CHECKING:
@@ -263,6 +263,7 @@ def create_app(env: Environment) -> FastAPI:
     )
 
     app.add_middleware(CorrelationMiddleware)
+    app.add_middleware(LanguageMiddleware)
 
     # Root → redirect to web UI
     @app.get("/", include_in_schema=False)

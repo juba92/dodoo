@@ -1,5 +1,6 @@
 import * as api from '/web/static/api.js';
 import { App } from '/web/static/app.js';
+import { t, formatDate, formatNumber } from '/web/static/i18n.js';
 
 const _LIST_FIELD_TYPES = new Set(['char', 'text', 'integer', 'float', 'boolean', 'date', 'datetime']);
 
@@ -37,7 +38,7 @@ function _debounce(fn, ms) {
 export async function render(container, params) {
   const model = params.model;
   if (!model) {
-    container.textContent = 'No model specified.';
+    container.textContent = t('No model specified.');
     return;
   }
 
@@ -72,7 +73,7 @@ export async function render(container, params) {
   const searchInput = document.createElement('input');
   searchInput.type = 'search';
   searchInput.className = 'search-input';
-  searchInput.placeholder = 'Search…';
+  searchInput.placeholder = t('Search…');
   searchInput.setAttribute('aria-label', `Search ${model} records`);
 
   if (cp) {
@@ -81,7 +82,7 @@ export async function render(container, params) {
     const newBtn = document.createElement('button');
     newBtn.className = 'btn btn-primary';
     newBtn.setAttribute('data-action', 'new');
-    newBtn.textContent = 'New';
+    newBtn.textContent = t('Create');
     newBtn.onclick = () => App.navigate(`#/model/${model}/new`);
     cp.appendChild(newBtn);
 
@@ -127,7 +128,7 @@ export async function render(container, params) {
     const loadingRow = document.createElement('tr');
     const loadingTd = document.createElement('td');
     loadingTd.colSpan = columns.length;
-    loadingTd.textContent = 'Loading…';
+    loadingTd.textContent = t('Loading…');
     loadingTd.style.textAlign = 'center';
     loadingTd.style.color = 'var(--text-muted)';
     loadingRow.appendChild(loadingTd);
@@ -173,7 +174,7 @@ export async function render(container, params) {
       const emptyTd = document.createElement('td');
       emptyTd.colSpan = columns.length;
       emptyTd.className = 'empty-state';
-      emptyTd.textContent = 'No records found.';
+      emptyTd.textContent = t('No records');
       emptyRow.appendChild(emptyTd);
       tbody.appendChild(emptyRow);
     } else {
@@ -198,14 +199,14 @@ export async function render(container, params) {
     if (offset > 0) {
       const prevBtn = document.createElement('button');
       prevBtn.className = 'btn btn-secondary';
-      prevBtn.textContent = '← Prev';
+      prevBtn.textContent = '← ' + t('Prev');
       prevBtn.onclick = () => { offset = Math.max(0, offset - LIMIT); fetchAndRender(); };
       pagination.appendChild(prevBtn);
     }
     if (records.length === LIMIT) {
       const nextBtn = document.createElement('button');
       nextBtn.className = 'btn btn-secondary';
-      nextBtn.textContent = 'Next →';
+      nextBtn.textContent = t('Next') + ' →';
       nextBtn.onclick = () => { offset += LIMIT; fetchAndRender(); };
       pagination.appendChild(nextBtn);
     }

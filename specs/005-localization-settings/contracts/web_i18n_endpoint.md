@@ -2,7 +2,7 @@
 
 Public REST route registered by the `localization` addon
 (`@route("/web/i18n/{lang}.json", methods=["GET"], auth="public")`). Serves the client-string catalog and
-locale metadata the SPA loads at bootstrap and on language change (FR-007b, ADR-007).
+locale metadata the SPA loads at bootstrap and on language change (FR-007b, ADR-019).
 
 ## Request
 

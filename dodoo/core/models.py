@@ -18,6 +18,21 @@ _SYSTEM_FIELDS = ("id", "create_date", "write_date")
 _ALL_MODELS: list[type] = []
 
 
+def _translate_label(text: str) -> str:
+    """Run a field label through the localization catalog for the active request language.
+
+    Inert (identity) when the ``localization`` addon is not installed — its ``i18n`` module
+    is imported lazily so ``core`` keeps no dependency on the addon.
+    """
+    try:
+        from dodoo.addons.localization.i18n import translate
+        from dodoo.core.context import get_lang
+
+        return translate(text, get_lang())
+    except Exception:
+        return text
+
+
 class _ModelMeta(type):
     def __new__(
         mcs,  # noqa: N804
@@ -225,7 +240,7 @@ class BaseModel(metaclass=_ModelMeta):
         for fname, field in cls._fields.items():
             info: dict[str, Any] = {
                 "type": type(field).__name__.lower(),
-                "string": field.string or fname,
+                "string": _translate_label(field.string or fname),
                 "required": field.required,
                 "readonly": field.readonly,
             }

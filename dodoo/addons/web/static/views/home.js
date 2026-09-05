@@ -1,5 +1,6 @@
 import * as api from '/web/static/api.js';
 import { App } from '/web/static/app.js';
+import { t } from '/web/static/i18n.js';
 
 const _MODULE_ICONS = {
   base:     '🧩',
@@ -75,7 +76,7 @@ export async function render(container, params) {
 
   const loading = document.createElement('div');
   loading.className = 'loading';
-  loading.textContent = 'Loading modules…';
+  loading.textContent = t('Loading modules…');
   container.appendChild(loading);
 
   try {
@@ -92,7 +93,7 @@ export async function render(container, params) {
     container.innerHTML = '';
     const alert = document.createElement('div');
     alert.className = 'alert-error';
-    alert.textContent = 'Failed to load modules: ' + err.message;
+    alert.textContent = t('Failed to load modules') + ': ' + err.message;
     container.appendChild(alert);
     return;
   }
@@ -102,7 +103,7 @@ export async function render(container, params) {
   if (App.state.modules.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'empty-state';
-    empty.textContent = 'No modules installed.';
+    empty.textContent = t('No modules installed.');
     container.appendChild(empty);
     return;
   }

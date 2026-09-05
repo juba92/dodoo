@@ -24,6 +24,9 @@ class ResUsers(BaseModel):
     password_hash = Char(size=256, readonly=True)
     name = Char(size=256, required=True)
     active = Boolean(default=True)
+    # Personal language preference (005). NULL/empty ⇒ fall back to res.company.lang
+    # when resolving the effective language for a request.
+    lang = Char(size=16)
     group_ids = Many2many(
         "res.groups",
         relation_table="res_users_groups_rel",

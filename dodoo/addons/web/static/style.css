@@ -785,3 +785,44 @@ fieldset.form-group legend {
   .login-card { padding: 28px 20px 24px; }
   .nav-app-name { display: none; }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   RTL support (005 — Localization). Direction comes from <html dir> set by the
+   SPA from the active language. Base rules use physical properties for LTR; this
+   block mirrors the few that matter for the shell chrome.
+   ──────────────────────────────────────────────────────────────────────────── */
+[dir="rtl"] body,
+[dir="rtl"] .app-header,
+[dir="rtl"] .app-sidebar,
+[dir="rtl"] .app-main { direction: rtl; }
+
+[dir="rtl"] .nav-app-name {
+  border-right: none;
+  border-left: 1px solid var(--border);
+  margin-right: 0;
+  margin-left: 8px;
+}
+
+[dir="rtl"] .user-area { margin-left: 0; margin-right: auto; }
+
+[dir="rtl"] .app-sidebar { border-right: none; border-left: 1px solid var(--border); }
+[dir="rtl"] .sidebar-list button { text-align: right; border-left: none; border-right: 3px solid transparent; }
+[dir="rtl"] .sidebar-list button.active { border-left-color: transparent; border-right-color: var(--brand); }
+
+[dir="rtl"] .breadcrumb-strip .bc-sep { transform: scaleX(-1); }
+
+[dir="rtl"] .form-field label .required-mark { margin-left: 0; margin-right: 2px; }
+[dir="rtl"] .text-right { text-align: left !important; }
+
+/* Settings screen (localization addon) */
+.settings-page { max-width: 640px; margin: 0 auto; padding: 24px 16px; }
+.settings-page h2 { margin-bottom: 16px; }
+.settings-page .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 16px; }
+.settings-page .field label { font-weight: 600; font-size: 0.85rem; }
+.settings-page .derived { background: var(--brand-light, #f3f4f6); border-radius: 8px; padding: 12px 14px; margin: 16px 0; }
+.settings-page .derived dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; }
+.settings-page .derived dt { font-weight: 600; }
+.settings-page .settings-actions { display: flex; gap: 8px; margin-top: 20px; }
+.settings-page .settings-banner { padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; }
+.settings-page .settings-banner.error { background: #fdecea; color: #8a1c14; }
+.settings-page .settings-banner.success { background: #e7f6ec; color: #14612b; }
