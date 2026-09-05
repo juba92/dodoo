@@ -204,7 +204,16 @@ function _renderSidebar(hash) {
   // Update app name in navbar
   const appNameEl = document.querySelector('.nav-app-name');
   if (appNameEl) {
-    appNameEl.textContent = hash.startsWith('#/accounting') ? t('Accounting') : t('Dodoo ERP');
+    appNameEl.textContent = hash.startsWith('#/accounting') ? t('Accounting')
+      : hash === '#/settings' ? t('Settings')
+      : t('Dodoo ERP');
+  }
+
+  // Settings is a standalone config page — no model navigation.
+  if (hash === '#/settings') {
+    document.getElementById('app')?.classList.add('home-mode');
+    sidebar.innerHTML = '';
+    return;
   }
 
   if (hash.startsWith('#/accounting')) {
