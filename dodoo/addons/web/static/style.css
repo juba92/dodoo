@@ -915,3 +915,69 @@ fieldset.form-group legend {
 .report-neg { color: var(--danger); }
 
 .report-balance-badge { margin-top: 14px; }
+
+/* ── Human Resources / Fleet — Kanban, Calendar, Org chart (feature 006) ──────── */
+
+.o-kanban {
+  display: flex; gap: 12px; align-items: flex-start;
+  overflow-x: auto; padding: 8px 4px 16px;
+}
+.o-kanban-col {
+  flex: 0 0 260px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 8px; min-height: 120px;
+}
+.o-kanban-col-title {
+  margin: 2px 4px 8px; font-size: .78rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted);
+}
+.o-kanban-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); box-shadow: var(--shadow-sm);
+  padding: 10px; margin-bottom: 8px; cursor: pointer;
+}
+.o-kanban-card:hover { border-color: var(--brand); }
+.o-kanban-card:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+.o-kanban-card-line { font-size: .85rem; color: var(--text); }
+.o-kanban-card-line:first-child { font-weight: 600; }
+.o-kanban-move {
+  margin-top: 6px; width: 100%; font-size: .78rem;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 3px;
+}
+
+.o-calendar {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px;
+  background: var(--border); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden;
+}
+.o-cal-cell { background: var(--surface); min-height: 92px; padding: 4px; }
+.o-cal-cell:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+.o-cal-other { background: var(--bg); }
+.o-cal-today .o-cal-num {
+  background: var(--brand); color: #fff; border-radius: 50%;
+  width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center;
+}
+.o-cal-num { font-size: .78rem; color: var(--text-muted); }
+.o-cal-event {
+  display: block; width: 100%; text-align: left; margin-top: 3px;
+  font-size: .76rem; padding: 2px 5px; border: none; border-radius: var(--radius-sm);
+  background: var(--brand-light); color: var(--text); cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.o-cal-event:hover { background: var(--brand); color: #fff; }
+.o-cal-label { font-weight: 700; padding: 0 10px; }
+
+.o-orgchart { padding: 8px; }
+.o-orgchart ul { list-style: none; margin: 0; padding-left: 22px; }
+.o-orgchart li { margin: 4px 0; }
+.o-orgchart .o-org-node {
+  display: inline-block; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 4px 10px; background: var(--surface);
+  color: var(--text); text-decoration: none; font-size: .85rem;
+}
+.o-orgchart .o-org-node:hover { border-color: var(--brand); }
+.o-orgchart .o-org-current { border-color: var(--brand); font-weight: 700; }
+
+[dir="rtl"] .o-kanban { direction: rtl; }
+[dir="rtl"] .o-cal-event { text-align: right; }
+[dir="rtl"] .o-orgchart ul { padding-left: 0; padding-right: 22px; }

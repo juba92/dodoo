@@ -64,6 +64,8 @@ async def core_info(request: Request) -> JSONResponse:
 
         direction = "ltr"
         is_admin = False
+        hr_groups: list[str] = []
+        fleet_manager = False
         try:
             drow = await conn.execute(
                 text("SELECT direction FROM res_lang WHERE code = :c"), {"c": lang}
@@ -74,15 +76,17 @@ async def core_info(request: Request) -> JSONResponse:
         except Exception:
             pass
         if uid:
-            arow = await conn.execute(
+            grow = await conn.execute(
                 text(
-                    "SELECT 1 FROM res_users_groups_rel r "
-                    "JOIN res_groups g ON g.id = r.group_id "
-                    "WHERE r.user_id = :uid AND g.name = 'Administrator' LIMIT 1"
+                    "SELECT g.name FROM res_users_groups_rel r "
+                    "JOIN res_groups g ON g.id = r.group_id WHERE r.user_id = :uid"
                 ),
                 {"uid": uid},
             )
-            is_admin = arow.fetchone() is not None
+            held = {row[0] for row in grow}
+            is_admin = "Administrator" in held
+            hr_groups = sorted(n for n in held if n.startswith("HR "))
+            fleet_manager = "Fleet Manager" in held
 
     models = sorted(env.registry._models.keys())
     return JSONResponse(
@@ -96,5 +100,7 @@ async def core_info(request: Request) -> JSONResponse:
             "lang": lang,
             "direction": direction,
             "is_admin": is_admin,
+            "hr_groups": hr_groups,
+            "fleet_manager": fleet_manager,
         }
     )

@@ -55,6 +55,31 @@ export async function getInfo() {
   return _json(res);
 }
 
+/** POST JSON to an addon REST action route (e.g. /hr/leave/1/approve).
+ *  Returns the parsed `result`; throws Error(body.error) on a 4xx/5xx. */
+export async function post(url, body = {}) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: _headers(),
+    body: JSON.stringify(body),
+  });
+  const data = await _json(res);
+  if (!res.ok || data.error) {
+    throw new Error(data.error ?? `HTTP ${res.status}`);
+  }
+  return data.result;
+}
+
+/** GET JSON from an addon REST route. */
+export async function get(url) {
+  const res = await fetch(url, { headers: _headers() });
+  const data = await _json(res);
+  if (!res.ok || data.error) {
+    throw new Error(data.error ?? `HTTP ${res.status}`);
+  }
+  return data.result ?? data;
+}
+
 let _rpcId = 1;
 
 export async function rpc(model, method, args = [], kwargs = {}) {
