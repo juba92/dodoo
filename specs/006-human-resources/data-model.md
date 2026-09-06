@@ -22,6 +22,7 @@ workflow method), not just the UI.
 | company_id | Many2one(res.company) required | |
 | active | Boolean default True | archive flag |
 | complete_name | Char(256) readonly | derived "Parent / Child" (computed on read) |
+| appraisal_frequency_months | Integer | optional department-level override (resolved after the employee override, before the template default — ADR-026) |
 
 **Rules**: reject `parent_id` that introduces a cycle (walk parents; `DodooError("department_cycle")`).
 **Indexes**: `idx_hr_department_company (company_id)`, `idx_hr_department_parent (parent_id)`.

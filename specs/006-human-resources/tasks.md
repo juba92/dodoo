@@ -190,7 +190,7 @@ removes "open" without touching the next date.
 
 ### Tests for User Story 4
 
-- [ ] T087 [P] [US4] Integration test appraisal state machine (legal moves, `appraisal_transition_invalid`, `appraisal_state_conflict`), `action_launch` instantiating both sides' feedback rows, `action_done` next-date resolution (employee → department → template) in `tests/hr/test_appraisal_cycle.py`
+- [ ] T087 [P] [US4] Integration test appraisal state machine (legal moves, `appraisal_transition_invalid`, `appraisal_state_conflict`), `action_launch` instantiating both sides' feedback rows, `action_done` next-date resolution (employee → department → template), and manager-side routing when the appraisee is their own manager or has no manager (routes/approves via an HR Officer, per spec Edge Cases) in `tests/hr/test_appraisal_cycle.py`
 - [ ] T088 [P] [US4] Integration test feedback visibility: opposite side cannot read `is_visible=false` rows via `read`/`search_read`; owning side always can; `feedback_wrong_side` on cross-side write in `tests/hr/test_appraisal_cycle.py`
 - [ ] T089 [P] [US4] Integration test `hr.appraisal` record rules (owner OR manager OR Officer) and `get_history` ordering in `tests/hr/test_access_rules.py` (extend)
 
@@ -198,8 +198,8 @@ removes "open" without touching the next date.
 
 - [ ] T090 [P] [US4] `hr.appraisal.template` + `hr.appraisal.feedback.section` models in `dodoo/addons/hr/models/hr_appraisal_template.py` (`default_frequency_months` 1–60, ordered sections)
 - [ ] T091 [P] [US4] `hr.appraisal.feedback` model in `dodoo/addons/hr/models/hr_appraisal_feedback.py` (`side`, `content`, `is_visible`; `read`/`search_read` override filtering `is_visible=false` for the opposite side; write restricted to owning side)
-- [ ] T092 [US4] `hr.appraisal` model in `dodoo/addons/hr/models/hr_appraisal.py`: state machine, `action_launch(env, employee_id, template_id, uid)` (create + copy sections × 2 sides), `action_confirm` / `action_to_confirmed` / `action_done` / `action_cancel` (guarded, `log_transition`), `action_done` sets `employee.next_appraisal_date` via resolved frequency, `get_history(env, employee_id)` — depends on T090, T091, T033, T006
-- [ ] T093 [US4] Add `appraisal_frequency_months` column handling to `hr.employee` and `hr.department` (additive `Integer` field) in their model files; extend `tests/hr/test_migrations.py`
+- [ ] T092 [US4] `hr.appraisal` model in `dodoo/addons/hr/models/hr_appraisal.py`: state machine, `action_launch(env, employee_id, template_id, uid)` (create + copy sections × 2 sides), `action_confirm` / `action_to_confirmed` / `action_done` / `action_cancel` (guarded, `log_transition`), `action_done` sets `employee.next_appraisal_date` via resolved frequency (employee → department → template), `_resolve_appraiser(employee)` returning the manager's user, or an HR Officer in the employee's company when the employee has no manager or would be their own appraiser, `get_history(env, employee_id)` — depends on T090, T091, T033, T006
+- [ ] T093 [US4] Add the `appraisal_frequency_months` `Integer` field to `hr.department` in `dodoo/addons/hr/models/hr_department.py` (the `hr.employee` `appraisal_frequency_months` + `next_appraisal_date` fields are already created by T033); extend `tests/hr/test_migrations.py` to assert `hr_department.appraisal_frequency_months` exists
 - [ ] T094 [US4] Export US4 models from `dodoo/addons/hr/models/__init__.py`
 - [ ] T095 [P] [US4] Add appraisal template / launch / set-state / feedback validator models to `dodoo/addons/hr/validators.py` (contracts/hr-appraisal.md)
 - [ ] T096 [US4] REST routes in `dodoo/addons/hr/http/__init__.py`: `POST /hr/appraisal/launch`, `POST /hr/appraisal/{id}/set-state` (Officer or manager) — depends on T092, T095
@@ -259,7 +259,7 @@ appear in the alert list with days-left → service log recorded; non-Fleet-Mana
 
 ### Tests for User Story 6
 
-- [ ] T115 [P] [US6] Integration test vehicle state machine (`vehicle_state_conflict`), `brand_id` derived from `model_id`, driver assignment + `former_driver_ids` history in `tests/fleet/test_vehicle_lifecycle.py`
+- [ ] T115 [P] [US6] Integration test vehicle state machine (`vehicle_state_conflict`), `brand_id` derived from `model_id`, driver assignment + `former_driver_ids` history, and `needs_reassignment` set when the current driver's employee is archived in `tests/fleet/test_vehicle_lifecycle.py`
 - [ ] T116 [P] [US6] Integration test odometer: `_latest_odometer` (max date), a value below the prior max accepted but `inconsistent=true` + warning log in `tests/fleet/test_odometer.py`
 - [ ] T117 [P] [US6] Integration test `get_expiry_alerts` window classification + `days_left`, `run_fleet_contract_expiry` idempotent flip, `expiration_date ≥ start_date` guard in `tests/fleet/test_contract_alerts.py`
 - [ ] T118 [P] [US6] Integration test Fleet record rules: Fleet Manager full, HR Officer read, driver reads own vehicle, deny-by-default in `tests/fleet/test_access_rules.py`
@@ -267,13 +267,13 @@ appear in the alert list with days-left → service log recorded; non-Fleet-Mana
 ### Implementation for User Story 6
 
 - [ ] T119 [P] [US6] `fleet.vehicle.model.brand` + `fleet.vehicle.model` models in `dodoo/addons/fleet/models/fleet_vehicle_model.py` (brand global; model `brand_id` required)
-- [ ] T120 [US6] `fleet.vehicle` model in `dodoo/addons/fleet/models/fleet_vehicle.py`: 7-state `Selection`, `action_set_state(env, ids, target, uid, expected_state=None)` (Fleet-Manager-guarded, `log_transition`, `vehicle_state_conflict`), `brand_id` derived on `create`/`write`, `driver_id` change appends prior to `former_driver_ids` (Json), `odometer` computed from latest log, `get_assigned(env, employee_id)`, `name` derived — depends on T119, T033 (`hr.employee`), T006
+- [ ] T120 [US6] `fleet.vehicle` model in `dodoo/addons/fleet/models/fleet_vehicle.py`: 7-state `Selection`, `action_set_state(env, ids, target, uid, expected_state=None)` (Fleet-Manager-guarded, `log_transition`, `vehicle_state_conflict`), `brand_id` derived on `create`/`write`, `driver_id` change appends prior to `former_driver_ids` (Json), `flag_reassignment_for_archived_drivers(env)` setting `needs_reassignment=True` on vehicles whose `driver_id` employee is archived (spec Edge Cases "Vehicle driver who leaves the company"; called from `run_fleet_contract_expiry` or its own `POST /fleet/cron/...` — reuse the T126 cron route), `odometer` computed from latest log, `get_assigned(env, employee_id)`, `name` derived — depends on T119, T033 (`hr.employee`), T006
 - [ ] T121 [P] [US6] `fleet.vehicle.odometer` model in `dodoo/addons/fleet/models/fleet_vehicle_odometer.py` (`inconsistent` set on create when below max; `_latest_odometer`)
 - [ ] T122 [US6] `fleet.vehicle.log.contract` model in `dodoo/addons/fleet/models/fleet_vehicle_log_contract.py`: `cost_type`, `amount` + `currency_id`, `state` open/expired/closed, `FLEET_ALERT_WINDOW_DAYS=30`, `get_expiry_alerts(env, window_days=None)`, `run_fleet_contract_expiry(env)` idempotent, date guard — depends on T120, T006
 - [ ] T123 [P] [US6] `fleet.vehicle.log.services` model in `dodoo/addons/fleet/models/fleet_vehicle_log_services.py`
 - [ ] T124 [US6] Export all fleet models from `dodoo/addons/fleet/models/__init__.py`; extend `tests/fleet/test_migrations.py`
 - [ ] T125 [P] [US6] Add brand / model / vehicle / set-state / assign-driver / odometer / contract-log / service-log validator models to `dodoo/addons/fleet/validators.py` (contracts/fleet.md)
-- [ ] T126 [US6] REST routes in `dodoo/addons/fleet/http/__init__.py`: `POST /fleet/vehicle/{id}/set-state`, `POST /fleet/vehicle/{id}/assign-driver`, `GET /fleet/alerts`, `POST /fleet/cron/contract-expiry` — depends on T120, T122, T125
+- [ ] T126 [US6] REST routes in `dodoo/addons/fleet/http/__init__.py`: `POST /fleet/vehicle/{id}/set-state`, `POST /fleet/vehicle/{id}/assign-driver`, `GET /fleet/alerts`, `POST /fleet/cron/contract-expiry` (also runs `flag_reassignment_for_archived_drivers` from T120) — depends on T120, T122, T125
 - [ ] T127 [US6] `fleet` `ir.rule` rows in `dodoo/addons/fleet/data/rules.py` (Fleet Manager full, HR Officer read, driver-reads-own on `fleet.vehicle`, logs via parent, deny-by-default) + `sync_ir_model` entries; add `idx_fleet_vehicle_*`, `idx_fleet_odometer_vehicle_date`, `idx_fleet_log_contract_expiry` / `_vehicle`, `idx_fleet_log_services_vehicle` to `dodoo/addons/fleet/data/indexes.py`
 - [ ] T128 [US6] Implement `seed_fleet_data(env)` in `dodoo/addons/fleet/data/seed.py`: 6 brands, 2 models each; call `groups.seed`, `sync_ir_model`, `ensure_indexes`, `rules.apply`
 - [ ] T129 [P] [US6] `dodoo/addons/fleet/static/fleet-menu.js` (Vehicles / Alerts / Configuration sections, `requires:"fleet_manager"`) and `dodoo/addons/fleet/static/views/vehicle-kanban.js` (generic `kanban.js`, `groupBy:"state"`)
@@ -295,9 +295,10 @@ appear in the alert list with days-left → service log recorded; non-Fleet-Mana
 - [ ] T138 Security hardening pass: audit every REST route for `auth="session"` + `require_groups`, every custom `execute_kw` method for `validate(...)`, confirm no f-string SQL with user data, confirm no PII in any `log_transition`/`_log` `extra` (SEC-001–007, OWASP review in research.md)
 - [ ] T139 [P] Observability review: grep tests for a structured JSON log line (correlation_id, actor_uid, model, record_id, from, to) on every transition type across all six areas (SC-008 / Principle IX)
 - [ ] T140 [P] Accessibility audit across all HR + Fleet screens in LTR and RTL — contrast, keyboard-only Kanban move, calendar day nav, org-chart structure, status text+ARIA (SC-011 / ACC-001–004); record results in `tests/e2e/test_web_ui_a11y.py`
-- [ ] T141 [P] Run `ruff check` + `black --check` over `dodoo/addons/hr`, `dodoo/addons/fleet`, `tests/hr`, `tests/fleet`; remove dead code / unjustified comments (Principle I)
+- [ ] T141 [P] Run `ruff check` + `black --check` over `dodoo/addons/hr`, `dodoo/addons/fleet`, `tests/hr`, `tests/fleet`; run the suite with coverage and confirm ≥ 80% unit-line coverage overall and 100% branch coverage on the contract-state table, leave duration/balance/accrual, appraisal next-date + appraiser resolution, fleet expiry classification, every from-state guard, and every whitelist validator (Principles I, II); remove dead code / unjustified comments
 - [ ] T142 Run `specs/006-human-resources/quickstart.md` §0–§9 end to end on a fresh database; fix any drift; confirm the Definition-of-Done table (SC-001–SC-012) passes
 - [ ] T143 [P] Update `dodoo/addons/hr/__init__.py` and `dodoo/addons/fleet/__init__.py` module docstrings to summarise the delivered scope (matching the `localization/__init__.py` precedent)
+- [ ] T144 [P] Internationalise the HR + Fleet UI (FR-010, SC-011): wrap every user-facing literal in `hr/static/hr-menu.js`, `fleet/static/fleet-menu.js`, and all `hr/static/views/*.js` + `fleet/static/views/*.js` in `t(...)` (the `web/static/i18n.js` helper), and add the corresponding keys to `dodoo/addons/localization/data/i18n/en.json` and `ar.json`; verify model field labels already translate via 005's `fields_get` path. Extend `tests/e2e/test_hr_ui.py` to assert menu + button strings render in Arabic under RTL
 
 ---
 

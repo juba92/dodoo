@@ -126,9 +126,12 @@ under 300 ms. Mirrors Odoo's `_get_number_of_days` intent without its Python int
 
 **Decision**: `hr.employee` list/search is `search_read` with `order` and `limit=50`, backed by
 `idx_hr_employee_company_name (company_id, name)` and `idx_hr_employee_department (department_id)`,
-`idx_hr_employee_job (job_id)`. Name search uses `ilike` on `name` (btree `text_pattern_ops` index
-`idx_hr_employee_name_pattern` for prefix; trigram is a new extension → not used). 2,000 rows with a
-covering index returns in well under 500 ms.
+`idx_hr_employee_job (job_id)`. Department/job filters and the default name ordering use these
+indexes directly. Name text search uses `ilike`: a prefix term (`"ali%"`) is served by the
+`text_pattern_ops` btree `idx_hr_employee_name_pattern`; a substring term (`"%ali%"`) falls back to
+a filtered scan, which at ≤ 2,000 company-scoped rows still returns well under the 500 ms budget
+(no trigram extension is introduced — Principle VII). The target is therefore met for all three
+filter shapes named in PERF-001.
 
 **Rationale**: matches the `account` invoice-list approach; no new infra.
 

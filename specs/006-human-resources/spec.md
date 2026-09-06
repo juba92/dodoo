@@ -90,7 +90,7 @@ directly. It depends on the employee record (US1) for the requester, their manag
 scope, but nothing else, so it can ship right after the directory.
 
 **Independent Test**: Create a paid leave type (unit = days, single manager approval) and allocate
-20 days to an employee. Submit an 5-working-day request spanning a weekend and a public holiday;
+20 days to an employee. Submit a 5-working-day request spanning a weekend and a public holiday;
 confirm the duration is computed excluding the weekend and holiday. Approve it as the manager;
 confirm the balance drops by the computed duration. Submit an overlapping request; confirm it is
 rejected. Open the calendar and confirm the approved leave appears.

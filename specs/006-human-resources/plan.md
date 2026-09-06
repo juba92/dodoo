@@ -152,7 +152,8 @@ failure is re-runnable (idempotent guards), matching the `account` addon precede
   company `resource.calendar` working weekdays minus `hr_public_holiday` ranges, returning days or
   hours. Balance = `allocated − taken − pending` via three aggregate queries; a request over balance
   is refused when `leave_type.allow_negative = false`. Overlap = `EXISTS` query on non-refused
-  `hr_leave` for the same employee with `tstzrange` overlap. **Accrual**: `hr.leave.allocation.mode
+  `hr_leave` for the same employee with `tsrange` (`timestamp without time zone`, matching the
+  `Datetime` field type) overlap. **Accrual**: `hr.leave.allocation.mode
   ∈ {regular, accrual}`; accrual carries `accrual_rate`, `accrual_period ∈ {day,week,month}`,
   `accrual_max`. `run_leave_accrual(env)` (idempotent, keyed on `last_accrual_date`) adds
   `floor(periods_elapsed) * accrual_rate` capped at `accrual_max`; exposed at
