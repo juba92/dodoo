@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 from dodoo.core.exceptions import DodooError
@@ -7,6 +8,7 @@ from dodoo.core.fields import (
     Boolean,
     Char,
     Date,
+    Float,
     Integer,
     Json,
     Many2many,
@@ -41,6 +43,10 @@ class AccountMoveLine(BaseModel):
     name = Char(size=256)
     date = Date(required=True)
     display_type = Selection(DISPLAY_TYPE_CHOICES, default="product")
+    quantity = Float(default=1.0)
+    price_unit = Monetary()
+    price_subtotal = Monetary()
+    price_total = Monetary()
     debit = Monetary()
     credit = Monetary()
     balance = Monetary()
@@ -67,4 +73,28 @@ class AccountMoveLine(BaseModel):
             raise DodooError(
                 f"display_type='{dtype}' lines are system-generated and cannot be created directly"
             )
+        cls._apply_price_defaults(vals)
         return await super().create(env, vals)
+
+    @classmethod
+    async def write(cls, env: Environment, ids: list[int], vals: dict[str, Any]) -> bool:
+        cls._apply_price_defaults(vals)
+        return await super().write(env, ids, vals)
+
+    @staticmethod
+    def _apply_price_defaults(vals: dict[str, Any]) -> None:
+        """Derive ``price_subtotal`` from ``price_unit`` × ``quantity`` when the
+        caller supplies a unit price but not an explicit subtotal.
+
+        ``price_total`` (subtotal + tax) is left to
+        ``account.move.recompute_totals`` / ``action_post`` because it depends on
+        the ``tax_ids`` Many2many, which is only linked after the row exists.
+        """
+        if "price_unit" not in vals:
+            return
+        if vals.get("quantity") in (None, ""):
+            vals["quantity"] = 1.0
+        if vals.get("price_subtotal") in (None, ""):
+            qty = Decimal(str(vals.get("quantity") or 0))
+            unit = Decimal(str(vals.get("price_unit") or 0))
+            vals["price_subtotal"] = qty * unit

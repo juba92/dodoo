@@ -127,22 +127,84 @@ class BaseModel(metaclass=_ModelMeta):
         ]
         return names
 
+    # ---- Many2many helpers ----
+
+    @classmethod
+    def _m2m_fields(cls) -> dict[str, Many2many]:
+        """Writable Many2many fields (those backed by a junction table)."""
+        return {
+            n: f
+            for n, f in cls._fields.items()
+            if isinstance(f, Many2many) and f.relation_table
+        }
+
+    @classmethod
+    def _m2m_columns(cls, field: Many2many) -> tuple[str, str]:
+        """(source_column, target_column) of a Many2many junction table.
+
+        Mirrors ``MigrationRunner`` so declared column names win and the
+        defaults match the tables it creates.
+        """
+        col1 = field.column1 or f"{cls._table_name()}_id"
+        col2 = field.column2 or f"{field.relation.replace('.', '_')}_id"
+        return col1, col2
+
+    @staticmethod
+    def _m2m_id_list(value: Any) -> list[int]:
+        """Normalise a Many2many write value to a de-duplicated list of ids.
+
+        Accepts ``None`` / ``False`` (clear) or an iterable of ints. The full
+        Odoo command protocol ``(6, 0, ids)`` is intentionally not supported —
+        a plain id list is the only form the SPA sends.
+        """
+        if not value:
+            return []
+        seen: dict[int, None] = {}
+        for item in value:
+            seen.setdefault(int(item), None)
+        return list(seen)
+
+    @classmethod
+    async def _write_m2m(
+        cls, conn: Any, field: Many2many, source_id: int, target_ids: list[int]
+    ) -> None:
+        col1, col2 = cls._m2m_columns(field)
+        await conn.execute(
+            text(f"DELETE FROM {field.relation_table} WHERE {col1} = :sid"),
+            {"sid": source_id},
+        )
+        for tid in target_ids:
+            await conn.execute(
+                text(
+                    f"INSERT INTO {field.relation_table} ({col1}, {col2}) "
+                    f"VALUES (:sid, :tid) ON CONFLICT DO NOTHING"
+                ),
+                {"sid": source_id, "tid": tid},
+            )
+
     # ---- CRUD ----
 
     @classmethod
     async def create(cls, env: Environment, vals: dict[str, Any]) -> int:
         table = cls._sa_table()
+        m2m = cls._m2m_fields()
+        m2m_vals = {k: cls._m2m_id_list(vals[k]) for k in m2m if k in vals}
         async with env.dml_conn() as conn:
             row = {
-                k: cls._fields[k].coerce(v) for k, v in vals.items() if k in cls._fields
+                k: cls._fields[k].coerce(v)
+                for k, v in vals.items()
+                if k in cls._fields and k not in m2m
             }
             if cls._inherit:
                 row["_type"] = cls._name
             result = await conn.execute(
                 table.insert().values(**row).returning(table.c.id)
             )
+            new_id = result.scalar_one()
+            for k, target_ids in m2m_vals.items():
+                await cls._write_m2m(conn, m2m[k], new_id, target_ids)
             await conn.commit()
-            return result.scalar_one()
+            return new_id
 
     @classmethod
     async def read(
@@ -150,9 +212,14 @@ class BaseModel(metaclass=_ModelMeta):
     ) -> list[dict[str, Any]]:
         table = cls._sa_table()
         allowed = set(cls._all_field_names())
-        cols = [table.c[f] for f in (fields or cls._all_field_names()) if f in allowed]
-        if not cols:
-            cols = [table.c.id]
+        col_names = [f for f in (fields or cls._all_field_names()) if f in allowed]
+        if "id" not in col_names:
+            col_names = ["id", *col_names]
+        cols = [table.c[f] for f in col_names]
+
+        # Many2many fields are virtual — only returned when explicitly requested.
+        m2m = cls._m2m_fields()
+        req_m2m = [f for f in (fields or ()) if f in m2m]
 
         query = sa.select(*cols).where(table.c.id.in_(ids))
         if cls._inherit:
@@ -160,21 +227,47 @@ class BaseModel(metaclass=_ModelMeta):
 
         async with env.dml_conn() as conn:
             result = await conn.execute(query)
-            rows = result.mappings().all()
-        return [dict(r) for r in rows]
+            records = [dict(r) for r in result.mappings().all()]
+
+            for fname in req_m2m:
+                field = m2m[fname]
+                col1, col2 = cls._m2m_columns(field)
+                rel_rows = await conn.execute(
+                    text(
+                        f"SELECT {col1} AS sid, {col2} AS tid "
+                        f"FROM {field.relation_table} WHERE {col1} = ANY(:ids)"
+                    ),
+                    {"ids": ids},
+                )
+                by_source: dict[int, list[int]] = {}
+                for r in rel_rows:
+                    by_source.setdefault(r.sid, []).append(r.tid)
+                for rec in records:
+                    rec[fname] = by_source.get(rec["id"], [])
+
+        return records
 
     @classmethod
     async def write(
         cls, env: Environment, ids: list[int], vals: dict[str, Any]
     ) -> bool:
         table = cls._sa_table()
-        row = {k: cls._fields[k].coerce(v) for k, v in vals.items() if k in cls._fields}
+        m2m = cls._m2m_fields()
+        m2m_vals = {k: cls._m2m_id_list(vals[k]) for k in m2m if k in vals}
+        row = {
+            k: cls._fields[k].coerce(v)
+            for k, v in vals.items()
+            if k in cls._fields and k not in m2m
+        }
         row["write_date"] = sa.func.now()
         query = sa.update(table).where(table.c.id.in_(ids)).values(**row)
         if cls._inherit:
             query = query.where(table.c._type == cls._name)
         async with env.dml_conn() as conn:
             await conn.execute(query)
+            for k, target_ids in m2m_vals.items():
+                for source_id in ids:
+                    await cls._write_m2m(conn, m2m[k], source_id, target_ids)
             await conn.commit()
         return True
 

@@ -380,6 +380,115 @@ class AccountMove(BaseModel):
             },
         )
 
+    # ---- Draft dynamic totals ----
+
+    @classmethod
+    async def recompute_totals(
+        cls, env: Environment, ids: list[int]
+    ) -> dict[int, dict[str, str]]:
+        """Recompute ``amount_untaxed`` / ``amount_tax`` / ``amount_total`` for
+        draft invoice moves from their product lines and each line's ``tax_ids``.
+
+        This is the persisted counterpart of the live client-side preview: the
+        SPA calls it after saving invoice lines so a re-opened draft shows the
+        same figures. Posted moves are owned by :meth:`action_post` and are left
+        untouched. Taxes are accumulated round-globally per tax (ADR-003).
+        """
+        from dodoo.addons.account.models.account_tax import AccountTax
+
+        result: dict[int, dict[str, str]] = {}
+        for move_id in ids:
+            records = await super().read(
+                env, [move_id], ["state", "move_type", "currency_id"]
+            )
+            if not records:
+                raise DodooError(f"account.move {move_id} not found")
+            rec = records[0]
+            if rec["state"] == "posted":
+                continue
+
+            async with env.dml_conn() as conn:
+                rounding_row = await conn.execute(
+                    text("SELECT rounding FROM res_currency WHERE id = :cid"),
+                    {"cid": rec["currency_id"]},
+                )
+                rr = rounding_row.fetchone()
+                rounding = int(rr[0]) if rr else 2
+
+                prod_rows = await conn.execute(
+                    text(
+                        "SELECT id, debit, credit, price_subtotal "
+                        "FROM account_move_line "
+                        "WHERE move_id = :mid AND display_type = 'product'"
+                    ),
+                    {"mid": move_id},
+                )
+                product_lines = [dict(r._mapping) for r in prod_rows]
+
+                untaxed = Decimal("0")
+                raw_tax_amounts: dict[int, Decimal] = {}
+                for pl in product_lines:
+                    subtotal = pl.get("price_subtotal")
+                    base = (
+                        Decimal(str(subtotal))
+                        if subtotal not in (None, 0)
+                        else abs(Decimal(str(pl["debit"])) - Decimal(str(pl["credit"])))
+                    )
+                    untaxed += base
+
+                    line_total = base
+                    tax_rows = await conn.execute(
+                        text(
+                            "SELECT t.id, t.amount_type, t.amount "
+                            "FROM account_move_line_tax_rel rel "
+                            "JOIN account_tax t ON t.id = rel.tax_id "
+                            "WHERE rel.move_line_id = :lid"
+                        ),
+                        {"lid": pl["id"]},
+                    )
+                    for tax in (dict(r._mapping) for r in tax_rows):
+                        amt = AccountTax._compute_amount(tax, base)
+                        raw_tax_amounts[tax["id"]] = (
+                            raw_tax_amounts.get(tax["id"], Decimal("0")) + amt
+                        )
+                        line_total += amt
+                    await conn.execute(
+                        text(
+                            "UPDATE account_move_line "
+                            "SET price_total = :pt, write_date = now() WHERE id = :lid"
+                        ),
+                        {"pt": str(_round(line_total, rounding)), "lid": pl["id"]},
+                    )
+
+                untaxed = _round(untaxed, rounding)
+                tax_total = sum(
+                    (_round(v, rounding) for v in raw_tax_amounts.values()),
+                    Decimal("0"),
+                )
+                total = untaxed + tax_total
+
+                await conn.execute(
+                    text(
+                        "UPDATE account_move SET "
+                        "amount_untaxed = :u, amount_tax = :t, amount_total = :g, "
+                        "write_date = now() WHERE id = :mid"
+                    ),
+                    {
+                        "u": str(untaxed),
+                        "t": str(tax_total),
+                        "g": str(total),
+                        "mid": move_id,
+                    },
+                )
+                await conn.commit()
+
+            result[move_id] = {
+                "amount_untaxed": str(untaxed),
+                "amount_tax": str(tax_total),
+                "amount_total": str(total),
+            }
+        return result
+
     # ---- Posting ----
 
     @classmethod
