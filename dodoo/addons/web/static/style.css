@@ -981,3 +981,103 @@ fieldset.form-group legend {
 [dir="rtl"] .o-kanban { direction: rtl; }
 [dir="rtl"] .o-cal-event { text-align: right; }
 [dir="rtl"] .o-orgchart ul { padding-left: 0; padding-right: 22px; }
+
+/* ── HR / Fleet forms + shared bits (feature 006) ────────────────────────────── */
+
+.o-form {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 20px 24px;
+  max-width: 960px;
+}
+.o-form-title { margin-bottom: 14px; }
+.o-form-title label { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; }
+.o-form-title input {
+  font-size: 1.25rem; font-weight: 700; padding: 6px 10px;
+  border: 1px solid transparent; border-bottom: 1px solid var(--border);
+  border-radius: 0; background: transparent; width: 100%;
+}
+.o-form-title input:focus {
+  border-bottom-color: var(--brand);
+  box-shadow: 0 1px 0 0 var(--brand);
+}
+
+.o-form-tabbar {
+  display: flex; gap: 2px; border-bottom: 1px solid var(--border);
+  margin: 4px 0 16px; flex-wrap: wrap;
+}
+.o-form-tab {
+  border: none; background: transparent; cursor: pointer;
+  padding: 8px 14px; font-size: .85rem; font-weight: 600; color: var(--text-muted);
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.o-form-tab:hover { color: var(--text); }
+.o-form-tab[aria-selected="true"] { color: var(--brand); border-bottom-color: var(--brand); }
+.o-form-tab:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+.o-form-panel { margin-bottom: 8px; }
+.o-form-panel.field-grid { padding: 4px 0 8px; }
+
+.o-form-section {
+  margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border);
+}
+.o-form-section h3 {
+  font-size: .74rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--text-muted); margin-bottom: 8px;
+}
+.o-form-section ul { margin: 0; padding-inline-start: 20px; }
+.o-form-section li { font-size: .875rem; margin: 3px 0; }
+.o-form-section .muted, .o-form .muted { color: var(--text-muted); font-size: .85rem; }
+
+.field-hint { font-size: .74rem; color: var(--text-muted); margin-top: 2px; }
+
+/* Simpler row-per-field forms (time off, contract, applicant, appraisal, referral, vehicle) */
+.o-form-row {
+  display: grid; grid-template-columns: 190px 1fr; gap: 10px 16px;
+  align-items: center; padding: 6px 0;
+}
+.o-form-row > label {
+  font-size: .82rem; font-weight: 600; color: var(--text-muted);
+}
+.o-form-row input, .o-form-row select, .o-form-row textarea {
+  border: 1px solid rgba(0,0,0,.15); border-radius: var(--radius-sm);
+  padding: 6px 10px; font-size: .875rem; color: var(--text);
+  background: var(--surface); width: 100%;
+}
+.o-form-row input:focus, .o-form-row select:focus, .o-form-row textarea:focus {
+  border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-light); outline: none;
+}
+.o-form-row textarea { min-height: 64px; resize: vertical; }
+
+.o-state-badge {
+  display: inline-block; padding: 2px 10px; border-radius: 999px;
+  font-size: .78rem; font-weight: 600;
+  background: var(--brand-light); color: var(--brand-hover);
+  border: 1px solid var(--brand-light);
+}
+.o-duration-preview { font-weight: 700; color: var(--text); }
+
+/* ── RTL ─────────────────────────────────────────────────────────────────────── */
+[dir="rtl"] .data-table th,
+[dir="rtl"] .data-table td { text-align: right; }
+[dir="rtl"] .form-field label,
+[dir="rtl"] .o-form-row > label { text-align: right; }
+[dir="rtl"] .form-field input,
+[dir="rtl"] .form-field textarea,
+[dir="rtl"] .form-field select,
+[dir="rtl"] .o-form-row input,
+[dir="rtl"] .o-form-row select,
+[dir="rtl"] .o-form-row textarea,
+[dir="rtl"] .o-form-title input,
+[dir="rtl"] .search-input { text-align: right; }
+[dir="rtl"] .form-field input[type="date"],
+[dir="rtl"] .form-field input[type="number"],
+[dir="rtl"] .o-form-row input[type="date"],
+[dir="rtl"] .o-form-row input[type="number"] { direction: ltr; text-align: right; }
+[dir="rtl"] .o-form-row { grid-template-columns: 190px 1fr; }
+[dir="rtl"] .o-form-tabbar { flex-direction: row; }
+[dir="rtl"] .o-form-section ul { padding-inline-start: 20px; }
+[dir="rtl"] .o-kanban-card { text-align: right; }
+[dir="rtl"] .o-kanban-move { text-align: right; }

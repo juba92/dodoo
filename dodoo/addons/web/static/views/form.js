@@ -143,6 +143,14 @@ export async function render(container, params) {
   // Fetch record data for existing records
   let record = {};
   let originalValues = {};
+  if (isNew && fields.company_id && fields.company_id.required && model !== 'res.company') {
+    // Default a required company_id to the (single) company so the create doesn't
+    // fail a NOT NULL constraint before the user has picked one.
+    try {
+      const co = await api.rpc('res.company', 'search_read', [[]], { fields: ['id'], limit: 1 });
+      if (co[0]) record.company_id = co[0].id;
+    } catch { /* leave blank */ }
+  }
   if (!isNew) {
     try {
       const fieldNames = Object.keys(fields).filter(f => _EDITABLE_TYPES.has(fields[f].type) || fields[f].readonly);
