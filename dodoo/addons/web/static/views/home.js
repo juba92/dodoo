@@ -94,9 +94,13 @@ export async function render(container, params) {
     App.state.modules = info.modules ?? [];
     App.state.models = info.models ?? [];
 
-    // Refresh sidebar — only when still on a non-accounting route (guard against race condition)
+    // Refresh sidebar — ONLY if we are still on the home screen. getInfo() is
+    // async; by the time it resolves the user may have navigated to an app
+    // screen (#/hr, #/fleet, #/accounting, …) whose own sidebar renderer has
+    // already run. Repainting the raw model list here would clobber it.
     const sidebar = document.getElementById('sidebar');
-    if (sidebar && !window.location.hash.startsWith('#/accounting')) {
+    const h = window.location.hash;
+    if (sidebar && (h === '' || h === '#/' || h === '#/home')) {
       _refreshSidebar(sidebar, info.models ?? []);
     }
   } catch (err) {

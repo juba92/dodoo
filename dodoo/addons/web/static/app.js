@@ -5,7 +5,7 @@ import { loadCatalog, applyDirection, t, currentLang } from '/web/static/i18n.js
 // lazily-imported view module so a new build is a new module URL — otherwise the
 // browser keeps the first-imported version of a view for the whole tab session
 // (hash navigation never reloads the document) and serves stale screens.
-const CLIENT_BUILD = '2026-09-06.14';
+const CLIENT_BUILD = '2026-09-06.15';
 
 /** Lazy-import a view module, cache-busted by the current build. */
 const _view = path => import(path + '?v=' + CLIENT_BUILD);
@@ -50,7 +50,6 @@ export const App = {
     if (appNameEl) {
       appNameEl.textContent = hash.startsWith('#/accounting') ? t('Accounting')
         : hash.startsWith('#/hr') ? t('Human Resources')
-      : hash.startsWith('#/fleet') ? t('Fleet')
         : hash.startsWith('#/fleet') ? t('Fleet')
         : hash === '#/settings' ? t('Settings')
         : t('Dodoo ERP');
@@ -290,20 +289,27 @@ function _renderSidebar(hash) {
   }
 
   if (hash.startsWith('#/accounting')) {
-    _renderAccountingMenu(sidebar, hash).catch(() => {});
+    sidebar.innerHTML = '';
+    _renderAccountingMenu(sidebar, hash).catch(err => console.error('[dodoo] Accounting menu render failed', err));
     return;
   }
 
   if (hash.startsWith('#/hr')) {
-    _renderHrMenu(sidebar, hash).catch(() => {});
+    // Clear immediately so a slow/failed menu load never leaves the generic
+    // model list (or any stale content) showing on an HR screen.
+    sidebar.innerHTML = '';
+    _renderHrMenu(sidebar, hash).catch(err => console.error('[dodoo] HR menu render failed', err));
     return;
   }
 
   if (hash.startsWith('#/fleet')) {
-    _renderFleetMenu(sidebar, hash).catch(() => {});
+    sidebar.innerHTML = '';
+    _renderFleetMenu(sidebar, hash).catch(err => console.error('[dodoo] Fleet menu render failed', err));
     return;
   }
 
+  // Generic model browser sidebar — only reachable from #/model/* and #/module/*
+  // (accounting, HR and Fleet are handled above). Never shown on an app screen.
   sidebar.innerHTML = '';
   const title = document.createElement('div');
   title.className = 'sidebar-section-title';
