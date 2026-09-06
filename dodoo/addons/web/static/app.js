@@ -5,7 +5,7 @@ import { loadCatalog, applyDirection, t, currentLang } from '/web/static/i18n.js
 // lazily-imported view module so a new build is a new module URL — otherwise the
 // browser keeps the first-imported version of a view for the whole tab session
 // (hash navigation never reloads the document) and serves stale screens.
-const CLIENT_BUILD = '2026-09-06.10';
+const CLIENT_BUILD = '2026-09-06.11';
 
 /** Lazy-import a view module, cache-busted by the current build. */
 const _view = path => import(path + '?v=' + CLIENT_BUILD);
@@ -121,6 +121,8 @@ function _labelFromHash(hash) {
   if (hash === '#/hr/appraisals')                              return t('Appraisals');
   if ((m = hash.match(/^#\/hr\/appraisal\/new$/)))           return t('New Appraisal');
   if ((m = hash.match(/^#\/hr\/appraisal\/(\d+)$/)))        return t('Appraisal') + ' #' + m[1];
+  if (hash === '#/hr/referrals')                                return t('My Referrals');
+  if (hash === '#/hr/referral/new')                             return t('Refer a Friend');
   if ((m = hash.match(/^#\/hr\/employee\/new$/)))               return t('New Employee');
   if ((m = hash.match(/^#\/hr\/employee\/(\d+)$/)))             return t('Employee') + ' #' + m[1];
   if ((m = hash.match(/^#\/hr\/model\/([^/]+)\/new$/)))         return t('New {name}', { name: m[1] });
@@ -418,6 +420,8 @@ const _ROUTES = [
   [/^#\/hr\/recruitment\/(\d+)$/, () => _view('/hr/static/views/recruitment-kanban.js')],
   [/^#\/hr\/applicant\/(new|\d+)$/, () => _view('/hr/static/views/applicant-form.js')],
   [/^#\/hr\/appraisal\/(new|\d+)$/, () => _view('/hr/static/views/appraisal-form.js')],
+  [/^#\/hr\/referrals$/, () => _view('/hr/static/views/referral-form.js')],
+  [/^#\/hr\/referral\/new$/, () => _view('/hr/static/views/referral-form.js')],
   [/^#\/hr\/model\/([^/]+)\/new$/, () => _view('/web/static/views/form.js')],
   [/^#\/hr\/model\/([^/]+)\/(\d+)$/, () => _view('/web/static/views/form.js')],
   [/^#\/hr\/model\/([^/]+)$/, () => _view('/web/static/views/list.js')],
@@ -456,6 +460,8 @@ function _paramsFromHash(hash) {
   if ((m = base.match(/^#\/hr\/recruitment\/(\d+)$/)))               return { jobId: parseInt(m[1], 10) };
   if ((m = base.match(/^#\/hr\/applicant\/(new|\d+)$/)))              return { id: m[1] === 'new' ? 'new' : parseInt(m[1], 10), job: qs.get('job') };
   if ((m = base.match(/^#\/hr\/appraisal\/(new|\d+)$/)))              return { id: m[1] === 'new' ? 'new' : parseInt(m[1], 10) };
+  if (base === '#/hr/referrals')                                       return { mode: 'list' };
+  if (base === '#/hr/referral/new')                                    return { mode: 'new' };
   if ((m = base.match(/^#\/hr\/model\/([^/]+)\/new$/)))               return { model: m[1], id: 'new' };
   if ((m = base.match(/^#\/hr\/model\/([^/]+)\/(\d+)$/)))             return { model: m[1], id: parseInt(m[2], 10) };
   if ((m = base.match(/^#\/hr\/model\/([^/]+)$/)))                    return { model: m[1] };

@@ -42,5 +42,6 @@ from dodoo.addons.hr.http import (  # noqa: E402,F401
     appraisal,
     employees,
     recruitment,
+    referral,
     timeoff,
 )

@@ -244,20 +244,20 @@ stats show total/hired, conversion marks it hired.
 
 ### Tests for User Story 5
 
-- [ ] T103 [P] [US5] Integration test `action_submit` (published-only → `referral_job_unpublished`, applicant created with `is_referral` source + `referral_id`, referrer resolved from current user → `referral_no_employee` when absent) in `tests/hr/test_referral.py`
-- [ ] T104 [P] [US5] Integration test derived `status` transitions (stage name → `refused` → `hired`) and `get_referrer_stats` `{total, hired}`; referral to a later-unpublished job stays visible, new ones blocked in `tests/hr/test_referral.py`
-- [ ] T105 [P] [US5] Integration test `hr.referral` record rule (`referrer_id.user_id = uid` for HR Employee; Officer full) in `tests/hr/test_access_rules.py` (extend)
+- [x] T103 [P] [US5] Integration test `action_submit` (published-only → `referral_job_unpublished`, applicant created with `is_referral` source + `referral_id`, referrer resolved from current user → `referral_no_employee` when absent) in `tests/hr/test_referral.py`
+- [x] T104 [P] [US5] Integration test derived `status` transitions (stage name → `refused` → `hired`) and `get_referrer_stats` `{total, hired}`; referral to a later-unpublished job stays visible, new ones blocked in `tests/hr/test_referral.py`
+- [x] T105 [P] [US5] Integration test `hr.referral` record rule (`referrer_id.user_id = uid` for HR Employee; Officer full) in `tests/hr/test_access_rules.py` (extend)
 
 ### Implementation for User Story 5
 
-- [ ] T106 [US5] `hr.referral` model in `dodoo/addons/hr/models/hr_referral.py`: fields, `action_submit(env, vals, uid)` (publish guard, resolve referrer via `hr.employee.resolve_current`, create linked `hr.applicant` with the `is_referral` source + `referral_id`, `log_transition` event `referral_submit`), derived `status` on read, `get_my_referrals(env)`, `get_referrer_stats(env, referrer_id)` — depends on T076 (US3), T033
-- [ ] T107 [US5] Add `referral_id` Many2one to `hr.applicant` (additive) in `hr_applicant.py`; export `hr.referral` from `models/__init__.py`; extend `tests/hr/test_migrations.py`
-- [ ] T108 [P] [US5] Add `ReferralSubmit` validator model to `dodoo/addons/hr/validators.py` (contracts/hr-referral.md)
-- [ ] T109 [US5] REST route `POST /hr/referral/submit` in `dodoo/addons/hr/http/__init__.py` (any authenticated user with an `hr.employee`) — depends on T106, T108
-- [ ] T110 [US5] Append US5 `ir.rule` rows to `dodoo/addons/hr/data/rules.py` (`hr.referral` owner / Officer / deny-by-default); add `idx_hr_referral_referrer` / `_job` to `indexes.py`; register `sync_ir_model` entry
-- [ ] T111 [P] [US5] `dodoo/addons/hr/static/views/referral-form.js` — published-job picker, candidate fields, submit; a "My Referrals" list from `get_my_referrals` with live status
-- [ ] T112 [US5] Wire `#/hr/referrals`, `#/hr/referral/new` routes + the Referrals menu section in `app.js`; bump `CLIENT_BUILD` — depends on T111
-- [ ] T113 [US5] E2E `tests/e2e/test_recruitment_ui.py` (extend) — submit referral, advance applicant, referrer sees status + counts, unpublished-job block
+- [x] T106 [US5] `hr.referral` model in `dodoo/addons/hr/models/hr_referral.py`: fields, `action_submit(env, vals, uid)` (publish guard, resolve referrer via `hr.employee.resolve_current`, create linked `hr.applicant` with the `is_referral` source + `referral_id`, `log_transition` event `referral_submit`), derived `status` on read, `get_my_referrals(env)`, `get_referrer_stats(env, referrer_id)` — depends on T076 (US3), T033
+- [x] T107 [US5] Add `referral_id` Many2one to `hr.applicant` (additive) in `hr_applicant.py`; export `hr.referral` from `models/__init__.py`; extend `tests/hr/test_migrations.py`
+- [x] T108 [P] [US5] Add `ReferralSubmit` validator model to `dodoo/addons/hr/validators.py` (contracts/hr-referral.md)
+- [x] T109 [US5] REST route `POST /hr/referral/submit` in `dodoo/addons/hr/http/__init__.py` (any authenticated user with an `hr.employee`) — depends on T106, T108
+- [x] T110 [US5] Append US5 `ir.rule` rows to `dodoo/addons/hr/data/rules.py` (`hr.referral` owner / Officer / deny-by-default); add `idx_hr_referral_referrer` / `_job` to `indexes.py`; register `sync_ir_model` entry
+- [x] T111 [P] [US5] `dodoo/addons/hr/static/views/referral-form.js` — published-job picker, candidate fields, submit; a "My Referrals" list from `get_my_referrals` with live status
+- [x] T112 [US5] Wire `#/hr/referrals`, `#/hr/referral/new` routes + the Referrals menu section in `app.js`; bump `CLIENT_BUILD` — depends on T111
+- [x] T113 [US5] E2E `tests/e2e/test_recruitment_ui.py` (extend) — submit referral, advance applicant, referrer sees status + counts, unpublished-job block
 - [ ] T114 [US5] Extend `tests/e2e/test_web_ui_a11y.py` with the referral form
 
 **Checkpoint**: US1–US5 independently functional.

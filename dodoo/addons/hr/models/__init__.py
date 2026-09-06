@@ -22,6 +22,7 @@ from dodoo.addons.hr.models.hr_leave_type import HrLeaveType
 from dodoo.addons.hr.models.hr_public_holiday import HrPublicHoliday
 from dodoo.addons.hr.models.hr_recruitment_source import HrRecruitmentSource
 from dodoo.addons.hr.models.hr_recruitment_stage import HrRecruitmentStage
+from dodoo.addons.hr.models.hr_referral import HrReferral
 from dodoo.addons.hr.models.hr_skill import (
     HrEmployeeSkill,
     HrSkill,
@@ -58,4 +59,5 @@ __all__ = [
     "HrAppraisalFeedbackSection",
     "HrAppraisalFeedback",
     "HrAppraisal",
+    "HrReferral",
 ]

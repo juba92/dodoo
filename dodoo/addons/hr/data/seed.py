@@ -35,6 +35,7 @@ def _load_areas() -> None:
         appraisal,
         employees,
         recruitment,
+        referral,
         timeoff,
     )
 

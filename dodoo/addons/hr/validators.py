@@ -284,3 +284,13 @@ class AppraisalSetState(Payload):
 class FeedbackWrite(Payload):
     content: str | None = None
     is_visible: bool
+
+
+# --------------------------------------------------------------------------- P3 (Referrals)
+
+
+class ReferralSubmit(Payload):
+    job_id: int
+    candidate_name: str = Field(min_length=1, max_length=128)
+    candidate_email: str | None = Field(default=None, max_length=256)
+    candidate_phone: str | None = Field(default=None, max_length=64)

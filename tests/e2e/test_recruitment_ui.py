@@ -67,3 +67,11 @@ def test_applicant_form_actions(page: Page):
     _login(page)
     page.goto(f"{_CLIENT}#/hr/applicant/new")
     expect(page.locator(".o-form")).to_be_visible()
+
+
+def test_referral_form_and_list(page: Page):
+    _login(page)
+    page.goto(f"{_CLIENT}#/hr/referral/new")
+    expect(page.locator(".o-form, .empty-state")).to_be_visible()
+    page.goto(f"{_CLIENT}#/hr/referrals")
+    expect(page.locator(".data-table, .empty-state")).to_be_visible()
