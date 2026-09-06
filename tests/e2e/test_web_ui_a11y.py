@@ -63,7 +63,7 @@ def test_a11y_login(a11y_page: Page):
     violations = _run_axe(a11y_page)
     critical = [v for v in violations if v.get("impact") in ("critical", "serious")]
     assert critical == [], (
-        f"WCAG 2.1 AA critical violations on login screen:\n"
+        "WCAG 2.1 AA critical violations on login screen:\n"
         + "\n".join(f"  [{v['id']}] {v['description']}" for v in critical)
     )
 
@@ -74,7 +74,7 @@ def test_a11y_home(a11y_page: Page):
     violations = _run_axe(a11y_page)
     critical = [v for v in violations if v.get("impact") in ("critical", "serious")]
     assert critical == [], (
-        f"WCAG 2.1 AA critical violations on home screen:\n"
+        "WCAG 2.1 AA critical violations on home screen:\n"
         + "\n".join(f"  [{v['id']}] {v['description']}" for v in critical)
     )
 
@@ -86,7 +86,7 @@ def test_a11y_list(a11y_page: Page):
     violations = _run_axe(a11y_page)
     critical = [v for v in violations if v.get("impact") in ("critical", "serious")]
     assert critical == [], (
-        f"WCAG 2.1 AA critical violations on list screen:\n"
+        "WCAG 2.1 AA critical violations on list screen:\n"
         + "\n".join(f"  [{v['id']}] {v['description']}" for v in critical)
     )
 
@@ -98,6 +98,6 @@ def test_a11y_form(a11y_page: Page):
     violations = _run_axe(a11y_page)
     critical = [v for v in violations if v.get("impact") in ("critical", "serious")]
     assert critical == [], (
-        f"WCAG 2.1 AA critical violations on form screen:\n"
+        "WCAG 2.1 AA critical violations on form screen:\n"
         + "\n".join(f"  [{v['id']}] {v['description']}" for v in critical)
     )

@@ -48,7 +48,7 @@ def _login(page: Page, login: str = "admin", password: str = "admin") -> None:
     page.fill("#f-login", login)
     page.fill("#f-password", password)
     page.click("button[type=submit]")
-    page.wait_for_url(f"**#/home")
+    page.wait_for_url("**#/home")
 
 
 # ── US1: Login ────────────────────────────────────────────────────────────────
@@ -102,11 +102,8 @@ def test_us1_logout(page: Page):
 # ── US2: Home Screen ──────────────────────────────────────────────────────────
 
 def test_us2_home_shows_tiles(page: Page):
-    t0 = time.monotonic()
     _login(page)
     page.wait_for_selector(".module-tile")
-    elapsed_nav = time.monotonic() - t0
-    # PERF-002: navigation < 300ms (this covers login→home transition)
     assert page.locator(".module-tile").count() >= 1
 
 

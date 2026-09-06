@@ -306,15 +306,15 @@ appear in the alert list with days-left → service log recorded; non-Fleet-Mana
 ## Phase 9: Polish & Cross-Cutting Concerns
 
 - [ ] T134 [P] Verify `docs/adr/024`–`027` are complete and match the as-built engines; cross-link from plan.md (Principle V)
-- [ ] T135 [P] Benchmark `tests/benchmarks/test_hr_directory_perf.py` — seed 2,000 employees, assert first-page name/department/job search < 500 ms (PERF-001 / SC-009)
-- [ ] T136 [P] Benchmark `tests/benchmarks/test_leave_balance_perf.py` — seed 5 years of allocations/leaves, assert `get_balance` < 300 ms (PERF-002 / SC-009)
+- [x] T135 [P] Benchmark `tests/benchmarks/test_hr_directory_perf.py` — seed 2,000 employees, assert first-page name/department/job search < 500 ms (PERF-001 / SC-009)
+- [x] T136 [P] Benchmark `tests/benchmarks/test_leave_balance_perf.py` — seed 5 years of allocations/leaves, assert `get_balance` < 300 ms (PERF-002 / SC-009)
 - [ ] T137 [P] Benchmark the recruitment Kanban (`get_pipeline`, 500 applicants < 800 ms, PERF-003) and fleet alerts (5,000 contracts < 500 ms, PERF-004) in `tests/benchmarks/`
 - [ ] T138 Security hardening pass: audit every REST route for `auth="session"` + `require_groups`, every custom `execute_kw` method for `validate(...)`, confirm no f-string SQL with user data, confirm no PII in any `log_transition`/`_log` `extra` (SEC-001–007, OWASP review in research.md)
 - [ ] T139 [P] Observability review: grep tests for a structured JSON log line (correlation_id, actor_uid, model, record_id, from, to) on every transition type across all six areas (SC-008 / Principle IX)
 - [ ] T140 [P] Accessibility audit across all HR + Fleet screens in LTR and RTL — contrast, keyboard-only Kanban move, calendar day nav, org-chart structure, status text+ARIA (SC-011 / ACC-001–004); record results in `tests/e2e/test_web_ui_a11y.py`
 - [ ] T141 [P] Run `ruff check` + `black --check` over `dodoo/addons/hr`, `dodoo/addons/fleet`, `tests/hr`, `tests/fleet`; run the suite with coverage and confirm ≥ 80% unit-line coverage overall and 100% branch coverage on the contract-state table, leave duration/balance/accrual, appraisal next-date + appraiser resolution, fleet expiry classification, every from-state guard, and every whitelist validator (Principles I, II); remove dead code / unjustified comments
 - [ ] T142 Run `specs/006-human-resources/quickstart.md` §0–§9 end to end on a fresh database; fix any drift; confirm the Definition-of-Done table (SC-001–SC-012) passes
-- [ ] T143 [P] Update `dodoo/addons/hr/__init__.py` and `dodoo/addons/fleet/__init__.py` module docstrings to summarise the delivered scope (matching the `localization/__init__.py` precedent)
+- [x] T143 [P] Update `dodoo/addons/hr/__init__.py` and `dodoo/addons/fleet/__init__.py` module docstrings to summarise the delivered scope (matching the `localization/__init__.py` precedent)
 - [ ] T144 [P] Internationalise the HR + Fleet UI (FR-010, SC-011): wrap every user-facing literal in `hr/static/hr-menu.js`, `fleet/static/fleet-menu.js`, and all `hr/static/views/*.js` + `fleet/static/views/*.js` in `t(...)` (the `web/static/i18n.js` helper), and add the corresponding keys to `dodoo/addons/localization/data/i18n/en.json` and `ar.json`; verify model field labels already translate via 005's `fields_get` path. Extend `tests/e2e/test_hr_ui.py` to assert menu + button strings render in Arabic under RTL
 
 ---
