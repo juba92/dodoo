@@ -56,6 +56,23 @@ implementable and testable. `hr` is one addon (US1–US5); `fleet` is a second a
 
 ---
 
+## Phase 2b: Record-rule domain engine extension (ADR-028) — BLOCKING
+
+**Discovered during implementation**: `dodoo.core.query.compile_domain` only supported flat,
+literal, single-column domain leaves — no user context, no relational traversal — and
+`_get_access_domain` failed *open* on error. The HR security model (FR-059…FR-064, SC-006,
+SC-007) is built on `ir.rule` domains like `["employee_id.user_id","=","$uid"]`. Full core
+extension chosen (user decision, 2026-09-06).
+
+- [x] T145 File `docs/adr/028-record-rule-domain-engine.md` (context / decision / scope boundary / consequences + threat note)
+- [x] T146 Extend `dodoo/core/query.py`: `compile_domain(..., *, context=None, resolve=None)` — `$uid` / `$company_id` / `$company_ids` / `$today` placeholder substitution (incl. inside `in`/`not in` lists), dotted-path leaves compiled to `head_fk IN (SELECT id FROM rel WHERE …)` (recursive, ≤ N hops), and `= None` / `!= None` → `IS NULL` / `IS NOT NULL`. Add `AccessEnforcer.build_context(env, uid)` in `dodoo/auth/access.py`; log (not swallow) in `get_merged_domain`
+- [x] T147 Wire into `dodoo/core/models.py::search`: build context + a registry-backed `resolve` closure, pass both when compiling the rule clause; on `DomainError` from a malformed rule apply `sa.false()` (fail closed, Principle III/IX). Unit tests `tests/unit/test_query_rule_engine.py` (14 cases: placeholders, 1- and 2-hop relations, NULL ops, resolver-missing, combinators, fail-closed) — no DB
+- [ ] T148 Integration test the engine end to end: seed an `ir.rule` on a real model with `["…user_id","=","$uid"]`, confirm a non-owner `search`/`search_read` returns 0 rows and the owner sees theirs; confirm a malformed rule denies. `tests/integration/test_rule_engine.py` (needs Postgres)
+
+**Checkpoint**: `ir.rule` domains can express ownership, company scope, and manager-chain access.
+
+---
+
 ## Phase 3: User Story 1 — Employee directory, org structure, contracts, skills (Priority: P1) 🎯 MVP
 
 **Goal**: A working company directory (departments, jobs, employees, tags, manager/coach, org

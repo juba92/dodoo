@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 import sqlalchemy as sa
 from sqlalchemy import text
 
-from dodoo.core.exceptions import DodooError
+from dodoo.core.exceptions import DodooError, DomainError
 from dodoo.core.fields import _RESERVED, Field, Many2many, One2many
 from dodoo.core.query import compile_domain
 
 if TYPE_CHECKING:
     from dodoo import Environment
+
+_log = logging.getLogger(__name__)
 
 _SYSTEM_FIELDS = ("id", "create_date", "write_date")
 
@@ -211,11 +214,20 @@ class BaseModel(metaclass=_ModelMeta):
         if uid is not None:
             rule_domain = await _get_access_domain(env, cls._name, uid, "read")
             if rule_domain:
-                rule_clause = compile_domain(
-                    table,
-                    {**cls._fields, **{f: None for f in _SYSTEM_FIELDS}},
-                    rule_domain,
-                )
+                fields_map = {**cls._fields, **{f: None for f in _SYSTEM_FIELDS}}
+                try:
+                    context = await _access_context(env, uid)
+                    rule_clause = compile_domain(
+                        table,
+                        fields_map,
+                        rule_domain,
+                        context=context,
+                        resolve=_make_resolver(env),
+                    )
+                except DomainError:
+                    # A malformed rule must fail closed, never open (ADR-028, Principle III).
+                    _log.error("Malformed ir.rule for %s; denying access", cls._name)
+                    rule_clause = sa.false()
                 where = sa.and_(where, rule_clause)
 
         query = sa.select(table.c.id).where(where)
@@ -274,3 +286,23 @@ async def _get_access_domain(
         return await AccessEnforcer.get_merged_domain(env, model_name, uid, operation)
     except Exception:
         return None
+
+
+async def _access_context(env: Environment, uid: int) -> dict[str, Any]:
+    """Placeholder context for ir.rule domain compilation (ADR-028)."""
+    from dodoo.auth.access import AccessEnforcer
+
+    return await AccessEnforcer.build_context(env, uid)
+
+
+def _make_resolver(env: Environment):
+    """Return a resolver ``(model_name) -> (table, fields_map)`` for dotted-path rule leaves."""
+
+    def resolve(model_name: str) -> tuple[Any, dict[str, Any]]:
+        model = env.registry.lookup(model_name)
+        return (
+            model._sa_table(),
+            {**model._fields, **{f: None for f in _SYSTEM_FIELDS}},
+        )
+
+    return resolve

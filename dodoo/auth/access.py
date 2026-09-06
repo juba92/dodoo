@@ -16,6 +16,22 @@ _log = logging.getLogger(__name__)
 
 class AccessEnforcer:
     @staticmethod
+    async def build_context(env: Environment, uid: int) -> dict:
+        """Values for ``$``-placeholder substitution in ir.rule domains (ADR-028).
+
+        ``company_ids`` is every ``res.company`` id — one today; a ``res.users.company_ids``
+        M2M replaces this when multi-company support lands.
+        """
+        async with env.dml_conn() as conn:
+            rows = await conn.execute(text("SELECT id FROM res_company ORDER BY id"))
+            company_ids = [r[0] for r in rows]
+        return {
+            "uid": uid,
+            "company_ids": company_ids,
+            "company_id": company_ids[0] if company_ids else None,
+        }
+
+    @staticmethod
     async def get_applicable_rules(
         env: Environment,
         model_name: str,
@@ -77,6 +93,7 @@ class AccessEnforcer:
         try:
             domains = await AccessEnforcer.get_applicable_rules(env, model_name, uid, operation)
         except Exception:
+            _log.exception("ir.rule lookup failed for %s/%s; applying no extra domain", model_name, operation)
             return None
 
         if not domains:
