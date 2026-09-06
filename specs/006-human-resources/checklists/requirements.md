@@ -38,8 +38,12 @@
   FR/SC/ACC/PERF sections stay behaviour-focused.
 - All clarifiable points resolved via informed defaults recorded in Assumptions and Out of Scope
   (payroll, attendances, portals, chatter, referral gamification, fleet-accounting all excluded).
-- `/speckit-clarify` session 2026-09-06 completed: 5 questions resolved autonomously (catalog
+- `/speckit-clarify` pass 1 (2026-09-06): 5 questions resolved autonomously — catalog
   company-scoping, no `account` dependency, generic Kanban/Calendar view types + org-chart widget,
-  from-state precondition check on transitions, no user auto-provisioning). Integrated into
+  from-state precondition check on transitions, no user auto-provisioning. Integrated into
   Clarifications, FR-005/FR-038/FR-064a/FR-067a, edge cases, and Assumptions.
+- `/speckit-clarify` pass 2 (2026-09-06): 3 further questions resolved autonomously — six
+  addon-provided application menus (FR-064b), applicant "hired" derived from a hired-stage flag on
+  Recruitment Stage (FR-033, US3 AS6, entities), and approver resolution to a `res.users` with
+  HR-Officer fallback (FR-028). No checklist regressions.
 - Ready for `/speckit-plan`.

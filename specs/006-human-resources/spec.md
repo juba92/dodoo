@@ -19,6 +19,9 @@
 - Q: Are the new presentations (card/Kanban, calendar, org chart) generic reusable view types or HR-specific screens? → A: **Kanban and Calendar are added to the web client as generic, metadata-driven view types** reusable by any model (extending the 002-web-ui view architecture); the **org chart is a bespoke HR form widget** on the employee form, mirroring Odoo's `hr_org_chart` (a widget, not a view type). The employee "card view" is the generic Kanban view type applied to `hr.employee`.
 - Q: How are concurrent/stale workflow transitions handled? → A: Every state transition performs a **server-side from-state precondition check**: if the record is no longer in the expected source state, the transition is rejected with a conflict error and logged (per FR-066), with no side effects. No new client-side version token is introduced; plain form field edits keep the 002-web-ui save semantics.
 - Q: Is a login user auto-created when an employee is added or an applicant is converted? → A: **No auto-provisioning.** The employee ↔ `res.users` link is set explicitly by an HR Officer or HR Administrator. Applicant-to-employee conversion (FR-038) carries name, contact, job, and department but never creates a user.
+- Q: How is HR navigation surfaced in the web client? → A: **Six addon-provided application menus** — Employees, Recruitment, Time Off, Appraisals, Referrals, Fleet — each with its own sub-menus, following the pattern the `account` addon already uses (`account-menu.js`). The generic metadata-driven model sidebar from 002 remains available (primarily for administrators); HR does not replace it.
+- Q: How is an applicant's "hired" outcome modelled? → A: A boolean **hired-stage flag on Recruitment Stage** (per Odoo 19.0 `hr.recruitment.stage.hired_stage`). An applicant sitting in a hired-flagged stage is "hired" and eligible for the FR-038 conversion; "refused" stays a separate flag (FR-037). There is no additional per-applicant state machine beyond `stage` + `refused`.
+- Q: Who is the approver when the employee's manager has no linked user (or there is no manager)? → A: The approving **actor is a `res.users`**: the user linked to the employee's manager employee; if there is no manager, or the manager has no linked user, approval falls to **any HR Officer in the same company scope**. A requester is never the sole approver of their own request (escalates, per the existing edge case).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -149,10 +152,10 @@ new employee exists with the carried-over data and a link back to the applicant.
    users are recorded as interviewers on the applicant.
 5. **Given** an applicant, **When** the recruiter marks it refused and selects a refusal reason,
    **Then** the applicant is flagged refused, leaves the active pipeline, and retains the reason.
-6. **Given** an applicant in a hired state, **When** the recruiter runs "create employee", **Then**
-   a new employee is created with the applicant's name, contact details, job position, and
-   department, and the applicant references that employee; running it again does not create a
-   second employee.
+6. **Given** an applicant in a stage flagged as a hired stage, **When** the recruiter runs "create
+   employee", **Then** a new employee is created with the applicant's name, contact details, job
+   position, and department, and the applicant references that employee; running it again does not
+   create a second employee.
 
 ---
 
@@ -386,9 +389,10 @@ both appear in the expiry alert list. Add a service log and confirm it is listed
   non-refused leave request for the same employee.
 - **FR-027**: The system MUST reject a leave request whose duration is zero after calendar and
   holiday exclusion.
-- **FR-028**: The system MUST route approval per the leave type's approval mode; the approver MUST
-  be the employee's manager and/or an HR officer, and a requester MUST NOT be the sole approver of
-  their own request (it escalates).
+- **FR-028**: The system MUST route approval per the leave type's approval mode. The approving actor
+  is a login user: the user linked to the employee's manager employee; if there is no manager, or
+  the manager has no linked user, approval falls to any HR Officer in the same company scope. A
+  requester MUST NOT be the sole approver of their own request (it escalates to an HR Officer).
 - **FR-029**: The system MUST compute, per employee and leave type, a balance = allocated − (taken +
   pending) and MUST reject a request exceeding the available balance when the leave type disallows
   negative balances.
@@ -401,8 +405,9 @@ both appear in the expiry alert list. Add a service log and confirm it is listed
 
 - **FR-032**: The Job Position record MUST carry a published flag; only a published job can be a
   recruitment or referral target for external/candidate-facing flows.
-- **FR-033**: The system MUST provide a Recruitment Stage record with a name and a sequence,
-  ordering the pipeline columns.
+- **FR-033**: The system MUST provide a Recruitment Stage record with a name, a sequence ordering
+  the pipeline columns, and a boolean "hired stage" flag; an applicant whose stage has the hired
+  flag set is considered hired and is eligible for conversion (FR-038).
 - **FR-034**: The system MUST provide a Recruitment Source record identifying where an applicant
   came from (including a value denoting an employee referral).
 - **FR-035**: The system MUST provide an Applicant record with the candidate name, email, phone, the
@@ -496,6 +501,15 @@ both appear in the expiry alert list. Add a service log and confirm it is listed
   (skill type / skill / skill level, employee categories, applicant refusal reasons, vehicle
   brands/models) carry no `company_id` and are visible to all companies.
 
+#### Navigation and menus (cross-cutting)
+
+- **FR-064b**: Each area MUST contribute its own top-level application menu — Employees,
+  Recruitment, Time Off, Appraisals, Referrals, and Fleet — with area sub-menus, following the
+  menu-contribution pattern already used by the accounting addon. The generic metadata-driven model
+  sidebar from feature 002 MUST remain available and MUST NOT be removed by this feature. Menu
+  entries MUST be gated by the viewer's HR / Fleet groups (an Employee-only user does not see the
+  Recruitment or Fleet configuration menus).
+
 #### Input validation, logging, workflow integrity (cross-cutting)
 
 - **FR-065**: Every HTTP/RPC entry point that creates or mutates an HR or Fleet record MUST validate
@@ -514,8 +528,9 @@ both appear in the expiry alert list. Add a service log and confirm it is listed
   effects, and the rejection MUST be logged per FR-066. Plain (non-workflow) field edits retain the
   web client's existing save semantics from feature 002.
 - **FR-068**: A fresh install MUST seed sample data: a small department tree, several job positions,
-  a set of leave types, skill types with skills and levels, a set of recruitment stages, at least
-  one appraisal template, and a set of vehicle brands with models.
+  a set of leave types, skill types with skills and levels, a set of recruitment stages (including
+  one flagged as a hired stage), at least one appraisal template, and a set of vehicle brands with
+  models.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -544,13 +559,15 @@ both appear in the expiry alert list. Add a service log and confirm it is listed
   (regular/accrual), accrual rate/cap, validity. Modelled on Odoo `hr.leave.allocation`.
 - **Leave Request**: a time-off request — employee, leave type, date/time range, computed duration,
   state (to-approve / second-approval / approved / refused). Modelled on Odoo `hr.leave`.
-- **Recruitment Stage**: a named, sequenced column in the recruitment pipeline. Modelled on Odoo
-  `hr.recruitment.stage`.
+- **Recruitment Stage**: a named, sequenced column in the recruitment pipeline, with a boolean
+  "hired stage" flag marking the outcome column(s). Modelled on Odoo `hr.recruitment.stage`
+  (`hired_stage`).
 - **Recruitment Source**: where an applicant originated (including "employee referral"). Modelled on
   Odoo `hr.recruitment.source` / `utm.source`.
 - **Applicant**: a candidate for a job — name, contact, job position, department, source, stage,
-  interviewers, refused flag + refusal reason, linked employee once hired. Modelled on Odoo
-  `hr.applicant`.
+  interviewers, refused flag + refusal reason, linked employee once hired. "Hired" is derived from
+  the applicant's stage carrying the hired-stage flag; there is no separate applicant state machine
+  beyond stage + refused. Modelled on Odoo `hr.applicant`.
 - **Applicant Refusal Reason**: a reusable reason for rejecting an applicant. Modelled on Odoo
   `hr.applicant.refuse.reason`.
 - **Appraisal Template**: ordered feedback sections + default frequency (months). Modelled on Odoo
