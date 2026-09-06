@@ -5,8 +5,6 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import text
 
-pytestmark = pytest.mark.asyncio
-
 EXPECTED_TABLES: list[str] = []
 
 

@@ -29,7 +29,13 @@ INDEXES: list[str] = []
 AREA_SEEDS: list[Any] = []
 
 
+def _load_areas() -> None:
+    """Import each area module for its ``IR_MODELS`` / ``INDEXES`` / ``HR_RULES`` side effects."""
+    from dodoo.addons.hr.data import employees  # noqa: F401
+
+
 async def seed_hr_data(env: Any) -> None:
+    _load_areas()
     await sync_ir_model(env, IR_MODELS)
     await groups.seed(env)
     await ensure_indexes(env, INDEXES)

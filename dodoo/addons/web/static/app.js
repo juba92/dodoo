@@ -5,7 +5,7 @@ import { loadCatalog, applyDirection, t, currentLang } from '/web/static/i18n.js
 // lazily-imported view module so a new build is a new module URL — otherwise the
 // browser keeps the first-imported version of a view for the whole tab session
 // (hash navigation never reloads the document) and serves stale screens.
-const CLIENT_BUILD = '2026-09-06.6';
+const CLIENT_BUILD = '2026-09-06.7';
 
 /** Lazy-import a view module, cache-busted by the current build. */
 const _view = path => import(path + '?v=' + CLIENT_BUILD);
@@ -31,6 +31,8 @@ export const App = {
       const info = await api.getInfo();
       App.state.lang = info.lang || 'en';
       App.state.isAdmin = !!info.is_admin;
+      App.state.hrGroups = info.hr_groups || [];
+      App.state.fleetManager = !!info.fleet_manager;
       await loadCatalog(App.state.lang);
       applyDirection(info.direction);
     } catch { /* keep current catalog */ }
@@ -47,6 +49,7 @@ export const App = {
     const appNameEl = header.querySelector('.nav-app-name');
     if (appNameEl) {
       appNameEl.textContent = hash.startsWith('#/accounting') ? t('Accounting')
+        : hash.startsWith('#/hr') ? t('Human Resources')
         : hash === '#/settings' ? t('Settings')
         : t('Dodoo ERP');
     }
@@ -105,6 +108,13 @@ function _labelFromHash(hash) {
   if ((m = hash.match(/^#\/accounting\/model\/([^/]+)$/)))      return m[1];
   if ((m = hash.match(/^#\/accounting\/([^/]+)$/)))             return _ACC_LABELS[m[1]] ? t(_ACC_LABELS[m[1]]) : m[1].replace(/-/g, ' ');
   if ((m = hash.match(/^#\/module\/(.+)$/)))                    return m[1];
+  if (hash === '#/hr/employees')                                return t('Employees');
+  if (hash === '#/hr/contracts')                                return t('Contracts');
+  if ((m = hash.match(/^#\/hr\/employee\/new$/)))               return t('New Employee');
+  if ((m = hash.match(/^#\/hr\/employee\/(\d+)$/)))             return t('Employee') + ' #' + m[1];
+  if ((m = hash.match(/^#\/hr\/model\/([^/]+)\/new$/)))         return t('New {name}', { name: m[1] });
+  if ((m = hash.match(/^#\/hr\/model\/([^/]+)\/(\d+)$/)))       return `${m[1]} #${m[2]}`;
+  if ((m = hash.match(/^#\/hr\/model\/([^/]+)$/)))              return m[1];
   if ((m = hash.match(/^#\/model\/([^/]+)\/new$/)))             return t('New {name}', { name: m[1] });
   if ((m = hash.match(/^#\/model\/([^/]+)\/(\d+)$/)))           return `#${m[2]}`;
   if ((m = hash.match(/^#\/model\/([^/]+)$/)))                  return m[1];
@@ -247,6 +257,7 @@ function _renderSidebar(hash) {
   const appNameEl = document.querySelector('.nav-app-name');
   if (appNameEl) {
     appNameEl.textContent = hash.startsWith('#/accounting') ? t('Accounting')
+      : hash.startsWith('#/hr') ? t('Human Resources')
       : hash === '#/settings' ? t('Settings')
       : t('Dodoo ERP');
   }
@@ -260,6 +271,11 @@ function _renderSidebar(hash) {
 
   if (hash.startsWith('#/accounting')) {
     _renderAccountingMenu(sidebar, hash).catch(() => {});
+    return;
+  }
+
+  if (hash.startsWith('#/hr')) {
+    _renderHrMenu(sidebar, hash).catch(() => {});
     return;
   }
 
@@ -319,6 +335,42 @@ async function _renderAccountingMenu(sidebar, currentHash) {
   });
 }
 
+function _hrHas(requires) {
+  if (!requires) return true;
+  const g = App.state.hrGroups || [];
+  if (requires === 'officer') return g.includes('HR Officer') || g.includes('HR Administrator');
+  if (requires === 'administrator') return g.includes('HR Administrator');
+  if (requires === 'fleet_manager') return !!App.state.fleetManager;
+  return true;
+}
+
+async function _renderHrMenu(sidebar, currentHash) {
+  const { HR_MENU } = await _view('/hr/static/hr-menu.js');
+  if (!document.body.contains(sidebar)) return;
+  sidebar.innerHTML = '';
+  HR_MENU.forEach(({ section, requires, items }) => {
+    if (!_hrHas(requires)) return;
+    const visible = items.filter(it => _hrHas(it.requires));
+    if (!visible.length) return;
+    const title = document.createElement('div');
+    title.className = 'sidebar-section-title';
+    title.textContent = t(section);
+    sidebar.appendChild(title);
+    const ul = document.createElement('ul');
+    ul.className = 'sidebar-list';
+    visible.forEach(({ label, hash }) => {
+      const li = document.createElement('li');
+      const btn = document.createElement('button');
+      btn.textContent = t(label);
+      if (currentHash === hash || currentHash.startsWith(hash + '/')) btn.className = 'active';
+      btn.onclick = () => { App.breadcrumb = []; App.navigate(hash); };
+      li.appendChild(btn);
+      ul.appendChild(li);
+    });
+    sidebar.appendChild(ul);
+  });
+}
+
 async function _handleLogout() {
   try { await api.logout(); } catch { /* ignore errors on logout */ }
   App.state.token = null;
@@ -345,6 +397,13 @@ const _ROUTES = [
   [/^#\/accounting\/model\/([^/]+)\/(\d+)$/, () => _view('/web/static/views/form.js')],
   [/^#\/accounting\/model\/([^/]+)$/, () => _view('/web/static/views/list.js')],
   [/^#\/accounting\/([^/]+)$/, () => _view('/account/static/views/invoice-list.js')],
+  // Human Resources routes (before the generic model routes)
+  [/^#\/hr\/employees$/, () => _view('/hr/static/views/employee-kanban.js')],
+  [/^#\/hr\/employee\/(new|\d+)$/, () => _view('/hr/static/views/employee-form.js')],
+  [/^#\/hr\/contracts$/, () => _view('/hr/static/views/contract-list.js')],
+  [/^#\/hr\/model\/([^/]+)\/new$/, () => _view('/web/static/views/form.js')],
+  [/^#\/hr\/model\/([^/]+)\/(\d+)$/, () => _view('/web/static/views/form.js')],
+  [/^#\/hr\/model\/([^/]+)$/, () => _view('/web/static/views/list.js')],
   // Generic model routes
   [/^#\/model\/([^/]+)\/new$/, () => _view('/web/static/views/form.js')],
   [/^#\/model\/([^/]+)\/(\d+)$/, () => _view('/web/static/views/form.js')],
@@ -375,6 +434,10 @@ function _paramsFromHash(hash) {
   if ((m = base.match(/^#\/accounting\/model\/([^/]+)$/)))             return { model: m[1] };
   if ((m = base.match(/^#\/accounting\/([^/]+)$/)))                    return { route: m[1] };
   if ((m = base.match(/^#\/module\/(.+)$/)))                           return { mode: 'module', name: m[1] };
+  if ((m = base.match(/^#\/hr\/employee\/(new|\d+)$/)))                return { id: m[1] === 'new' ? 'new' : parseInt(m[1], 10) };
+  if ((m = base.match(/^#\/hr\/model\/([^/]+)\/new$/)))               return { model: m[1], id: 'new' };
+  if ((m = base.match(/^#\/hr\/model\/([^/]+)\/(\d+)$/)))             return { model: m[1], id: parseInt(m[2], 10) };
+  if ((m = base.match(/^#\/hr\/model\/([^/]+)$/)))                    return { model: m[1] };
   if ((m = base.match(/^#\/model\/([^/]+)\/new$/)))                    return { model: m[1], id: 'new' };
   if ((m = base.match(/^#\/model\/([^/]+)\/(\d+)$/)))                  return { model: m[1], id: parseInt(m[2], 10) };
   if ((m = base.match(/^#\/model\/([^/]+)$/)))                         return { model: m[1] };
@@ -433,6 +496,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     App.state.isAdmin = !!info.is_admin;
     App.state.modules = info.modules ?? [];
     App.state.models = info.models ?? [];
+    App.state.hrGroups = info.hr_groups ?? [];
+    App.state.fleetManager = !!info.fleet_manager;
     await loadCatalog(App.state.lang);
     applyDirection(info.direction);
   } catch {

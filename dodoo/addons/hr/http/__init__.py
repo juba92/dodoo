@@ -38,5 +38,4 @@ def json_err(code: str, status_code: int = 400) -> JSONResponse:
 
 
 # Route modules import `json_ok` / `json_err` from here and register with `@route`.
-# They are imported below as each user story adds them:
-#   from dodoo.addons.hr.http import employees, timeoff, recruitment, appraisal, referral  # noqa
+from dodoo.addons.hr.http import employees  # noqa: E402,F401

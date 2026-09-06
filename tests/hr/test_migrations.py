@@ -9,8 +9,6 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import text
 
-pytestmark = pytest.mark.asyncio
-
 # Filled in by later phases: table names that must exist after `install("hr")`.
 EXPECTED_TABLES: list[str] = []
 
