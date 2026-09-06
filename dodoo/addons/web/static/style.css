@@ -1,6 +1,10 @@
 /* ── Reset & variables ─────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* `display:` in author rules (e.g. .field-grid { display:grid }) beats the UA
+   `[hidden]{display:none}`, so toggling `el.hidden` alone wouldn't hide tab panels. */
+[hidden] { display: none !important; }
+
 :root {
   --brand:        #71639e;   /* Odoo community purple */
   --brand-hover:  #5d5187;
