@@ -10,6 +10,7 @@ const _MODULE_ICONS = {
   purchase: '🛒',
   account:  '📊',
   hr:       '👥',
+  fleet:    '🚗',
   project:  '📋',
   stock:    '📦',
   crm:      '🤝',
@@ -22,9 +23,17 @@ const _MODULE_DISPLAY_NAMES = {
   sale:     'Sales',
   purchase: 'Purchase',
   hr:       'Employees',
+  fleet:    'Fleet',
   project:  'Project',
   stock:    'Inventory',
   crm:      'CRM',
+};
+
+// App tiles that open their own dedicated screen instead of the generic model browser.
+const _MODULE_HOME_ROUTE = {
+  account: '#/accounting/invoices',
+  hr:      '#/hr/employees',
+  fleet:   '#/fleet/vehicles',
 };
 
 // Odoo-style per-module colors (mirrors Odoo's app tile palette)
@@ -36,6 +45,7 @@ const _MODULE_COLORS = {
   purchase: '#F07B40',
   account:  '#7C5295',
   hr:       '#44B3A2',
+  fleet:    '#017E84',
   project:  '#0083A9',
   stock:    '#B64DA0',
   crm:      '#D15E49',
@@ -162,9 +172,9 @@ function _refreshSidebar(sidebar, models) {
 }
 
 async function _renderModuleDetail(container, moduleName) {
-  // Accounting has its own app — redirect directly
-  if (moduleName === 'account') {
-    App.navigate('#/accounting/invoices');
+  // Modules with a dedicated app screen redirect straight to it.
+  if (_MODULE_HOME_ROUTE[moduleName]) {
+    App.navigate(_MODULE_HOME_ROUTE[moduleName]);
     return;
   }
 
