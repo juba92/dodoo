@@ -5,15 +5,15 @@ import pathlib
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from starlette.staticfiles import StaticFiles
 
 from dodoo.http.routing import MountRegistry, route
+from dodoo.http.static import NoCacheStaticFiles
 
 _STATIC_DIR = pathlib.Path(__file__).parent.parent / "static"
 
 MountRegistry.get().add_mount(
     "/account/static",
-    StaticFiles(directory=str(_STATIC_DIR)),
+    NoCacheStaticFiles(directory=str(_STATIC_DIR)),
     name="account_static",
 )
 

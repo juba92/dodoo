@@ -1,5 +1,6 @@
 import * as api from '/web/static/api.js';
 import { App } from '/web/static/app.js';
+import { t, formatNumber } from '/web/static/i18n.js';
 
 const ROUTE_CONFIG = {
   'invoices':            { model: 'account.move',    domain: [['move_type', '=', 'out_invoice']], label: 'Customer Invoices',      newType: 'out_invoice' },
@@ -15,18 +16,18 @@ const ROUTE_CONFIG = {
 
 function _fmt(amount) {
   if (amount === null || amount === undefined) return '—';
-  return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(parseFloat(amount));
+  return formatNumber(parseFloat(amount), 2);
 }
 
 function _date(d) { return d ? d.substring(0, 10) : '—'; }
 
 function _badge(state, paymentState) {
-  if (state === 'draft')  return { label: 'Draft',      cls: 'badge-draft' };
-  if (state === 'cancel') return { label: 'Cancelled',  cls: 'badge-cancel' };
-  if (paymentState === 'paid')     return { label: 'Paid',     cls: 'badge-paid' };
-  if (paymentState === 'reversed') return { label: 'Reversed', cls: 'badge-cancel' };
-  if (paymentState === 'partial')  return { label: 'Partial',  cls: 'badge-partial' };
-  return { label: 'Confirmed', cls: 'badge-posted' };
+  if (state === 'draft')  return { label: t('Draft'),      cls: 'badge-draft' };
+  if (state === 'cancel') return { label: t('Cancelled'),  cls: 'badge-cancel' };
+  if (paymentState === 'paid')     return { label: t('Paid'),     cls: 'badge-paid' };
+  if (paymentState === 'reversed') return { label: t('Reversed'), cls: 'badge-cancel' };
+  if (paymentState === 'partial')  return { label: t('Partial'),  cls: 'badge-partial' };
+  return { label: t('Confirmed'), cls: 'badge-posted' };
 }
 
 function _columns(model) {
@@ -49,7 +50,7 @@ function _columns(model) {
     { field: 'code',         label: 'Code',          render: v => v ?? '—' },
     { field: 'name',         label: 'Name',          render: v => v ?? '—' },
     { field: 'account_type', label: 'Type',          render: v => v ?? '—' },
-    { field: 'reconcile',    label: 'Reconcilable',  render: v => v ? 'Yes' : 'No' },
+    { field: 'reconcile',    label: 'Reconcilable',  render: v => v ? t('Yes') : t('No') },
   ];
   if (model === 'account.journal') return [
     { field: 'name', label: 'Name', render: v => v ?? '—' },
@@ -68,7 +69,8 @@ export async function render(container, params) {
   const config = ROUTE_CONFIG[params.route];
   if (!config) { container.textContent = `Unknown view: ${params.route}`; return; }
 
-  const { model, domain, label, newType } = config;
+  const { model, domain, newType } = config;
+  const label = t(config.label);
   const cols = _columns(model);
   let searchTerm = '';
   let offset = 0;
@@ -81,7 +83,7 @@ export async function render(container, params) {
     if (newType) {
       const newBtn = document.createElement('button');
       newBtn.className = 'btn btn-primary';
-      newBtn.textContent = 'New';
+      newBtn.textContent = t('New');
       newBtn.onclick = () => App.navigate(`#/accounting/move/new?type=${newType}`);
       cp.appendChild(newBtn);
     }
@@ -91,7 +93,7 @@ export async function render(container, params) {
     const search = document.createElement('input');
     search.type = 'search';
     search.className = 'search-input';
-    search.placeholder = `Search ${label}…`;
+    search.placeholder = t('Search {name}…', { name: label });
     search.addEventListener('input', _debounce(() => { searchTerm = search.value.trim(); offset = 0; fetchAndRender(); }, 400));
     cp.appendChild(search);
   }
@@ -109,7 +111,7 @@ export async function render(container, params) {
   const headRow = document.createElement('tr');
   cols.forEach(col => {
     const th = document.createElement('th');
-    th.textContent = col.label;
+    th.textContent = t(col.label);
     if (col.right) th.className = 'text-right';
     headRow.appendChild(th);
   });
@@ -132,7 +134,7 @@ export async function render(container, params) {
     const loadTd = document.createElement('td');
     loadTd.colSpan = cols.length;
     loadTd.className = 'loading';
-    loadTd.textContent = 'Loading…';
+    loadTd.textContent = t('Loading…');
     loadRow.appendChild(loadTd);
     tbody.appendChild(loadRow);
 
@@ -157,7 +159,7 @@ export async function render(container, params) {
         const td = document.createElement('td');
         td.colSpan = cols.length;
         td.className = 'empty-state';
-        td.textContent = `No ${label.toLowerCase()} found.`;
+        td.textContent = t('No records found.');
         emptyRow.appendChild(td);
         tbody.appendChild(emptyRow);
       } else {
@@ -193,14 +195,14 @@ export async function render(container, params) {
       if (offset > 0) {
         const prev = document.createElement('button');
         prev.className = 'btn btn-secondary';
-        prev.textContent = '← Prev';
+        prev.textContent = '← ' + t('Prev');
         prev.onclick = () => { offset = Math.max(0, offset - LIMIT); fetchAndRender(); };
         pagination.appendChild(prev);
       }
       if (records.length === LIMIT) {
         const next = document.createElement('button');
         next.className = 'btn btn-secondary';
-        next.textContent = 'Next →';
+        next.textContent = t('Next') + ' →';
         next.onclick = () => { offset += LIMIT; fetchAndRender(); };
         pagination.appendChild(next);
       }
@@ -210,7 +212,7 @@ export async function render(container, params) {
       const td = document.createElement('td');
       td.colSpan = cols.length;
       td.className = 'alert-error';
-      td.textContent = 'Error: ' + err.message;
+      td.textContent = t('Error') + ': ' + err.message;
       errRow.appendChild(td);
       tbody.appendChild(errRow);
     }

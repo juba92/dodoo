@@ -121,3 +121,28 @@ def test_reserved_field_name_write_date():
         class BadModel3(BaseModel):
             _name = "test.bad.write_date"
             write_date = Char()  # type: ignore[assignment]
+
+
+def test_humanize_field_label_replaces_underscores_and_titlecases():
+    from dodoo.core.models import _humanize
+
+    assert _humanize("invoice_date_due") == "Invoice Date Due"
+    assert _humanize("narration") == "Narration"
+
+
+def test_humanize_field_label_strips_relational_suffixes():
+    from dodoo.core.models import _humanize
+
+    assert _humanize("partner_id") == "Partner"
+    assert _humanize("tax_ids") == "Tax"
+
+
+async def test_fields_get_uses_humanized_label_when_no_string(env):
+    """A field with no explicit string= gets a humanized, translatable label (not the raw name)."""
+
+    class HumanizeProbe(BaseModel):
+        _name = "test.humanize.probe"
+        invoice_date_due = Date()
+
+    info = await HumanizeProbe.fields_get(env, attributes=["string"])
+    assert info["invoice_date_due"]["string"] == "Invoice Date Due"

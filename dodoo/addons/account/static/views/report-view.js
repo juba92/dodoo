@@ -1,3 +1,5 @@
+import { t, formatNumber } from '/web/static/i18n.js';
+
 const REPORT_CONFIG = {
   'trial-balance': {
     label: 'Trial Balance',
@@ -15,7 +17,7 @@ const REPORT_CONFIG = {
 
 function _fmt(v) {
   if (v === null || v === undefined) return '—';
-  return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(parseFloat(v));
+  return formatNumber(parseFloat(v), 2);
 }
 
 export async function render(container, params) {
@@ -26,18 +28,20 @@ export async function render(container, params) {
 
   if (!config) { container.textContent = `Unknown report: ${params.report}`; return; }
 
+  const label = t(config.label);
+
   if (!config.endpoint) {
     const msg = document.createElement('div');
     msg.className = 'empty-state';
     msg.style.padding = '60px';
-    msg.textContent = `${config.label} — coming soon.`;
+    msg.textContent = t('{label} — coming soon.', { label });
     container.appendChild(msg);
     return;
   }
 
   const loading = document.createElement('div');
   loading.className = 'loading';
-  loading.textContent = `Loading ${config.label}…`;
+  loading.textContent = t('Loading {label}…', { label });
   container.appendChild(loading);
 
   try {
@@ -63,10 +67,10 @@ export async function render(container, params) {
       summary.className = 'report-summary';
       const balanced = result.balanced;
       summary.innerHTML = `
-        <span>Total Debit: <strong>${_fmt(result.total_debit)}</strong></span>
-        <span>Total Credit: <strong>${_fmt(result.total_credit)}</strong></span>
+        <span>${t('Total Debit')}: <strong>${_fmt(result.total_debit)}</strong></span>
+        <span>${t('Total Credit')}: <strong>${_fmt(result.total_credit)}</strong></span>
         <span class="badge ${balanced ? 'badge-paid' : 'badge-cancel'}">
-          ${balanced ? 'Balanced ✓' : 'Not Balanced ✗'}
+          ${balanced ? t('Balanced') + ' ✓' : t('Not Balanced') + ' ✗'}
         </span>
       `;
       container.appendChild(summary);
@@ -81,7 +85,7 @@ export async function render(container, params) {
     const headRow = document.createElement('tr');
     config.columns.forEach(([txt, cls]) => {
       const th = document.createElement('th');
-      th.textContent = txt;
+      th.textContent = txt ? t(txt) : txt;
       if (cls) th.className = cls;
       headRow.appendChild(th);
     });
@@ -106,14 +110,14 @@ export async function render(container, params) {
     if (rows.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty-state';
-      empty.textContent = 'No data for this period.';
+      empty.textContent = t('No data for this period.');
       container.appendChild(empty);
     }
   } catch (err) {
     container.innerHTML = '';
     const el = document.createElement('div');
     el.className = 'alert-error';
-    el.textContent = 'Failed to load report: ' + err.message;
+    el.textContent = t('Failed to load report') + ': ' + err.message;
     container.appendChild(el);
   }
 }

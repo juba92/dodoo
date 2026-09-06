@@ -1,5 +1,6 @@
 import * as api from '/web/static/api.js';
 import { App } from '/web/static/app.js';
+import { t, formatNumber } from '/web/static/i18n.js';
 
 const TYPE_LABEL = {
   out_invoice: 'Customer Invoice',  out_refund: 'Customer Credit Note',
@@ -7,6 +8,11 @@ const TYPE_LABEL = {
   entry:        'Journal Entry',    out_receipt: 'Customer Receipt',
   in_receipt:  'Vendor Receipt',
 };
+
+/** Translated move-type label ('' → generic "Invoice"). */
+function _typeLabel(moveType) {
+  return TYPE_LABEL[moveType] ? t(TYPE_LABEL[moveType]) : t('Invoice');
+}
 
 const _TYPE_LIST_HASH = {
   out_invoice: '#/accounting/invoices',
@@ -19,7 +25,7 @@ function _listHashForType(moveType) { return _TYPE_LIST_HASH[moveType] ?? '#/acc
 
 function _fmt(v) {
   if (v === null || v === undefined) return '—';
-  return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(parseFloat(v));
+  return formatNumber(parseFloat(v), 2);
 }
 function _date(d) { return d ? d.substring(0, 10) : '—'; }
 function _tok() { return sessionStorage.getItem('session_token') ?? ''; }
@@ -56,11 +62,11 @@ export async function render(container, params) {
         'currency_id', 'company_id', 'reversed_entry_id'],
     });
     move = rows[0];
-    if (!move) { container.textContent = 'Record not found.'; return; }
+    if (!move) { container.textContent = t('Record not found.'); return; }
   } catch (err) {
     const el = document.createElement('div');
     el.className = 'alert-error';
-    el.textContent = 'Failed to load: ' + err.message;
+    el.textContent = t('Failed to load') + ': ' + err.message;
     container.appendChild(el);
     return;
   }
@@ -96,22 +102,22 @@ function _buildCP(cp, move, id) {
   if (state === 'draft') {
     const editBtn = document.createElement('button');
     editBtn.className = 'btn btn-primary';
-    editBtn.textContent = 'Edit';
+    editBtn.textContent = t('Edit');
     editBtn.onclick = () => App.navigate(`#/accounting/move/new?type=${move_type}&edit=${id}`);
     cp.appendChild(editBtn);
 
     const confirmBtn = document.createElement('button');
     confirmBtn.className = 'btn btn-secondary';
-    confirmBtn.textContent = 'Confirm';
+    confirmBtn.textContent = t('Confirm');
     confirmBtn.onclick = async () => {
-      confirmBtn.disabled = true; confirmBtn.textContent = 'Confirming…';
+      confirmBtn.disabled = true; confirmBtn.textContent = t('Confirming…');
       try {
         const data = await _post(`/account/move/${id}/post`);
-        if (!data.result) { alert(data.error || 'Confirm failed'); confirmBtn.disabled = false; confirmBtn.textContent = 'Confirm'; return; }
+        if (!data.result) { alert(data.error || t('Confirm failed')); confirmBtn.disabled = false; confirmBtn.textContent = t('Confirm'); return; }
         App.navigate(`#/accounting/move/${id}`);
       } catch (err) {
-        alert('Error: ' + err.message);
-        confirmBtn.disabled = false; confirmBtn.textContent = 'Confirm';
+        alert(t('Error') + ': ' + err.message);
+        confirmBtn.disabled = false; confirmBtn.textContent = t('Confirm');
       }
     };
     cp.appendChild(confirmBtn);
@@ -120,7 +126,7 @@ function _buildCP(cp, move, id) {
   if (state === 'posted' && ['not_paid', 'partial'].includes(payment_state) && move_type !== 'entry') {
     const btn = document.createElement('button');
     btn.className = 'btn btn-primary';
-    btn.textContent = 'Register Payment';
+    btn.textContent = t('Register Payment');
     btn.onclick = () => _paymentDialog(move, id);
     cp.appendChild(btn);
   }
@@ -128,9 +134,9 @@ function _buildCP(cp, move, id) {
   if (state === 'posted') {
     const btn = document.createElement('button');
     btn.className = 'btn btn-secondary';
-    btn.textContent = move_type === 'entry' ? 'Reverse Entry' : 'Add Credit Note';
+    btn.textContent = move_type === 'entry' ? t('Reverse Entry') : t('Add Credit Note');
     btn.onclick = async () => {
-      if (!confirm('Create a reversal/credit note?')) return;
+      if (!confirm(t('Create a reversal/credit note?'))) return;
       btn.disabled = true;
       try {
         const res = await fetch(`/account/move/${id}/reverse`, {
@@ -140,9 +146,9 @@ function _buildCP(cp, move, id) {
         });
         const data = await res.json();
         if (data.result?.length) App.navigate(`#/accounting/move/${data.result[0]}`);
-        else alert(data.error ?? 'Failed to create credit note');
+        else alert(data.error ?? t('Failed to create credit note'));
       } catch (err) {
-        alert('Error: ' + err.message);
+        alert(t('Error') + ': ' + err.message);
       } finally {
         btn.disabled = false;
       }
@@ -156,16 +162,16 @@ function _buildCP(cp, move, id) {
     cp.appendChild(spacer);
     const btn = document.createElement('button');
     btn.className = 'btn btn-secondary';
-    btn.textContent = 'Reset to Draft';
+    btn.textContent = t('Reset to Draft');
     btn.onclick = async () => {
-      if (!confirm('Reset to draft? This unlocks the entry.')) return;
+      if (!confirm(t('Reset to draft? This unlocks the entry.'))) return;
       btn.disabled = true;
       try {
         const data = await _post(`/account/move/${id}/reset_to_draft`);
-        if (!data.result) { alert(data.error || 'Reset to draft failed'); btn.disabled = false; return; }
+        if (!data.result) { alert(data.error || t('Reset to draft failed')); btn.disabled = false; return; }
         App.navigate(`#/accounting/move/${id}`);
       } catch (err) {
-        alert('Error: ' + err.message);
+        alert(t('Error') + ': ' + err.message);
         btn.disabled = false;
       }
     };
@@ -178,9 +184,9 @@ function _statusBar(move) {
   bar.className = 'status-bar';
   const { state, payment_state } = move;
   const steps = [
-    { label: 'Draft',     active: state === 'draft' },
-    { label: 'Confirmed', active: state === 'posted' },
-    { label: 'Paid',      active: state === 'posted' && ['in_payment', 'paid'].includes(payment_state) },
+    { label: t('Draft'),     active: state === 'draft' },
+    { label: t('Confirmed'), active: state === 'posted' },
+    { label: t('Paid'),      active: state === 'posted' && ['in_payment', 'paid'].includes(payment_state) },
   ];
   steps.forEach((step, i) => {
     if (i > 0) {
@@ -207,7 +213,7 @@ function _headerCard(move) {
 
   const titleEl = document.createElement('h2');
   titleEl.className = 'invoice-number';
-  titleEl.textContent = (move.name && move.name !== '/') ? move.name : (TYPE_LABEL[move.move_type] ?? move.move_type);
+  titleEl.textContent = (move.name && move.name !== '/') ? move.name : _typeLabel(move.move_type);
   top.appendChild(titleEl);
 
   if (move.payment_state && move.state === 'posted') {
@@ -224,14 +230,14 @@ function _headerCard(move) {
   grid.className = 'header-grid';
 
   const fields = [
-    ['Customer / Vendor',  Array.isArray(move.partner_id) ? move.partner_id[1] : '—'],
-    ['Journal',            Array.isArray(move.journal_id) ? move.journal_id[1] : '—'],
-    ['Invoice Date',       _date(move.invoice_date)],
-    ['Accounting Date',    _date(move.date)],
-    ['Due Date',           _date(move.invoice_date_due)],
-    ['Payment Terms',      Array.isArray(move.invoice_payment_term_id) ? move.invoice_payment_term_id[1] : '—'],
-    ['Reference',          move.ref || '—'],
-    ['Currency',           Array.isArray(move.currency_id) ? move.currency_id[1] : '—'],
+    [t('Customer / Vendor'),  Array.isArray(move.partner_id) ? move.partner_id[1] : '—'],
+    [t('Journal'),            Array.isArray(move.journal_id) ? move.journal_id[1] : '—'],
+    [t('Invoice Date'),       _date(move.invoice_date)],
+    [t('Accounting Date'),    _date(move.date)],
+    [t('Due Date'),           _date(move.invoice_date_due)],
+    [t('Payment Terms'),      Array.isArray(move.invoice_payment_term_id) ? move.invoice_payment_term_id[1] : '—'],
+    [t('Reference'),          move.ref || '—'],
+    [t('Currency'),           Array.isArray(move.currency_id) ? move.currency_id[1] : '—'],
   ];
 
   fields.forEach(([label, value]) => {
@@ -258,7 +264,7 @@ function _linesCard(lines) {
 
   const h = document.createElement('h3');
   h.className = 'section-title';
-  h.textContent = 'Invoice Lines';
+  h.textContent = t('Invoice Lines');
   card.appendChild(h);
 
   const table = document.createElement('table');
@@ -266,7 +272,7 @@ function _linesCard(lines) {
 
   const thead = document.createElement('thead');
   const hr = document.createElement('tr');
-  [['Description', ''], ['Account', ''], ['Debit', 'text-right'], ['Credit', 'text-right'], ['Balance', 'text-right']].forEach(([txt, cls]) => {
+  [[t('Description'), ''], [t('Account'), ''], [t('Debit'), 'text-right'], [t('Credit'), 'text-right'], [t('Balance'), 'text-right']].forEach(([txt, cls]) => {
     const th = document.createElement('th');
     th.textContent = txt;
     if (cls) th.className = cls;
@@ -284,7 +290,7 @@ function _linesCard(lines) {
     td.colSpan = 5;
     td.className = 'empty-state';
     td.style.padding = '20px';
-    td.textContent = 'No invoice lines.';
+    td.textContent = t('No invoice lines.');
     tr.appendChild(td);
     tbody.appendChild(tr);
   } else {
@@ -320,10 +326,10 @@ function _totalsCard(move) {
   card.className = 'form-card totals-card';
 
   const rows = [
-    { label: 'Untaxed Amount', value: _fmt(move.amount_untaxed) },
-    { label: 'Taxes',          value: _fmt(move.amount_tax) },
-    { label: 'Total',          value: _fmt(move.amount_total), bold: true },
-    { label: 'Amount Due',     value: _fmt(move.amount_residual), bold: true,
+    { label: t('Untaxed Amount'), value: _fmt(move.amount_untaxed) },
+    { label: t('Taxes'),          value: _fmt(move.amount_tax) },
+    { label: t('Total'),          value: _fmt(move.amount_total), bold: true },
+    { label: t('Amount Due'),     value: _fmt(move.amount_residual), bold: true,
       highlight: parseFloat(move.amount_residual || 0) > 0 },
   ];
 
@@ -345,12 +351,12 @@ function _totalsCard(move) {
 }
 
 function _badge(state, paymentState) {
-  if (state === 'draft')  return { label: 'Draft',      cls: 'badge-draft' };
-  if (state === 'cancel') return { label: 'Cancelled',  cls: 'badge-cancel' };
-  if (paymentState === 'paid')     return { label: 'Paid',     cls: 'badge-paid' };
-  if (paymentState === 'reversed') return { label: 'Reversed', cls: 'badge-cancel' };
-  if (paymentState === 'partial')  return { label: 'Partial',  cls: 'badge-partial' };
-  return { label: 'Confirmed', cls: 'badge-posted' };
+  if (state === 'draft')  return { label: t('Draft'),      cls: 'badge-draft' };
+  if (state === 'cancel') return { label: t('Cancelled'),  cls: 'badge-cancel' };
+  if (paymentState === 'paid')     return { label: t('Paid'),     cls: 'badge-paid' };
+  if (paymentState === 'reversed') return { label: t('Reversed'), cls: 'badge-cancel' };
+  if (paymentState === 'partial')  return { label: t('Partial'),  cls: 'badge-partial' };
+  return { label: t('Confirmed'), cls: 'badge-posted' };
 }
 
 async function _paymentDialog(move, moveId) {
@@ -366,18 +372,18 @@ async function _paymentDialog(move, moveId) {
 
   const title = document.createElement('h3');
   title.className = 'modal-title';
-  title.textContent = 'Register Payment';
+  title.textContent = t('Register Payment');
   dialog.appendChild(title);
 
-  const amountF = _field('Amount', 'number', String(parseFloat(move.amount_residual || 0).toFixed(2)));
-  const dateF   = _field('Payment Date', 'date', new Date().toISOString().substring(0, 10));
+  const amountF = _field(t('Amount'), 'number', String(parseFloat(move.amount_residual || 0).toFixed(2)));
+  const dateF   = _field(t('Payment Date'), 'date', new Date().toISOString().substring(0, 10));
   dialog.appendChild(amountF.wrap);
   dialog.appendChild(dateF.wrap);
 
   const jWrap = document.createElement('div');
   jWrap.className = 'form-field';
   const jLabel = document.createElement('label');
-  jLabel.textContent = 'Journal';
+  jLabel.textContent = t('Journal');
   const jSelect = document.createElement('select');
   jSelect.style.cssText = 'width:100%;padding:6px 10px;border:1px solid rgba(0,0,0,.15);border-radius:4px;font-size:.875rem';
   jWrap.appendChild(jLabel);
@@ -393,11 +399,11 @@ async function _paymentDialog(move, moveId) {
   btnRow.className = 'modal-btn-row';
   const cancelBtn = document.createElement('button');
   cancelBtn.className = 'btn btn-secondary';
-  cancelBtn.textContent = 'Cancel';
+  cancelBtn.textContent = t('Cancel');
   cancelBtn.onclick = () => overlay.remove();
   const payBtn = document.createElement('button');
   payBtn.className = 'btn btn-primary';
-  payBtn.textContent = 'Pay';
+  payBtn.textContent = t('Pay');
   btnRow.appendChild(cancelBtn);
   btnRow.appendChild(payBtn);
   dialog.appendChild(btnRow);
@@ -420,13 +426,13 @@ async function _paymentDialog(move, moveId) {
     const journalId = parseInt(jSelect.value, 10);
 
     if (!amount || !date || !journalId) {
-      errEl.textContent = 'Please fill all fields.';
+      errEl.textContent = t('Please fill all fields.');
       errEl.style.display = 'block';
       return;
     }
 
     payBtn.disabled = true;
-    payBtn.textContent = 'Processing…';
+    payBtn.textContent = t('Processing…');
     errEl.style.display = 'none';
 
     try {
@@ -459,10 +465,10 @@ async function _paymentDialog(move, moveId) {
       overlay.remove();
       App.navigate(`#/accounting/move/${moveId}`);
     } catch (err) {
-      errEl.textContent = 'Payment failed: ' + err.message;
+      errEl.textContent = t('Payment failed') + ': ' + err.message;
       errEl.style.display = 'block';
       payBtn.disabled = false;
-      payBtn.textContent = 'Pay';
+      payBtn.textContent = t('Pay');
     }
   };
 }
@@ -529,7 +535,7 @@ function _inlineSelect(options) {
 }
 
 async function _renderNewInvoice(container, cp, moveType, editId = null) {
-  const typeLabel = TYPE_LABEL[moveType] ?? 'Invoice';
+  const typeLabel = _typeLabel(moveType);
   const isEntry   = moveType === 'entry';
 
   // ── Title + loading (immediate) ──
@@ -537,12 +543,12 @@ async function _renderNewInvoice(container, cp, moveType, editId = null) {
   const titleEl = document.createElement('h2');
   titleEl.className = 'invoice-number';
   titleEl.style.padding = '12px 24px 0';
-  titleEl.textContent = editId ? `Edit ${typeLabel}` : `New ${typeLabel}`;
+  titleEl.textContent = editId ? t('Edit {type}', { type: typeLabel }) : t('New {type}', { type: typeLabel });
   container.appendChild(titleEl);
 
   const loadingEl = document.createElement('div');
   loadingEl.className = 'loading';
-  loadingEl.textContent = 'Loading form…';
+  loadingEl.textContent = t('Loading form…');
   container.appendChild(loadingEl);
 
   // ── Control panel (immediate, before any await) ──
@@ -551,13 +557,13 @@ async function _renderNewInvoice(container, cp, moveType, editId = null) {
     cp.innerHTML = '';
     const saveBtn = document.createElement('button');
     saveBtn.className = 'btn btn-primary';
-    saveBtn.textContent = editId ? 'Save Changes' : 'Save as Draft';
+    saveBtn.textContent = editId ? t('Save Changes') : t('Save as Draft');
     saveBtn.disabled = true;
     const _saveBtnLabel = saveBtn.textContent;
     saveBtn.onclick = async () => {
       if (!_saveForm) return;
       saveBtn.disabled = true;
-      saveBtn.textContent = 'Saving…';
+      saveBtn.textContent = t('Saving…');
       try {
         await _saveForm();
       } catch (err) {
@@ -568,7 +574,7 @@ async function _renderNewInvoice(container, cp, moveType, editId = null) {
     };
     const discardBtn = document.createElement('button');
     discardBtn.className = 'btn btn-secondary';
-    discardBtn.textContent = 'Discard';
+    discardBtn.textContent = t('Discard');
     discardBtn.onclick = () => {
       if (editId) {
         App.navigate(`#/accounting/move/${editId}`);
@@ -598,7 +604,7 @@ async function _renderNewInvoice(container, cp, moveType, editId = null) {
     }
   } catch (err) {
     loadingEl.className = 'alert-error';
-    loadingEl.textContent = 'Failed to load form data: ' + err.message;
+    loadingEl.textContent = t('Failed to load form data') + ': ' + err.message;
     return;
   }
 
@@ -635,21 +641,21 @@ async function _renderNewInvoice(container, cp, moveType, editId = null) {
   grid.className = 'header-grid';
 
   const partnerSel = _inlineSelect(
-    [['', isEntry ? '— Optional —' : '— Select partner —'], ...partners.map(p => [p.id, p.name])]
+    [['', isEntry ? t('— Optional —') : t('— Select partner —')], ...partners.map(p => [p.id, p.name])]
   );
-  grid.appendChild(_headerRow(isEntry ? 'Partner (optional)' : 'Customer / Vendor', partnerSel));
+  grid.appendChild(_headerRow(isEntry ? t('Partner (optional)') : t('Customer / Vendor'), partnerSel));
 
   const journalSel = _inlineSelect(journals.length
     ? journals.map(j => [j.id, j.name])
-    : [['', '— No journals found —']]);
-  grid.appendChild(_headerRow('Journal', journalSel));
+    : [['', t('— No journals found —')]]);
+  grid.appendChild(_headerRow(t('Journal'), journalSel));
 
   const dateInput = _inlineInput('date', '');
   dateInput.value = new Date().toISOString().substring(0, 10);
-  grid.appendChild(_headerRow('Invoice Date', dateInput));
+  grid.appendChild(_headerRow(t('Invoice Date'), dateInput));
 
-  const refInput = _inlineInput('text', 'Optional');
-  grid.appendChild(_headerRow('Reference', refInput));
+  const refInput = _inlineInput('text', t('Optional'));
+  grid.appendChild(_headerRow(t('Reference'), refInput));
 
   if (existingMove) {
     const exPartnerId = Array.isArray(existingMove.partner_id) ? existingMove.partner_id[0] : existingMove.partner_id;
@@ -668,7 +674,7 @@ async function _renderNewInvoice(container, cp, moveType, editId = null) {
   linesCard.className = 'form-card';
   const linesTitle = document.createElement('h3');
   linesTitle.className = 'section-title';
-  linesTitle.textContent = isEntry ? 'Journal Entry Lines' : 'Invoice Lines';
+  linesTitle.textContent = isEntry ? t('Journal Entry Lines') : t('Invoice Lines');
   linesCard.appendChild(linesTitle);
 
   const table = document.createElement('table');
@@ -676,8 +682,8 @@ async function _renderNewInvoice(container, cp, moveType, editId = null) {
   const thead = document.createElement('thead');
   const headRow = document.createElement('tr');
   const colDefs = isEntry
-    ? [['Description', ''], ['Account', ''], ['Debit', 'text-right'], ['Credit', 'text-right'], ['', '']]
-    : [['Description', ''], ['Account', ''], ['Amount', 'text-right'], ['', '']];
+    ? [[t('Description'), ''], [t('Account'), ''], [t('Debit'), 'text-right'], [t('Credit'), 'text-right'], ['', '']]
+    : [[t('Description'), ''], [t('Account'), ''], [t('Amount'), 'text-right'], ['', '']];
   colDefs.forEach(([txt, cls]) => {
     const th = document.createElement('th');
     th.textContent = txt;
@@ -693,7 +699,7 @@ async function _renderNewInvoice(container, cp, moveType, editId = null) {
   const addBtn = document.createElement('button');
   addBtn.className = 'btn btn-secondary';
   addBtn.style.marginTop = '8px';
-  addBtn.textContent = '+ Add Line';
+  addBtn.textContent = t('+ Add Line');
   linesCard.appendChild(addBtn);
   container.appendChild(linesCard);
 
@@ -704,7 +710,7 @@ async function _renderNewInvoice(container, cp, moveType, editId = null) {
   totalsRow.className = 'totals-row';
   const totalsLbl = document.createElement('span');
   totalsLbl.className = 'totals-label';
-  totalsLbl.textContent = isEntry ? 'Total Debit' : 'Subtotal';
+  totalsLbl.textContent = isEntry ? t('Total Debit') : t('Subtotal');
   const subtotalEl = document.createElement('span');
   subtotalEl.className = 'totals-value bold';
   subtotalEl.textContent = _fmt(0);
@@ -766,7 +772,7 @@ function _buildNewLineRow(line, accounts, lines, isEntry, onUpdate) {
   const descTd = document.createElement('td');
   const descInput = document.createElement('input');
   descInput.type = 'text';
-  descInput.placeholder = 'Description';
+  descInput.placeholder = t('Description');
   descInput.style.cssText = `width:100%;${tdStyle}`;
   descInput.value = line.name || '';
   descInput.oninput = () => { line.name = descInput.value; };
@@ -779,7 +785,7 @@ function _buildNewLineRow(line, accounts, lines, isEntry, onUpdate) {
   accSel.style.cssText = `width:100%;min-width:160px;${tdStyle}`;
   const blank = document.createElement('option');
   blank.value = '';
-  blank.textContent = '— Account —';
+  blank.textContent = t('— Account —');
   accSel.appendChild(blank);
   accounts.forEach(a => {
     const opt = document.createElement('option');
@@ -869,10 +875,10 @@ async function _saveNewInvoice(moveType, companyId, currencyId, partnerSel, jour
   const invoiceDate = dateInput.value;
   const ref         = refInput.value.trim() || null;
 
-  if (!journalId)               throw new Error('Please select a journal.');
-  if (!invoiceDate)             throw new Error('Please enter an invoice date.');
-  if (!isEntry && !partnerId)   throw new Error('Please select a customer or vendor.');
-  if (!editId && (!companyId || !currencyId)) throw new Error('Company or currency not found. Check server setup.');
+  if (!journalId)               throw new Error(t('Please select a journal.'));
+  if (!invoiceDate)             throw new Error(t('Please enter an invoice date.'));
+  if (!isEntry && !partnerId)   throw new Error(t('Please select a customer or vendor.'));
+  if (!editId && (!companyId || !currencyId)) throw new Error(t('Company or currency not found. Check server setup.'));
 
   const validLines = lines.filter(l => l.accountId && (
     isEntry
@@ -880,7 +886,7 @@ async function _saveNewInvoice(moveType, companyId, currencyId, partnerSel, jour
       : parseFloat(l.amount || 0) > 0
   ));
   if (validLines.length === 0) {
-    throw new Error('Please add at least one line with an account and amount.');
+    throw new Error(t('Please add at least one line with an account and amount.'));
   }
 
   const isRevenue = ['out_invoice', 'out_refund'].includes(moveType);
@@ -898,7 +904,7 @@ async function _saveNewInvoice(moveType, companyId, currencyId, partnerSel, jour
       await api.rpc('account.move.line', 'create', [{
         move_id:      targetId,
         display_type: 'product',
-        name:         line.name || 'Service',
+        name:         line.name || t('Service'),
         account_id:   parseInt(line.accountId, 10),
         date:         invoiceDate,
         debit,

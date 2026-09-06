@@ -3,7 +3,7 @@ import { App } from '/web/static/app.js';
 import { t } from '/web/static/i18n.js';
 
 /** Settings screen: system language + company country (admin), personal language (any user). */
-export async function render(container, _params) {
+export async function render(container, params) {
   container.innerHTML = '';
   const page = document.createElement('div');
   page.className = 'settings-page';
@@ -18,6 +18,9 @@ export async function render(container, _params) {
   banner.setAttribute('aria-live', 'polite');
   banner.hidden = true;
   page.appendChild(banner);
+
+  // A flash carried across a re-render (e.g. after a language switch rebuilt this screen).
+  if (params && params.flash) _flash(banner, params.flash.kind, params.flash.msg);
 
   let values;
   try {
@@ -46,9 +49,9 @@ export async function render(container, _params) {
     try {
       const res = await api.rpc('res.config.settings', 'set_user_lang', [meSelect.value || null]);
       await App.reloadLanguage();
-      _flash(banner, 'success', t('Settings saved.'));
       if (res && res.direction) document.documentElement.setAttribute('dir', res.direction);
-      _rerender(container);
+      App.refreshChrome();
+      _rerender(container, { kind: 'success', msg: t('Settings saved.') });
     } catch (err) { _flash(banner, 'error', err.message); }
   });
   page.appendChild(_actions(meBtn));
@@ -126,9 +129,11 @@ export async function render(container, _params) {
       return;
     }
     await App.reloadLanguage();
-    _flash(banner, 'success',
-      res && res.applied ? t('Localization package applied.') : t('Settings saved.'));
-    _rerender(container);
+    App.refreshChrome();
+    _rerender(container, {
+      kind: 'success',
+      msg: res && res.applied ? t('Localization package applied.') : t('Settings saved.'),
+    });
   }
 }
 
@@ -171,6 +176,6 @@ function _staleBanner(banner, container) {
   banner.appendChild(document.createTextNode(' '));
   banner.appendChild(reload);
 }
-function _rerender(container) {
-  render(container, {});
+function _rerender(container, flash) {
+  render(container, flash ? { flash } : {});
 }

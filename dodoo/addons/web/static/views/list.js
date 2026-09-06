@@ -24,7 +24,7 @@ function _pickColumns(fields, max = 6) {
 
 function _cellText(value) {
   if (value === null || value === undefined) return '';
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (typeof value === 'boolean') return value ? t('Yes') : t('No');
   if (Array.isArray(value)) return String(value[1] ?? value[0] ?? '');
   return String(value);
 }
@@ -55,7 +55,7 @@ export async function render(container, params) {
     } catch (err) {
       const alert = document.createElement('div');
       alert.className = 'alert-error';
-      alert.textContent = 'Failed to load field metadata: ' + err.message;
+      alert.textContent = t('Failed to load field metadata') + ': ' + err.message;
       container.appendChild(alert);
       return;
     }
@@ -161,7 +161,7 @@ export async function render(container, params) {
       const errTd = document.createElement('td');
       errTd.colSpan = columns.length;
       errTd.className = 'alert-error';
-      errTd.textContent = 'Error: ' + err.message;
+      errTd.textContent = t('Error') + ': ' + err.message;
       errRow.appendChild(errTd);
       tbody.appendChild(errRow);
       return;

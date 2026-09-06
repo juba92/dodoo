@@ -17,7 +17,7 @@ function _inputType(fieldType) {
 
 function _displayValue(value) {
   if (value === null || value === undefined) return '';
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (typeof value === 'boolean') return value ? t('Yes') : t('No');
   if (Array.isArray(value)) return String(value[1] ?? value[0] ?? '');
   return String(value);
 }
@@ -80,7 +80,7 @@ function _buildFieldControl(fieldName, fieldMeta, value, isNew) {
     inp.id = `ff-${fieldName}`;
     inp.setAttribute('data-field', fieldName);
     inp.value = Array.isArray(value) ? String(value[0] ?? '') : String(value ?? '');
-    inp.placeholder = 'Record ID';
+    inp.placeholder = t('Record ID');
     inp.setAttribute('aria-describedby', `ff-err-${fieldName}`);
     if (fieldMeta.required) inp.required = true;
     // Show related name as hint
@@ -134,7 +134,7 @@ export async function render(container, params) {
     } catch (err) {
       const alert = document.createElement('div');
       alert.className = 'alert-error';
-      alert.textContent = 'Failed to load fields: ' + err.message;
+      alert.textContent = t('Failed to load fields') + ': ' + err.message;
       container.appendChild(alert);
       return;
     }
@@ -152,7 +152,7 @@ export async function render(container, params) {
     } catch (err) {
       const alert = document.createElement('div');
       alert.className = 'alert-error';
-      alert.textContent = 'Failed to load record: ' + err.message;
+      alert.textContent = t('Failed to load record') + ': ' + err.message;
       container.appendChild(alert);
       return;
     }
@@ -193,12 +193,12 @@ export async function render(container, params) {
       cp.appendChild(deleteBtn);
 
       deleteBtn.onclick = async () => {
-        if (!window.confirm(`Delete record #${id}? This cannot be undone.`)) return;
+        if (!window.confirm(t('Delete record #{id}? This cannot be undone.', { id }))) return;
         try {
           await api.rpc(model, 'unlink', [[id]]);
           App.navigate(`#/model/${model}`);
         } catch (err) {
-          _showBanner(statusBanner, 'error', 'Delete failed: ' + err.message);
+          _showBanner(statusBanner, 'error', t('Delete failed') + ': ' + err.message);
         }
       };
     }
@@ -230,7 +230,7 @@ export async function render(container, params) {
       const legend = document.createElement('legend');
       const start = gi * GROUP_SIZE + 1;
       const end = Math.min((gi + 1) * GROUP_SIZE, fieldEntries.length);
-      legend.textContent = `Fields ${start}–${end}`;
+      legend.textContent = t('Fields {start}–{end}', { start, end });
       fs.appendChild(legend);
       const grid = document.createElement('div');
       grid.className = 'field-grid';
@@ -293,7 +293,7 @@ export async function render(container, params) {
     e.preventDefault();
     _clearErrors();
     if (!_validateRequired()) {
-      _showBanner(statusBanner, 'error', 'Please fill in all required fields.');
+      _showBanner(statusBanner, 'error', t('Please fill in all required fields.'));
       return;
     }
     const vals = _collectValues();
@@ -301,7 +301,7 @@ export async function render(container, params) {
       if (isNew) {
         const newId = await api.rpc(model, 'create', [vals]);
         originalValues = { ...vals, id: newId };
-        _showBanner(statusBanner, 'success', 'Record created successfully.');
+        _showBanner(statusBanner, 'success', t('Record created successfully.'));
         App.navigate(`#/model/${model}/${newId}`);
       } else {
         await api.rpc(model, 'write', [[id], vals]);
@@ -309,7 +309,7 @@ export async function render(container, params) {
         _showBanner(statusBanner, 'success', t('Settings saved.'));
       }
     } catch (err) {
-      _showBanner(statusBanner, 'error', 'Save failed: ' + err.message);
+      _showBanner(statusBanner, 'error', t('Save failed') + ': ' + err.message);
     }
   };
 

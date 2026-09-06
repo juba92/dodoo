@@ -114,7 +114,7 @@ export async function render(container, params) {
   App.state.modules.forEach(mod => {
     const tile = document.createElement('button');
     tile.className = 'module-tile';
-    const displayName = _MODULE_DISPLAY_NAMES[mod.name] ?? mod.name;
+    const displayName = _MODULE_DISPLAY_NAMES[mod.name] ? t(_MODULE_DISPLAY_NAMES[mod.name]) : mod.name;
     tile.setAttribute('aria-label', `Open ${displayName} module`);
     tile.onclick = () => App.navigate(`#/module/${mod.name}`);
 
@@ -146,7 +146,7 @@ function _refreshSidebar(sidebar, models) {
   sidebar.innerHTML = '';
   const title = document.createElement('div');
   title.className = 'sidebar-section-title';
-  title.textContent = 'Models';
+  title.textContent = t('Models');
   sidebar.appendChild(title);
   const ul = document.createElement('ul');
   ul.className = 'sidebar-list';
@@ -185,7 +185,7 @@ async function _renderModuleDetail(container, moduleName) {
   const subtitle = document.createElement('p');
   subtitle.style.color = 'var(--text-muted)';
   subtitle.style.marginBottom = '1rem';
-  subtitle.textContent = `Browse models in the ${moduleName} module.`;
+  subtitle.textContent = t('Browse models in the {module} module.', { module: moduleName });
   container.appendChild(subtitle);
 
   const grid = document.createElement('div');

@@ -18,6 +18,20 @@ _SYSTEM_FIELDS = ("id", "create_date", "write_date")
 _ALL_MODELS: list[type] = []
 
 
+def _humanize(field_name: str) -> str:
+    """Odoo-style fallback label for a field with no explicit ``string=``.
+
+    ``invoice_date_due`` → ``Invoice Date Due``; a trailing ``_id`` / ``_ids`` is
+    dropped so relational fields read as ``Partner``, not ``Partner Id``.
+    """
+    name = field_name
+    for suffix in ("_ids", "_id"):
+        if name.endswith(suffix):
+            name = name[: -len(suffix)]
+            break
+    return name.replace("_", " ").strip().title()
+
+
 def _translate_label(text: str) -> str:
     """Run a field label through the localization catalog for the active request language.
 
@@ -240,7 +254,7 @@ class BaseModel(metaclass=_ModelMeta):
         for fname, field in cls._fields.items():
             info: dict[str, Any] = {
                 "type": type(field).__name__.lower(),
-                "string": _translate_label(field.string or fname),
+                "string": _translate_label(field.string or _humanize(fname)),
                 "required": field.required,
                 "readonly": field.readonly,
             }

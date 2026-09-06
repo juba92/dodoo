@@ -27,6 +27,31 @@ export const App = {
     } catch { /* keep current catalog */ }
   },
 
+  /** Re-render the header, sidebar and breadcrumb in place so a language/direction
+   *  switch is reflected across the chrome without a manual navigation. The active
+   *  view keeps its own DOM (callers that changed language re-render it themselves). */
+  refreshChrome() {
+    const hash = window.location.hash || '#/login';
+    if (/^#\/login/.test(hash) || !App.state.token) return;
+    const header = document.querySelector('.app-header');
+    if (!header) return;
+    const appNameEl = header.querySelector('.nav-app-name');
+    if (appNameEl) {
+      appNameEl.textContent = hash.startsWith('#/accounting') ? t('Accounting')
+        : hash === '#/settings' ? t('Settings')
+        : t('Dodoo ERP');
+    }
+    header.querySelector('.nav-home-btn')?.setAttribute('aria-label', t('Go to home'));
+    const setBtn = header.querySelector('#btn-settings');
+    if (setBtn) { setBtn.title = t('Settings'); setBtn.setAttribute('aria-label', t('Settings')); }
+    const outBtn = header.querySelector('#btn-logout');
+    if (outBtn) { outBtn.title = t('Sign out'); outBtn.setAttribute('aria-label', t('Sign out')); }
+    // Recompute stored breadcrumb labels in the new language before re-rendering.
+    App.breadcrumb = App.breadcrumb.map(b => ({ ...b, label: _labelFromHash(b.hash) }));
+    _renderBreadcrumb();
+    _renderSidebar(hash);
+  },
+
   navigate(hash) {
     const existing = App.breadcrumb.findIndex(b => b.hash === hash);
     if (existing !== -1) {
@@ -55,15 +80,15 @@ function _labelFromHash(hash) {
   if (hash === '#/login') return t('Login');
   if (hash === '#/settings') return t('Settings');
   let m;
-  if ((m = hash.match(/^#\/accounting\/move\/new(\?.*)?$/)))    return 'New Invoice';
-  if ((m = hash.match(/^#\/accounting\/move\/(\d+)$/)))         return `Invoice #${m[1]}`;
-  if ((m = hash.match(/^#\/accounting\/reports\/([^/]+)$/)))    return m[1].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-  if ((m = hash.match(/^#\/accounting\/model\/([^/]+)\/new$/))) return `New ${m[1]}`;
+  if ((m = hash.match(/^#\/accounting\/move\/new(\?.*)?$/)))    return t('New Invoice');
+  if ((m = hash.match(/^#\/accounting\/move\/(\d+)$/)))         return t('Invoice #{id}', { id: m[1] });
+  if ((m = hash.match(/^#\/accounting\/reports\/([^/]+)$/)))    return t(m[1].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()));
+  if ((m = hash.match(/^#\/accounting\/model\/([^/]+)\/new$/))) return t('New {name}', { name: m[1] });
   if ((m = hash.match(/^#\/accounting\/model\/([^/]+)\/(\d+)$/))) return `${m[1]} #${m[2]}`;
   if ((m = hash.match(/^#\/accounting\/model\/([^/]+)$/)))      return m[1];
   if ((m = hash.match(/^#\/accounting\/([^/]+)$/)))             return _ACC_LABELS[m[1]] ? t(_ACC_LABELS[m[1]]) : m[1].replace(/-/g, ' ');
   if ((m = hash.match(/^#\/module\/(.+)$/)))                    return m[1];
-  if ((m = hash.match(/^#\/model\/([^/]+)\/new$/)))             return `New ${m[1]}`;
+  if ((m = hash.match(/^#\/model\/([^/]+)\/new$/)))             return t('New {name}', { name: m[1] });
   if ((m = hash.match(/^#\/model\/([^/]+)\/(\d+)$/)))           return `#${m[2]}`;
   if ((m = hash.match(/^#\/model\/([^/]+)$/)))                  return m[1];
   return hash.replace(/^#\//, '');
@@ -366,8 +391,13 @@ async function _route() {
   render(document.getElementById('main'), _paramsFromHash(hash));
 }
 
+// Bump on any web/account/localization static change so it's obvious in the console
+// which bundle a browser actually loaded (helps spot a stale cache).
+const CLIENT_BUILD = '2026-09-06.3';
+
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
+  console.info('[dodoo] web client build', CLIENT_BUILD);
   // Restore session from storage
   const tok = sessionStorage.getItem('session_token');
   const uid = sessionStorage.getItem('session_uid');
@@ -394,7 +424,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Seed breadcrumb from current hash
   const hash = window.location.hash || '#/login';
   if (hash !== '#/login' && App.state.token) {
-    App.breadcrumb = [{ label: 'Home', hash: '#/home' }];
+    App.breadcrumb = [{ label: t('Home'), hash: '#/home' }];
     if (hash !== '#/home') {
       App.breadcrumb.push({ label: _labelFromHash(hash), hash });
     }

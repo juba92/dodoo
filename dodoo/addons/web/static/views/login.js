@@ -24,7 +24,7 @@ export function render(container, _params) {
 
   const logoText = document.createElement('div');
   logoText.className = 'login-logo-text';
-  logoText.textContent = 'Dodoo ERP';
+  logoText.textContent = t('Dodoo ERP');
   logoDiv.appendChild(logoText);
   card.appendChild(logoDiv);
 

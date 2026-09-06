@@ -4,30 +4,35 @@
  * The catalog + locale metadata come from `GET /web/i18n/<lang>.json`. `t(key)` returns
  * the translation or the key itself (the key is the English source string, so untranslated
  * UI still reads correctly). Numbers/dates are formatted from the res.lang format fields so
- * the client matches the server exactly — digits stay Western for both languages.
+ * the client matches the server exactly; digits follow the language's numeral system
+ * (Eastern Arabic for `ar`, Western otherwise).
  */
 
-let _catalog = { lang: 'en', direction: 'ltr', terms: {}, date_format: '%m/%d/%Y',
-                 decimal_point: '.', thousands_sep: ',', grouping: [3, 0] };
+let _catalog = { lang: 'en', direction: 'ltr', numeral_system: 'latn', terms: {},
+                 date_format: '%m/%d/%Y', decimal_point: '.', thousands_sep: ',', grouping: [3, 0] };
 
 export function currentLang() { return _catalog.lang; }
 export function currentDirection() { return _catalog.direction; }
 
 export async function loadCatalog(lang) {
   const code = lang || 'en';
+  // Always fetch fresh: the endpoint is local, the payload is small, and a stale
+  // sessionStorage copy would silently pin the UI to an old catalog after any
+  // translation change. sessionStorage is now only an offline fallback.
   try {
-    const cached = sessionStorage.getItem('i18n:' + code);
-    if (cached) { _catalog = JSON.parse(cached); return _catalog; }
-  } catch { /* private mode / disabled storage */ }
-
-  try {
-    const res = await fetch('/web/i18n/' + encodeURIComponent(code) + '.json');
+    const res = await fetch('/web/i18n/' + encodeURIComponent(code) + '.json', { cache: 'no-store' });
     if (res.ok) {
       _catalog = await res.json();
       _catalog.terms = _catalog.terms || {};
       try { sessionStorage.setItem('i18n:' + code, JSON.stringify(_catalog)); } catch { /* ignore */ }
+      return _catalog;
     }
-  } catch { /* offline — keep whatever catalog we have */ }
+  } catch { /* network failed — fall back to the last cached copy below */ }
+
+  try {
+    const cached = sessionStorage.getItem('i18n:' + code);
+    if (cached) { _catalog = JSON.parse(cached); _catalog.terms = _catalog.terms || {}; }
+  } catch { /* private mode / disabled storage */ }
   return _catalog;
 }
 
@@ -56,6 +61,15 @@ export function applyDirection(direction) {
   document.documentElement.setAttribute('lang', _catalog.lang || 'en');
 }
 
+const _EASTERN_ARABIC = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+
+/** Map ASCII digits to the active language's numeral system (currently Eastern Arabic
+ *  for `ar`). Applied to every user-visible number/date; input fields keep ASCII. */
+function _localizeDigits(str) {
+  if (_catalog.numeral_system !== 'arab') return str;
+  return String(str).replace(/[0-9]/g, d => _EASTERN_ARABIC[+d]);
+}
+
 export function formatNumber(value, decimals) {
   const n = Number(value);
   if (!isFinite(n)) return String(value ?? '');
@@ -72,7 +86,7 @@ export function formatNumber(value, decimals) {
     intPart = intPart.slice(0, -grouping);
   }
   grouped = intPart + grouped;
-  return (neg ? '-' : '') + grouped + (fracPart ? dp + fracPart : '');
+  return _localizeDigits((neg ? '-' : '') + grouped + (fracPart ? dp + fracPart : ''));
 }
 
 export function formatCurrency(value, opts = {}) {
@@ -93,5 +107,5 @@ export function formatDate(iso) {
     '%d': p2(d.getDate()), '%m': p2(d.getMonth() + 1), '%Y': String(d.getFullYear()),
     '%y': p2(d.getFullYear() % 100), '%H': p2(d.getHours()), '%M': p2(d.getMinutes()),
   };
-  return (_catalog.date_format || '%m/%d/%Y').replace(/%[dmYyHM]/g, m => map[m] ?? m);
+  return _localizeDigits((_catalog.date_format || '%m/%d/%Y').replace(/%[dmYyHM]/g, m => map[m] ?? m));
 }

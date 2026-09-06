@@ -20,7 +20,12 @@ _DEFAULTS = {
     "decimal_point": ".",
     "thousands_sep": ",",
     "grouping": [3, 0],
+    "numeral_system": "latn",
 }
+
+# Language codes whose conventional numeral system is Eastern Arabic (Arabic-Indic).
+# Mirrors Babel's default digit shaping for these locales.
+_ARABIC_NUMERAL_LANGS = {"ar"}
 
 
 def _parse_grouping(raw: str | None) -> list[int]:
@@ -46,6 +51,7 @@ async def locale_meta(env: Environment, lang: str) -> dict[str, Any] | None:
         r = row.mappings().fetchone()
     if r is None:
         return None
+    base_code = (r["code"] or "").split("_")[0].lower()
     return {
         "lang": r["code"],
         "name": r["name"],
@@ -54,4 +60,5 @@ async def locale_meta(env: Environment, lang: str) -> dict[str, Any] | None:
         "decimal_point": r["decimal_point"] or _DEFAULTS["decimal_point"],
         "thousands_sep": r["thousands_sep"] or _DEFAULTS["thousands_sep"],
         "grouping": _parse_grouping(r["grouping"]),
+        "numeral_system": "arab" if base_code in _ARABIC_NUMERAL_LANGS else "latn",
     }
