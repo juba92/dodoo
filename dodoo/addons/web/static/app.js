@@ -5,7 +5,7 @@ import { loadCatalog, applyDirection, t, currentLang } from '/web/static/i18n.js
 // lazily-imported view module so a new build is a new module URL — otherwise the
 // browser keeps the first-imported version of a view for the whole tab session
 // (hash navigation never reloads the document) and serves stale screens.
-const CLIENT_BUILD = '2026-09-06.16';
+const CLIENT_BUILD = '2026-09-06.17';
 
 /** Lazy-import a view module, cache-busted by the current build. */
 const _view = path => import(path + '?v=' + CLIENT_BUILD);
@@ -107,6 +107,24 @@ const _REPORT_LABELS = {
   'aged-receivable': 'Aged Receivable', 'aged-payable': 'Aged Payable',
 };
 
+// Human-readable label for a raw model name, so a breadcrumb never shows a
+// dotted technical id like "hr.job" or "fleet.vehicle.model.brand".
+const _MODEL_LABELS = {
+  'hr.department': 'Departments', 'hr.job': 'Job Positions',
+  'hr.employee.category': 'Tags', 'hr.recruitment.stage': 'Stages',
+  'hr.applicant.refuse.reason': 'Refusal Reasons',
+  'hr.leave.allocation': 'Allocations', 'hr.leave.type': 'Leave Types',
+  'hr.public.holiday': 'Public Holidays', 'hr.appraisal': 'Appraisals',
+  'hr.appraisal.template': 'Templates',
+};
+function _modelLabel(name) {
+  if (_MODEL_LABELS[name]) return t(_MODEL_LABELS[name]);
+  const parts = name.split('.');
+  const words = (parts[0] === 'hr' || parts[0] === 'fleet' ? parts.slice(1) : parts).join(' ');
+  const humanized = words.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  return t(humanized);
+}
+
 function _labelFromHash(hash) {
   if (hash === '#/home' || hash === '#/') return t('Home');
   if (hash === '#/login') return t('Login');
@@ -117,9 +135,9 @@ function _labelFromHash(hash) {
   if ((m = hash.match(/^#\/accounting\/account\/new$/)))        return t('New Account');
   if ((m = hash.match(/^#\/accounting\/account\/(\d+)$/)))      return t('Account') + ' #' + m[1];
   if ((m = hash.match(/^#\/accounting\/reports\/([^/]+)$/)))    return t(_REPORT_LABELS[m[1]] || m[1].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()));
-  if ((m = hash.match(/^#\/accounting\/model\/([^/]+)\/new$/))) return t('New {name}', { name: m[1] });
-  if ((m = hash.match(/^#\/accounting\/model\/([^/]+)\/(\d+)$/))) return `${m[1]} #${m[2]}`;
-  if ((m = hash.match(/^#\/accounting\/model\/([^/]+)$/)))      return m[1];
+  if ((m = hash.match(/^#\/accounting\/model\/([^/]+)\/new$/))) return t('New {name}', { name: _modelLabel(m[1]) });
+  if ((m = hash.match(/^#\/accounting\/model\/([^/]+)\/(\d+)$/))) return `${_modelLabel(m[1])} #${m[2]}`;
+  if ((m = hash.match(/^#\/accounting\/model\/([^/]+)$/)))      return _modelLabel(m[1]);
   if ((m = hash.match(/^#\/accounting\/([^/]+)$/)))             return _ACC_LABELS[m[1]] ? t(_ACC_LABELS[m[1]]) : m[1].replace(/-/g, ' ');
   if ((m = hash.match(/^#\/module\/(.+)$/)))                    return m[1];
   if (hash === '#/hr/employees')                                return t('Employees');
@@ -140,17 +158,17 @@ function _labelFromHash(hash) {
   if (hash === '#/fleet/vehicles')                              return t('Vehicles');
   if (hash === '#/fleet/alerts')                                return t('Fleet Alerts');
   if ((m = hash.match(/^#\/fleet\/vehicle\/(\d+)$/)))        return t('Vehicle') + ' #' + m[1];
-  if ((m = hash.match(/^#\/fleet\/model\/([^/]+)\/new$/)))    return t('New {name}', { name: m[1] });
-  if ((m = hash.match(/^#\/fleet\/model\/([^/]+)\/(\d+)$/)))  return `${m[1]} #${m[2]}`;
-  if ((m = hash.match(/^#\/fleet\/model\/([^/]+)$/)))         return m[1];
+  if ((m = hash.match(/^#\/fleet\/model\/([^/]+)\/new$/)))    return t('New {name}', { name: _modelLabel(m[1]) });
+  if ((m = hash.match(/^#\/fleet\/model\/([^/]+)\/(\d+)$/)))  return `${_modelLabel(m[1])} #${m[2]}`;
+  if ((m = hash.match(/^#\/fleet\/model\/([^/]+)$/)))         return _modelLabel(m[1]);
   if ((m = hash.match(/^#\/hr\/employee\/new$/)))               return t('New Employee');
   if ((m = hash.match(/^#\/hr\/employee\/(\d+)$/)))             return t('Employee') + ' #' + m[1];
-  if ((m = hash.match(/^#\/hr\/model\/([^/]+)\/new$/)))         return t('New {name}', { name: m[1] });
-  if ((m = hash.match(/^#\/hr\/model\/([^/]+)\/(\d+)$/)))       return `${m[1]} #${m[2]}`;
-  if ((m = hash.match(/^#\/hr\/model\/([^/]+)$/)))              return m[1];
-  if ((m = hash.match(/^#\/model\/([^/]+)\/new$/)))             return t('New {name}', { name: m[1] });
-  if ((m = hash.match(/^#\/model\/([^/]+)\/(\d+)$/)))           return `#${m[2]}`;
-  if ((m = hash.match(/^#\/model\/([^/]+)$/)))                  return m[1];
+  if ((m = hash.match(/^#\/hr\/model\/([^/]+)\/new$/)))         return t('New {name}', { name: _modelLabel(m[1]) });
+  if ((m = hash.match(/^#\/hr\/model\/([^/]+)\/(\d+)$/)))       return `${_modelLabel(m[1])} #${m[2]}`;
+  if ((m = hash.match(/^#\/hr\/model\/([^/]+)$/)))              return _modelLabel(m[1]);
+  if ((m = hash.match(/^#\/model\/([^/]+)\/new$/)))             return t('New {name}', { name: _modelLabel(m[1]) });
+  if ((m = hash.match(/^#\/model\/([^/]+)\/(\d+)$/)))           return `${_modelLabel(m[1])} #${m[2]}`;
+  if ((m = hash.match(/^#\/model\/([^/]+)$/)))                  return _modelLabel(m[1]);
   return hash.replace(/^#\//, '');
 }
 
