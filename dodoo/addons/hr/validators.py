@@ -253,3 +253,34 @@ class ApplicantSetStage(Payload):
 
 class ApplicantRefuse(Payload):
     refuse_reason_id: int
+
+
+# --------------------------------------------------------------------------- P3 (Appraisals)
+
+
+class AppraisalTemplateCreate(Payload):
+    name: str = Field(min_length=1, max_length=64)
+    default_frequency_months: int = Field(default=12, ge=1, le=60)
+    company_id: int | None = None
+
+
+class FeedbackSectionCreate(Payload):
+    template_id: int
+    title: str = Field(min_length=1, max_length=128)
+    prompt: str | None = None
+    sequence: int = Field(default=10, ge=0)
+
+
+class AppraisalLaunch(Payload):
+    employee_id: int
+    template_id: int
+
+
+class AppraisalSetState(Payload):
+    state: Literal["pending_confirmation", "confirmed", "done", "cancelled"]
+    expected_state: Literal["new", "pending_confirmation", "confirmed"] | None = None
+
+
+class FeedbackWrite(Payload):
+    content: str | None = None
+    is_visible: bool

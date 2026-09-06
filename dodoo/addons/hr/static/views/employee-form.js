@@ -127,6 +127,26 @@ export async function render(container, params) {
     } catch { /* ignore */ }
   }
 
+  // Appraisal history (FR-044)
+  if (!isNew) {
+    try {
+      const hist = await api.rpc('hr.appraisal', 'get_history', [], { employee_id: Number(id) });
+      if (hist.length) {
+        const hb = document.createElement('section');
+        hb.className = 'o-form-panel';
+        hb.appendChild(Object.assign(document.createElement('h3'), { textContent: t('Appraisal history') }));
+        const ul = document.createElement('ul');
+        hist.forEach(a => {
+          const li = document.createElement('li');
+          li.textContent = `${a.date_close || t('open')} — ${t(a.state)}`;
+          ul.appendChild(li);
+        });
+        hb.appendChild(ul);
+        form.appendChild(hb);
+      }
+    } catch { /* ignore */ }
+  }
+
   // Org chart
   if (!isNew) {
     const orgBox = document.createElement('section');

@@ -207,24 +207,24 @@ removes "open" without touching the next date.
 
 ### Tests for User Story 4
 
-- [ ] T087 [P] [US4] Integration test appraisal state machine (legal moves, `appraisal_transition_invalid`, `appraisal_state_conflict`), `action_launch` instantiating both sides' feedback rows, `action_done` next-date resolution (employee → department → template), and manager-side routing when the appraisee is their own manager or has no manager (routes/approves via an HR Officer, per spec Edge Cases) in `tests/hr/test_appraisal_cycle.py`
-- [ ] T088 [P] [US4] Integration test feedback visibility: opposite side cannot read `is_visible=false` rows via `read`/`search_read`; owning side always can; `feedback_wrong_side` on cross-side write in `tests/hr/test_appraisal_cycle.py`
-- [ ] T089 [P] [US4] Integration test `hr.appraisal` record rules (owner OR manager OR Officer) and `get_history` ordering in `tests/hr/test_access_rules.py` (extend)
+- [x] T087 [P] [US4] Integration test appraisal state machine (legal moves, `appraisal_transition_invalid`, `appraisal_state_conflict`), `action_launch` instantiating both sides' feedback rows, `action_done` next-date resolution (employee → department → template), and manager-side routing when the appraisee is their own manager or has no manager (routes/approves via an HR Officer, per spec Edge Cases) in `tests/hr/test_appraisal_cycle.py`
+- [x] T088 [P] [US4] Integration test feedback visibility: opposite side cannot read `is_visible=false` rows via `read`/`search_read`; owning side always can; `feedback_wrong_side` on cross-side write in `tests/hr/test_appraisal_cycle.py`
+- [x] T089 [P] [US4] Integration test `hr.appraisal` record rules (owner OR manager OR Officer) and `get_history` ordering in `tests/hr/test_access_rules.py` (extend)
 
 ### Implementation for User Story 4
 
-- [ ] T090 [P] [US4] `hr.appraisal.template` + `hr.appraisal.feedback.section` models in `dodoo/addons/hr/models/hr_appraisal_template.py` (`default_frequency_months` 1–60, ordered sections)
-- [ ] T091 [P] [US4] `hr.appraisal.feedback` model in `dodoo/addons/hr/models/hr_appraisal_feedback.py` (`side`, `content`, `is_visible`; `read`/`search_read` override filtering `is_visible=false` for the opposite side; write restricted to owning side)
-- [ ] T092 [US4] `hr.appraisal` model in `dodoo/addons/hr/models/hr_appraisal.py`: state machine, `action_launch(env, employee_id, template_id, uid)` (create + copy sections × 2 sides), `action_confirm` / `action_to_confirmed` / `action_done` / `action_cancel` (guarded, `log_transition`), `action_done` sets `employee.next_appraisal_date` via resolved frequency (employee → department → template), `_resolve_appraiser(employee)` returning the manager's user, or an HR Officer in the employee's company when the employee has no manager or would be their own appraiser, `get_history(env, employee_id)` — depends on T090, T091, T033, T006
-- [ ] T093 [US4] Add the `appraisal_frequency_months` `Integer` field to `hr.department` in `dodoo/addons/hr/models/hr_department.py` (the `hr.employee` `appraisal_frequency_months` + `next_appraisal_date` fields are already created by T033); extend `tests/hr/test_migrations.py` to assert `hr_department.appraisal_frequency_months` exists
-- [ ] T094 [US4] Export US4 models from `dodoo/addons/hr/models/__init__.py`
-- [ ] T095 [P] [US4] Add appraisal template / launch / set-state / feedback validator models to `dodoo/addons/hr/validators.py` (contracts/hr-appraisal.md)
-- [ ] T096 [US4] REST routes in `dodoo/addons/hr/http/__init__.py`: `POST /hr/appraisal/launch`, `POST /hr/appraisal/{id}/set-state` (Officer or manager) — depends on T092, T095
-- [ ] T097 [US4] Append US4 `ir.rule` rows to `dodoo/addons/hr/data/rules.py` (`hr.appraisal` owner|manager|Officer, `hr.appraisal.feedback` via parent + visibility, deny-by-default; catalog rows for template)
-- [ ] T098 [US4] Extend `dodoo/addons/hr/data/seed.py`: one `hr.appraisal.template` ("Annual Review", 12 months) with 2–3 feedback sections; add `idx_hr_appraisal_employee_state` / `_company` / `idx_hr_appraisal_feedback_appraisal` to `indexes.py`; register `sync_ir_model` entries
-- [ ] T099 [P] [US4] `dodoo/addons/hr/static/views/appraisal-form.js` — state buttons, per-side feedback sections each with a visibility toggle, and (on the employee form) an appraisal-history list from `get_history`
-- [ ] T100 [US4] Wire `#/hr/appraisals`, `#/hr/appraisal/:id` (+ `/new`) routes + the Appraisals menu section in `app.js`; add the history block to `employee-form.js`; bump `CLIENT_BUILD` — depends on T099
-- [ ] T101 [US4] E2E `tests/e2e/test_hr_ui.py` (extend) — launch, advance, per-side visibility, done → next date, history, cancel
+- [x] T090 [P] [US4] `hr.appraisal.template` + `hr.appraisal.feedback.section` models in `dodoo/addons/hr/models/hr_appraisal_template.py` (`default_frequency_months` 1–60, ordered sections)
+- [x] T091 [P] [US4] `hr.appraisal.feedback` model in `dodoo/addons/hr/models/hr_appraisal_feedback.py` (`side`, `content`, `is_visible`; `read`/`search_read` override filtering `is_visible=false` for the opposite side; write restricted to owning side)
+- [x] T092 [US4] `hr.appraisal` model in `dodoo/addons/hr/models/hr_appraisal.py`: state machine, `action_launch(env, employee_id, template_id, uid)` (create + copy sections × 2 sides), `action_confirm` / `action_to_confirmed` / `action_done` / `action_cancel` (guarded, `log_transition`), `action_done` sets `employee.next_appraisal_date` via resolved frequency (employee → department → template), `_resolve_appraiser(employee)` returning the manager's user, or an HR Officer in the employee's company when the employee has no manager or would be their own appraiser, `get_history(env, employee_id)` — depends on T090, T091, T033, T006
+- [x] T093 [US4] Add the `appraisal_frequency_months` `Integer` field to `hr.department` in `dodoo/addons/hr/models/hr_department.py` (the `hr.employee` `appraisal_frequency_months` + `next_appraisal_date` fields are already created by T033); extend `tests/hr/test_migrations.py` to assert `hr_department.appraisal_frequency_months` exists
+- [x] T094 [US4] Export US4 models from `dodoo/addons/hr/models/__init__.py`
+- [x] T095 [P] [US4] Add appraisal template / launch / set-state / feedback validator models to `dodoo/addons/hr/validators.py` (contracts/hr-appraisal.md)
+- [x] T096 [US4] REST routes in `dodoo/addons/hr/http/__init__.py`: `POST /hr/appraisal/launch`, `POST /hr/appraisal/{id}/set-state` (Officer or manager) — depends on T092, T095
+- [x] T097 [US4] Append US4 `ir.rule` rows to `dodoo/addons/hr/data/rules.py` (`hr.appraisal` owner|manager|Officer, `hr.appraisal.feedback` via parent + visibility, deny-by-default; catalog rows for template)
+- [x] T098 [US4] Extend `dodoo/addons/hr/data/seed.py`: one `hr.appraisal.template` ("Annual Review", 12 months) with 2–3 feedback sections; add `idx_hr_appraisal_employee_state` / `_company` / `idx_hr_appraisal_feedback_appraisal` to `indexes.py`; register `sync_ir_model` entries
+- [x] T099 [P] [US4] `dodoo/addons/hr/static/views/appraisal-form.js` — state buttons, per-side feedback sections each with a visibility toggle, and (on the employee form) an appraisal-history list from `get_history`
+- [x] T100 [US4] Wire `#/hr/appraisals`, `#/hr/appraisal/:id` (+ `/new`) routes + the Appraisals menu section in `app.js`; add the history block to `employee-form.js`; bump `CLIENT_BUILD` — depends on T099
+- [x] T101 [US4] E2E `tests/e2e/test_hr_ui.py` (extend) — launch, advance, per-side visibility, done → next date, history, cancel
 - [ ] T102 [US4] Extend `tests/e2e/test_web_ui_a11y.py` with the appraisal form (visibility toggles labelled, status text+ARIA)
 
 **Checkpoint**: US1–US4 independently functional.

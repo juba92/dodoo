@@ -31,7 +31,12 @@ AREA_SEEDS: list[Any] = []
 
 def _load_areas() -> None:
     """Import each area module for its ``IR_MODELS`` / ``INDEXES`` / ``HR_RULES`` side effects."""
-    from dodoo.addons.hr.data import employees, recruitment, timeoff  # noqa: F401
+    from dodoo.addons.hr.data import (  # noqa: F401
+        appraisal,
+        employees,
+        recruitment,
+        timeoff,
+    )
 
 
 async def seed_hr_data(env: Any) -> None:

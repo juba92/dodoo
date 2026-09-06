@@ -4,6 +4,12 @@
 
 from dodoo.addons.hr.models.hr_applicant import HrApplicant
 from dodoo.addons.hr.models.hr_applicant_refuse_reason import HrApplicantRefuseReason
+from dodoo.addons.hr.models.hr_appraisal import HrAppraisal
+from dodoo.addons.hr.models.hr_appraisal_feedback import HrAppraisalFeedback
+from dodoo.addons.hr.models.hr_appraisal_template import (
+    HrAppraisalFeedbackSection,
+    HrAppraisalTemplate,
+)
 from dodoo.addons.hr.models.hr_contract import HrContract
 from dodoo.addons.hr.models.hr_contract_type import HrContractType
 from dodoo.addons.hr.models.hr_department import HrDepartment
@@ -48,4 +54,8 @@ __all__ = [
     "HrRecruitmentSource",
     "HrApplicantRefuseReason",
     "HrApplicant",
+    "HrAppraisalTemplate",
+    "HrAppraisalFeedbackSection",
+    "HrAppraisalFeedback",
+    "HrAppraisal",
 ]

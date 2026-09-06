@@ -32,7 +32,8 @@ export const HR_MENU = [
   {
     section: 'Appraisals', requires: 'officer',
     items: [
-      { label: 'Appraisals',   hash: '#/hr/appraisals' },
+      { label: 'Appraisals',   hash: '#/hr/model/hr.appraisal' },
+      { label: 'Launch Appraisal', hash: '#/hr/appraisal/new' },
       { label: 'Templates',    hash: '#/hr/model/hr.appraisal.template', requires: 'administrator' },
     ],
   },
