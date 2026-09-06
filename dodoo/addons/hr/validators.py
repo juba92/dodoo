@@ -215,3 +215,41 @@ class PublicHolidayCreate(Payload):
         if self.date_to < self.date_from:
             raise ValueError("date_to before date_from")
         return self
+
+
+# --------------------------------------------------------------------------- P3
+
+
+class StageCreate(Payload):
+    name: str = Field(min_length=1, max_length=64)
+    sequence: int = Field(default=10, ge=0)
+    is_hired_stage: bool = False
+    fold: bool = False
+    company_id: int | None = None
+
+
+class SourceCreate(Payload):
+    name: str = Field(min_length=1, max_length=64)
+    is_referral: bool = False
+    company_id: int | None = None
+
+
+class ApplicantCreate(Payload):
+    partner_name: str = Field(min_length=1, max_length=128)
+    email_from: str | None = Field(default=None, max_length=256)
+    partner_phone: str | None = Field(default=None, max_length=64)
+    job_id: int
+    department_id: int | None = None
+    company_id: int | None = None
+    source_id: int | None = None
+    stage_id: int | None = None
+    interviewer_ids: list[int] = Field(default_factory=list)
+
+
+class ApplicantSetStage(Payload):
+    stage_id: int
+    expected_stage_id: int | None = None
+
+
+class ApplicantRefuse(Payload):
+    refuse_reason_id: int

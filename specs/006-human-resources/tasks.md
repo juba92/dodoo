@@ -170,25 +170,25 @@ exactly one new employee linked back, second conversion is a no-op, no login use
 
 ### Tests for User Story 3
 
-- [ ] T070 [P] [US3] Integration test pipeline: `get_pipeline` grouping/order, `action_set_stage` (guarded, logged, `applicant_stage_conflict`), refuse + reason leaves the active pipeline, hired-stage detection in `tests/hr/test_recruitment_pipeline.py`
-- [ ] T071 [P] [US3] Integration test `create_employee` from applicant: carries name/email/phone/job/department, links `employee_id`, **no `user_id`**, idempotent second run in `tests/hr/test_recruitment_pipeline.py`
-- [ ] T072 [P] [US3] Integration test recruitment validators + Officer-only REST auth in `tests/hr/test_validators.py` (extend)
+- [x] T070 [P] [US3] Integration test pipeline: `get_pipeline` grouping/order, `action_set_stage` (guarded, logged, `applicant_stage_conflict`), refuse + reason leaves the active pipeline, hired-stage detection in `tests/hr/test_recruitment_pipeline.py`
+- [x] T071 [P] [US3] Integration test `create_employee` from applicant: carries name/email/phone/job/department, links `employee_id`, **no `user_id`**, idempotent second run in `tests/hr/test_recruitment_pipeline.py`
+- [x] T072 [P] [US3] Integration test recruitment validators + Officer-only REST auth in `tests/hr/test_validators.py` (extend)
 
 ### Implementation for User Story 3
 
-- [ ] T073 [P] [US3] `hr.recruitment.stage` model in `dodoo/addons/hr/models/hr_recruitment_stage.py` (`sequence`, `is_hired_stage`, `fold`, nullable `company_id`)
-- [ ] T074 [P] [US3] `hr.recruitment.source` model in `dodoo/addons/hr/models/hr_recruitment_source.py` (`is_referral`, nullable `company_id`)
-- [ ] T075 [P] [US3] `hr.applicant.refuse.reason` model in `dodoo/addons/hr/models/hr_applicant_refuse_reason.py` (global)
-- [ ] T076 [US3] `hr.applicant` model in `dodoo/addons/hr/models/hr_applicant.py`: fields + interviewer M2M, `department_id` default from `job_id`, `action_set_stage(env, ids, stage_id, uid, expected_stage_id=None)` (guarded, `log_transition`, `applicant_stage_conflict`), `action_refuse(env, ids, uid, reason_id)`, `create_employee(env, id, uid)` (idempotent, no `user_id`, `log_transition` event `applicant_hired`), `get_pipeline(env, job_id)` (single grouped query, PERF-003) — depends on T073–T075, T033
-- [ ] T077 [US3] Export US3 models from `dodoo/addons/hr/models/__init__.py`; extend `tests/hr/test_migrations.py`
-- [ ] T078 [P] [US3] Add applicant / stage / source validator models to `dodoo/addons/hr/validators.py` (contracts/hr-recruitment.md)
-- [ ] T079 [US3] REST routes in `dodoo/addons/hr/http/__init__.py`: `POST /hr/applicant/{id}/set-stage`, `POST /hr/applicant/{id}/refuse`, `POST /hr/applicant/{id}/create-employee` (Officer-gated) — depends on T076, T078
-- [ ] T080 [US3] Append US3 `ir.rule` rows to `dodoo/addons/hr/data/rules.py` (`hr.applicant` company-scoped for Officer+, deny-by-default; catalog rows for stage / source / refuse-reason)
-- [ ] T081 [US3] Extend `dodoo/addons/hr/data/seed.py`: recruitment stages (Initial Qualification, First Interview, Second Interview, Contract Proposal, **Contract Signed** `is_hired_stage=True`), sources (LinkedIn, Website, **Employee Referral** `is_referral=True`, Agency, Other), refuse reasons; add `idx_hr_applicant_job_stage` / `_company` / `_refused` to `indexes.py`; register `sync_ir_model` entries
-- [ ] T082 [P] [US3] `dodoo/addons/hr/static/views/recruitment-kanban.js` — pipeline via the generic `kanban.js` (`model:"hr.applicant"`, `groupBy:"stage_id"`, `columns` from `hr.recruitment.stage` ordered by `sequence`, `moveEndpoint:"/hr/applicant/{id}/set-stage"`, keyboard "Move to…" menu)
-- [ ] T083 [P] [US3] `dodoo/addons/hr/static/views/applicant-form.js` — applicant form + interviewer picker + Refuse (reason) + Create Employee buttons
-- [ ] T084 [US3] Wire `#/hr/recruitment` (job list), `#/hr/recruitment/:jobId` (Kanban), `#/hr/applicant/:id` routes + the Recruitment menu section (with a job "Publish" toggle) in `app.js`; bump `CLIENT_BUILD` — depends on T082, T083
-- [ ] T085 [US3] E2E `tests/e2e/test_recruitment_ui.py` — publish job, create applicants, **stage move by pointer AND by keyboard**, refuse with reason, convert to employee (idempotent), RTL
+- [x] T073 [P] [US3] `hr.recruitment.stage` model in `dodoo/addons/hr/models/hr_recruitment_stage.py` (`sequence`, `is_hired_stage`, `fold`, nullable `company_id`)
+- [x] T074 [P] [US3] `hr.recruitment.source` model in `dodoo/addons/hr/models/hr_recruitment_source.py` (`is_referral`, nullable `company_id`)
+- [x] T075 [P] [US3] `hr.applicant.refuse.reason` model in `dodoo/addons/hr/models/hr_applicant_refuse_reason.py` (global)
+- [x] T076 [US3] `hr.applicant` model in `dodoo/addons/hr/models/hr_applicant.py`: fields + interviewer M2M, `department_id` default from `job_id`, `action_set_stage(env, ids, stage_id, uid, expected_stage_id=None)` (guarded, `log_transition`, `applicant_stage_conflict`), `action_refuse(env, ids, uid, reason_id)`, `create_employee(env, id, uid)` (idempotent, no `user_id`, `log_transition` event `applicant_hired`), `get_pipeline(env, job_id)` (single grouped query, PERF-003) — depends on T073–T075, T033
+- [x] T077 [US3] Export US3 models from `dodoo/addons/hr/models/__init__.py`; extend `tests/hr/test_migrations.py`
+- [x] T078 [P] [US3] Add applicant / stage / source validator models to `dodoo/addons/hr/validators.py` (contracts/hr-recruitment.md)
+- [x] T079 [US3] REST routes in `dodoo/addons/hr/http/__init__.py`: `POST /hr/applicant/{id}/set-stage`, `POST /hr/applicant/{id}/refuse`, `POST /hr/applicant/{id}/create-employee` (Officer-gated) — depends on T076, T078
+- [x] T080 [US3] Append US3 `ir.rule` rows to `dodoo/addons/hr/data/rules.py` (`hr.applicant` company-scoped for Officer+, deny-by-default; catalog rows for stage / source / refuse-reason)
+- [x] T081 [US3] Extend `dodoo/addons/hr/data/seed.py`: recruitment stages (Initial Qualification, First Interview, Second Interview, Contract Proposal, **Contract Signed** `is_hired_stage=True`), sources (LinkedIn, Website, **Employee Referral** `is_referral=True`, Agency, Other), refuse reasons; add `idx_hr_applicant_job_stage` / `_company` / `_refused` to `indexes.py`; register `sync_ir_model` entries
+- [x] T082 [P] [US3] `dodoo/addons/hr/static/views/recruitment-kanban.js` — pipeline via the generic `kanban.js` (`model:"hr.applicant"`, `groupBy:"stage_id"`, `columns` from `hr.recruitment.stage` ordered by `sequence`, `moveEndpoint:"/hr/applicant/{id}/set-stage"`, keyboard "Move to…" menu)
+- [x] T083 [P] [US3] `dodoo/addons/hr/static/views/applicant-form.js` — applicant form + interviewer picker + Refuse (reason) + Create Employee buttons
+- [x] T084 [US3] Wire `#/hr/recruitment` (job list), `#/hr/recruitment/:jobId` (Kanban), `#/hr/applicant/:id` routes + the Recruitment menu section (with a job "Publish" toggle) in `app.js`; bump `CLIENT_BUILD` — depends on T082, T083
+- [x] T085 [US3] E2E `tests/e2e/test_recruitment_ui.py` — publish job, create applicants, **stage move by pointer AND by keyboard**, refuse with reason, convert to employee (idempotent), RTL
 - [ ] T086 [US3] Extend `tests/e2e/test_web_ui_a11y.py` with the Recruitment Kanban (keyboard alternative to drag, WCAG 2.1 AA)
 
 **Checkpoint**: US1 + US2 + US3 independently functional.

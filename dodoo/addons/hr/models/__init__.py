@@ -1,19 +1,21 @@
-# HR model classes — imported so the metaclass registers them and the installer migrates
-# them. dodoo emits no DB-level FKs, so import order does not matter. Extended per user story.
+# HR model classes — importing them here registers each via the metaclass and makes the
+# installer migrate its table. dodoo emits no DB-level FKs, so import order is irrelevant.
+# Grouped by user story: P1 Employees/Contracts/Skills, P2 Time Off, P3 Recruitment.
 
-# --- P1: Employees, org structure, tags, contracts, skills ---
+from dodoo.addons.hr.models.hr_applicant import HrApplicant
+from dodoo.addons.hr.models.hr_applicant_refuse_reason import HrApplicantRefuseReason
 from dodoo.addons.hr.models.hr_contract import HrContract
 from dodoo.addons.hr.models.hr_contract_type import HrContractType
 from dodoo.addons.hr.models.hr_department import HrDepartment
 from dodoo.addons.hr.models.hr_employee import HrEmployee
 from dodoo.addons.hr.models.hr_employee_category import HrEmployeeCategory
 from dodoo.addons.hr.models.hr_job import HrJob
-
-# --- P2: Time Off ---
 from dodoo.addons.hr.models.hr_leave import HrLeave
 from dodoo.addons.hr.models.hr_leave_allocation import HrLeaveAllocation
 from dodoo.addons.hr.models.hr_leave_type import HrLeaveType
 from dodoo.addons.hr.models.hr_public_holiday import HrPublicHoliday
+from dodoo.addons.hr.models.hr_recruitment_source import HrRecruitmentSource
+from dodoo.addons.hr.models.hr_recruitment_stage import HrRecruitmentStage
 from dodoo.addons.hr.models.hr_skill import (
     HrEmployeeSkill,
     HrSkill,
@@ -26,10 +28,10 @@ from dodoo.addons.hr.models.resource_calendar import (
 )
 
 __all__ = [
-    "HrEmployeeCategory",
     "HrDepartment",
     "HrJob",
     "HrEmployee",
+    "HrEmployeeCategory",
     "HrContractType",
     "HrContract",
     "HrSkillType",
@@ -42,4 +44,8 @@ __all__ = [
     "HrLeaveType",
     "HrLeaveAllocation",
     "HrLeave",
+    "HrRecruitmentStage",
+    "HrRecruitmentSource",
+    "HrApplicantRefuseReason",
+    "HrApplicant",
 ]

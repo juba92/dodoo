@@ -6,12 +6,15 @@ import pytest
 
 from dodoo.addons.hr.validators import (
     AllocationCreate,
+    ApplicantCreate,
+    ApplicantSetStage,
     ContractCreate,
     ContractSetState,
     DepartmentCreate,
     EmployeeCreate,
     LeaveCreate,
     PublicHolidayCreate,
+    StageCreate,
     validate,
 )
 from dodoo.core.exceptions import DodooError
@@ -74,6 +77,16 @@ def test_p2_valid_payloads_pass():
         {"employee_id": 1, "leave_type_id": 1, "date_from": "2026-06-01T00:00:00", "date_to": "2026-06-05T00:00:00"},
     )
     assert m.employee_id == 1
+
+
+def test_p3_recruitment_payloads():
+    with pytest.raises(DodooError, match="unknown_field"):
+        validate(ApplicantCreate, {"partner_name": "X", "job_id": 1, "cv": "blob"})
+    with pytest.raises(DodooError, match="invalid_payload"):
+        validate(StageCreate, {"name": "S", "sequence": -1})
+    validate(ApplicantCreate, {"partner_name": "Jane", "job_id": 3, "interviewer_ids": [1, 2]})
+    m = validate(ApplicantSetStage, {"stage_id": 5, "expected_stage_id": 4})
+    assert m.stage_id == 5
 
 
 def test_valid_payloads_pass():
