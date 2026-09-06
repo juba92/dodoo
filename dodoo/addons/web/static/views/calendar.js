@@ -9,7 +9,7 @@
 //   formRoute,           // fn(id) → hash; default `#/model/<model>/<id>`
 // })
 import * as api from '/web/static/api.js';
-import { App } from '/web/static/app.js';
+import { App, modelRouteBase } from '/web/static/app.js';
 import { t, formatDate } from '/web/static/i18n.js';
 
 const _DAY = 86400000;
@@ -29,7 +29,7 @@ export async function render(container, params) {
     return;
   }
   const stopField = params.dateStopField || dateStartField;
-  const formRoute = params.formRoute || (id => `#/model/${model}/${id}`);
+  const formRoute = params.formRoute || (id => `${modelRouteBase()}/${model}/${id}`);
   container.innerHTML = '';
 
   let fields = App.state.fieldCache[model];

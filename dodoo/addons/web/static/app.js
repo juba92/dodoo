@@ -5,10 +5,23 @@ import { loadCatalog, applyDirection, t, currentLang } from '/web/static/i18n.js
 // lazily-imported view module so a new build is a new module URL — otherwise the
 // browser keeps the first-imported version of a view for the whole tab session
 // (hash navigation never reloads the document) and serves stale screens.
-const CLIENT_BUILD = '2026-09-06.15';
+const CLIENT_BUILD = '2026-09-06.16';
 
 /** Lazy-import a view module, cache-busted by the current build. */
 const _view = path => import(path + '?v=' + CLIENT_BUILD);
+
+/**
+ * Base for the generic list/form routes, derived from the CURRENT hash. A record
+ * opened from an app section (#/hr, #/fleet, #/accounting) must keep that
+ * section's URL prefix so `_renderSidebar` keeps showing that section's menu
+ * instead of falling back to the raw "Models" browser. Called at click time
+ * (while still on the originating screen), so the current hash is the right
+ * source of truth.
+ */
+export function modelRouteBase() {
+  const m = (window.location.hash || '').match(/^#\/(accounting|hr|fleet)(?:\/|$)/);
+  return m ? `#/${m[1]}/model` : '#/model';
+}
 
 // ── Global state ─────────────────────────────────────────────────────────────
 export const App = {
@@ -127,6 +140,8 @@ function _labelFromHash(hash) {
   if (hash === '#/fleet/vehicles')                              return t('Vehicles');
   if (hash === '#/fleet/alerts')                                return t('Fleet Alerts');
   if ((m = hash.match(/^#\/fleet\/vehicle\/(\d+)$/)))        return t('Vehicle') + ' #' + m[1];
+  if ((m = hash.match(/^#\/fleet\/model\/([^/]+)\/new$/)))    return t('New {name}', { name: m[1] });
+  if ((m = hash.match(/^#\/fleet\/model\/([^/]+)\/(\d+)$/)))  return `${m[1]} #${m[2]}`;
   if ((m = hash.match(/^#\/fleet\/model\/([^/]+)$/)))         return m[1];
   if ((m = hash.match(/^#\/hr\/employee\/new$/)))               return t('New Employee');
   if ((m = hash.match(/^#\/hr\/employee\/(\d+)$/)))             return t('Employee') + ' #' + m[1];

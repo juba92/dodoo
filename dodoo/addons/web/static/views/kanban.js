@@ -12,7 +12,7 @@
 //   hash,                 // current route hash (for back-nav)
 // })
 import * as api from '/web/static/api.js';
-import { App } from '/web/static/app.js';
+import { App, modelRouteBase } from '/web/static/app.js';
 import { t } from '/web/static/i18n.js';
 
 const _CARD_TYPES = new Set(['char', 'text', 'integer', 'float', 'boolean', 'date', 'datetime', 'selection', 'many2one']);
@@ -37,7 +37,7 @@ export async function render(container, params) {
     return;
   }
   const moveField = params.moveField || groupBy;
-  const formRoute = params.formRoute || (id => `#/model/${model}/${id}`);
+  const formRoute = params.formRoute || (id => `${modelRouteBase()}/${model}/${id}`);
   container.innerHTML = '';
 
   let fields = App.state.fieldCache[model];

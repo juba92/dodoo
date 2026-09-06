@@ -1,5 +1,5 @@
 import * as api from '/web/static/api.js';
-import { App } from '/web/static/app.js';
+import { App, modelRouteBase } from '/web/static/app.js';
 import { t } from '/web/static/i18n.js';
 
 const _EDITABLE_TYPES = new Set(['char', 'text', 'integer', 'float', 'boolean', 'date', 'datetime', 'many2one']);
@@ -204,7 +204,7 @@ export async function render(container, params) {
         if (!window.confirm(t('Delete record #{id}? This cannot be undone.', { id }))) return;
         try {
           await api.rpc(model, 'unlink', [[id]]);
-          App.navigate(`#/model/${model}`);
+          App.navigate(`${modelRouteBase()}/${model}`);
         } catch (err) {
           _showBanner(statusBanner, 'error', t('Delete failed') + ': ' + err.message);
         }
@@ -310,7 +310,7 @@ export async function render(container, params) {
         const newId = await api.rpc(model, 'create', [vals]);
         originalValues = { ...vals, id: newId };
         _showBanner(statusBanner, 'success', t('Record created successfully.'));
-        App.navigate(`#/model/${model}/${newId}`);
+        App.navigate(`${modelRouteBase()}/${model}/${newId}`);
       } else {
         await api.rpc(model, 'write', [[id], vals]);
         originalValues = { ...originalValues, ...vals };
@@ -323,11 +323,7 @@ export async function render(container, params) {
 
   // ── Discard ──────────────────────────────────────────────────────────────────
   discardBtn.onclick = () => {
-    const h = window.location.hash;
-    const listHash = h.startsWith('#/accounting/model/')
-      ? `#/accounting/model/${model}`
-      : `#/model/${model}`;
-    App.navigate(listHash);
+    App.navigate(`${modelRouteBase()}/${model}`);
   };
 }
 

@@ -1,5 +1,5 @@
 import * as api from '/web/static/api.js';
-import { App } from '/web/static/app.js';
+import { App, modelRouteBase } from '/web/static/app.js';
 import { t, formatDate, formatNumber } from '/web/static/i18n.js';
 
 const _LIST_FIELD_TYPES = new Set(['char', 'text', 'integer', 'float', 'boolean', 'date', 'datetime']);
@@ -83,7 +83,7 @@ export async function render(container, params) {
     newBtn.className = 'btn btn-primary';
     newBtn.setAttribute('data-action', 'new');
     newBtn.textContent = t('Create');
-    newBtn.onclick = () => App.navigate(`#/model/${model}/new`);
+    newBtn.onclick = () => App.navigate(`${modelRouteBase()}/${model}/new`);
     cp.appendChild(newBtn);
 
     const spacer = document.createElement('div');
@@ -180,7 +180,7 @@ export async function render(container, params) {
     } else {
       records.forEach(rec => {
         const tr = document.createElement('tr');
-        tr.onclick = () => App.navigate(`#/model/${model}/${rec.id}`);
+        tr.onclick = () => App.navigate(`${modelRouteBase()}/${model}/${rec.id}`);
         columns.forEach(col => {
           const td = document.createElement('td');
           td.textContent = _cellText(rec[col]);  // always textContent
