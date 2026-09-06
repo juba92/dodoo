@@ -91,18 +91,110 @@ async def register_payment(request: Request, payment_id: int) -> JSONResponse:
         return JSONResponse({"error": str(e)}, status_code=400)
 
 
-@route("/account/report/trial-balance", methods=["GET"], auth="session")
-async def trial_balance(request: Request) -> JSONResponse:
+@route("/account/account/{account_id}/balance", methods=["GET"], auth="session")
+async def account_balance(request: Request, account_id: int) -> JSONResponse:
+    """Debit / credit / net total of every posted line on one account (spec US-5 AC-5)."""
     env = request.app.state.env
+    from dodoo.addons.account.models.account_account import AccountAccount
+
+    try:
+        return JSONResponse({"result": await AccountAccount.get_balance(env, account_id)})
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+def _q(request: Request, key: str) -> str | None:
+    v = request.query_params.get(key)
+    return v or None
+
+
+@route("/account/report/trial-balance", methods=["GET"], auth="session")
+async def report_trial_balance(request: Request) -> JSONResponse:
     from dodoo.addons.account.models.account_report import AccountReportTrialBalance
 
-    params = dict(request.query_params)
     try:
-        result = await AccountReportTrialBalance.get_report(
-            env,
-            date_from=params.get("date_from"),
-            date_to=params.get("date_to"),
+        return JSONResponse(
+            await AccountReportTrialBalance.get_report(
+                request.app.state.env,
+                date_from=_q(request, "date_from"),
+                date_to=_q(request, "date_to"),
+            )
         )
-        return JSONResponse({"result": result})
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@route("/account/report/general-ledger", methods=["GET"], auth="session")
+async def report_general_ledger(request: Request) -> JSONResponse:
+    from dodoo.addons.account.models.account_report import AccountReportGeneralLedger
+
+    acc = _q(request, "account_id")
+    try:
+        return JSONResponse(
+            await AccountReportGeneralLedger.get_report(
+                request.app.state.env,
+                account_id=int(acc) if acc else None,
+                date_from=_q(request, "date_from"),
+                date_to=_q(request, "date_to"),
+            )
+        )
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@route("/account/report/profit-loss", methods=["GET"], auth="session")
+async def report_profit_loss(request: Request) -> JSONResponse:
+    from dodoo.addons.account.models.account_report import AccountReportProfitLoss
+
+    try:
+        return JSONResponse(
+            await AccountReportProfitLoss.get_report(
+                request.app.state.env,
+                date_from=_q(request, "date_from"),
+                date_to=_q(request, "date_to"),
+            )
+        )
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@route("/account/report/balance-sheet", methods=["GET"], auth="session")
+async def report_balance_sheet(request: Request) -> JSONResponse:
+    from dodoo.addons.account.models.account_report import AccountReportBalanceSheet
+
+    try:
+        return JSONResponse(
+            await AccountReportBalanceSheet.get_report(
+                request.app.state.env, date=_q(request, "date")
+            )
+        )
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@route("/account/report/aged-receivable", methods=["GET"], auth="session")
+async def report_aged_receivable(request: Request) -> JSONResponse:
+    from dodoo.addons.account.models.account_report import AccountReportAgedReceivable
+
+    try:
+        return JSONResponse(
+            await AccountReportAgedReceivable.get_report(
+                request.app.state.env, date=_q(request, "date")
+            )
+        )
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@route("/account/report/aged-payable", methods=["GET"], auth="session")
+async def report_aged_payable(request: Request) -> JSONResponse:
+    from dodoo.addons.account.models.account_report import AccountReportAgedPayable
+
+    try:
+        return JSONResponse(
+            await AccountReportAgedPayable.get_report(
+                request.app.state.env, date=_q(request, "date")
+            )
+        )
+    except Exception as e:  # noqa: BLE001
         return JSONResponse({"error": str(e)}, status_code=400)

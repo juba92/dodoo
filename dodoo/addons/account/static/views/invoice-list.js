@@ -10,7 +10,6 @@ const ROUTE_CONFIG = {
   'vendor-credit-notes': { model: 'account.move',    domain: [['move_type', '=', 'in_refund']],   label: 'Vendor Credit Notes',   newType: 'in_refund' },
   'vendor-payments':     { model: 'account.payment', domain: [['payment_type', '=', 'outbound']], label: 'Vendor Payments' },
   'journal-entries':     { model: 'account.move',    domain: [['move_type', '=', 'entry']],       label: 'Journal Entries',        newType: 'entry' },
-  'chart-of-accounts':   { model: 'account.account', domain: [['active', '=', true]],             label: 'Chart of Accounts' },
   'journals':            { model: 'account.journal', domain: [],                                   label: 'Journals' },
 };
 
@@ -45,12 +44,6 @@ function _columns(model) {
     { field: 'date',       label: 'Date',    render: _date },
     { field: 'amount',     label: 'Amount',  render: _fmt, right: true },
     { field: 'state',      label: 'Status',  render: v => v ?? '—' },
-  ];
-  if (model === 'account.account') return [
-    { field: 'code',         label: 'Code',          render: v => v ?? '—' },
-    { field: 'name',         label: 'Name',          render: v => v ?? '—' },
-    { field: 'account_type', label: 'Type',          render: v => v ?? '—' },
-    { field: 'reconcile',    label: 'Reconcilable',  render: v => v ? t('Yes') : t('No') },
   ];
   if (model === 'account.journal') return [
     { field: 'name', label: 'Name', render: v => v ?? '—' },

@@ -826,3 +826,92 @@ fieldset.form-group legend {
 .settings-page .settings-banner { padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; }
 .settings-page .settings-banner.error { background: #fdecea; color: #8a1c14; }
 .settings-page .settings-banner.success { background: #e7f6ec; color: #14612b; }
+
+/* ── Chart of Accounts (account addon) ──────────────────────────────────────── */
+.coa-toggle {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: .8rem; color: var(--text-muted); white-space: nowrap; cursor: pointer;
+}
+.coa-toggle input { cursor: pointer; }
+
+.coa-filter-bar {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 0 0 12px;
+}
+.filter-chip {
+  border: 1px solid var(--border-hard);
+  background: var(--surface);
+  color: var(--text-muted);
+  border-radius: 16px;
+  padding: 3px 12px;
+  font-size: .8rem;
+  transition: background .1s, color .1s, border-color .1s;
+}
+.filter-chip:hover { border-color: var(--brand); color: var(--text); }
+.filter-chip.active {
+  background: var(--brand); border-color: var(--brand); color: #fff;
+}
+
+.coa-table td { max-width: none; }
+.coa-col-code { width: 96px; font-variant-numeric: tabular-nums; }
+.coa-col-recon { width: 150px; text-align: center; }
+
+.coa-group-row td {
+  background: var(--bg);
+  font-weight: 700;
+  font-size: .8rem;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  padding: 6px 12px;
+}
+.coa-table tbody tr.coa-group-row { cursor: default; }
+.coa-table tbody tr.coa-group-row:hover td { background: var(--bg); }
+
+.coa-archived td { opacity: .55; }
+.coa-arch-badge { margin-left: 6px; font-size: .65rem; vertical-align: middle; }
+
+.coa-footer { padding: 10px 2px; font-size: .8rem; color: var(--text-muted); }
+
+.account-balance-box { margin: 12px 24px 0; gap: 28px; }
+
+.field-hint { font-size: .72rem; color: var(--text-muted); }
+
+[dir="rtl"] .coa-arch-badge { margin-left: 0; margin-right: 6px; }
+[dir="rtl"] .coa-col-code { font-variant-numeric: tabular-nums; }
+
+/* ── Accounting reports (account addon) ─────────────────────────────────────── */
+.report-filter {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: .8rem; color: var(--text-muted); white-space: nowrap;
+}
+.report-filter input, .report-filter select {
+  border: 1px solid var(--border-hard); border-radius: 4px;
+  padding: 3px 6px; font-size: .8rem; color: var(--text); background: var(--surface);
+}
+.report-title { margin: 4px 0 2px; font-size: 1.15rem; }
+.report-period { color: var(--text-muted); font-size: .82rem; margin-bottom: 14px; }
+
+.report-table { margin-top: 4px; }
+.report-table td, .report-table th { max-width: none; white-space: nowrap; }
+.report-table tbody tr { cursor: default; }
+.report-table tbody tr:hover { background: transparent; }
+
+.report-section-row td {
+  background: var(--brand); color: #fff; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .04em; font-size: .78rem; padding: 6px 12px;
+}
+.report-group-row td {
+  background: var(--bg); font-weight: 700; font-size: .82rem; color: var(--text);
+}
+.report-subtotal-row td {
+  border-top: 1px solid var(--border-hard); font-size: .84rem;
+  background: rgba(0,0,0,.02);
+}
+.report-total-row td {
+  border-top: 2px solid var(--text); border-bottom: 2px solid var(--text);
+  font-size: .9rem; background: rgba(113,99,158,.06);
+}
+.report-neg { color: var(--danger); }
+
+.report-balance-badge { margin-top: 14px; }

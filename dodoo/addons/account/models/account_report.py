@@ -1,3 +1,14 @@
+"""Financial reports (spec 003, US-8 / FR-036…FR-040).
+
+All figures come from **posted** journal lines only, exclude section/note display
+lines, and honour an optional date range (Balance Sheet / Aged use a single
+"as of" date). Sign convention follows the ledger: ``balance = debit - credit``,
+so asset/expense accounts carry a positive net and liability/equity/income a
+negative one. Each report flips signs where a human expects a positive magnitude
+(income on the P&L, liabilities on the Balance Sheet, …), mirroring Odoo's
+presentation.
+"""
+
 from __future__ import annotations
 
 import datetime
@@ -12,6 +23,23 @@ if TYPE_CHECKING:
     from dodoo import Environment
 
 _POSTED = "state='posted'"
+_REAL_LINE = "ml.display_type NOT IN ('line_section','line_note')"
+
+_INCOME_TYPES = ("income", "income_other")
+_COST_TYPES = ("expense_direct_cost",)
+_EXPENSE_TYPES = ("expense", "expense_other", "expense_depreciation")
+_PL_TYPES = _INCOME_TYPES + _COST_TYPES + _EXPENSE_TYPES
+
+
+def _d(value: Any) -> Decimal:
+    return Decimal(str(value if value is not None else "0"))
+
+
+def _as_date(value: str | datetime.date | None) -> datetime.date | None:
+    """asyncpg wants real ``date`` objects for DATE params, not ISO strings."""
+    if value is None or isinstance(value, datetime.date):
+        return value
+    return datetime.date.fromisoformat(str(value))
 
 
 class _VirtualReport(BaseModel):
@@ -31,6 +59,9 @@ class _VirtualReport(BaseModel):
         return {}
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Trial Balance — FR-036
+# ─────────────────────────────────────────────────────────────────────────────
 class AccountReportTrialBalance(_VirtualReport):
     _abstract = False
     _name = "account.report.trial.balance"
@@ -44,15 +75,15 @@ class AccountReportTrialBalance(_VirtualReport):
         company_id: int | None = None,
     ) -> dict[str, Any]:
         params: dict[str, Any] = {}
-        where_date = ""
+        where = ""
         if date_from:
-            where_date += " AND m.date >= :date_from"
-            params["date_from"] = date_from
+            where += " AND m.date >= :date_from"
+            params["date_from"] = _as_date(date_from)
         if date_to:
-            where_date += " AND m.date <= :date_to"
-            params["date_to"] = date_to
+            where += " AND m.date <= :date_to"
+            params["date_to"] = _as_date(date_to)
         if company_id:
-            where_date += " AND a.company_id = :company_id"
+            where += " AND a.company_id = :company_id"
             params["company_id"] = company_id
 
         sql = f"""
@@ -60,36 +91,46 @@ class AccountReportTrialBalance(_VirtualReport):
                 a.code,
                 a.name,
                 a.account_type,
-                ROUND(SUM(ml.debit)::NUMERIC, 2)   AS total_debit,
-                ROUND(SUM(ml.credit)::NUMERIC, 2)  AS total_credit,
-                ROUND(SUM(ml.balance)::NUMERIC, 2) AS net_balance
+                ROUND(SUM(ml.debit)::NUMERIC, 2)            AS debit,
+                ROUND(SUM(ml.credit)::NUMERIC, 2)           AS credit,
+                ROUND(SUM(ml.debit - ml.credit)::NUMERIC, 2) AS balance
             FROM account_move_line ml
             JOIN account_account a ON a.id = ml.account_id
             JOIN account_move m ON m.id = ml.move_id
-            WHERE m.{_POSTED}
-              AND ml.display_type NOT IN ('line_section','line_note')
-              {where_date}
+            WHERE m.{_POSTED} AND {_REAL_LINE} {where}
             GROUP BY a.id, a.code, a.name, a.account_type
+            HAVING SUM(ml.debit) <> 0 OR SUM(ml.credit) <> 0
             ORDER BY a.code
         """
         async with env.dml_conn() as conn:
             rows = await conn.execute(text(sql), params)
-            result = [dict(row._mapping) for row in rows]
+            lines = [dict(r._mapping) for r in rows]
 
-        total_debit = sum(Decimal(str(r["total_debit"])) for r in result)
-        total_credit = sum(Decimal(str(r["total_credit"])) for r in result)
-        balanced = abs(total_debit - total_credit) < Decimal("0.01")
-
+        total_debit = sum((_d(r["debit"]) for r in lines), Decimal("0"))
+        total_credit = sum((_d(r["credit"]) for r in lines), Decimal("0"))
         return {
-            "result": result,
+            "lines": [
+                {
+                    "code": r["code"],
+                    "name": r["name"],
+                    "account_type": r["account_type"],
+                    "debit": str(_d(r["debit"])),
+                    "credit": str(_d(r["credit"])),
+                    "balance": str(_d(r["balance"])),
+                }
+                for r in lines
+            ],
             "totals": {
-                "total_debit": str(total_debit),
-                "total_credit": str(total_credit),
-                "balanced": balanced,
+                "debit": str(total_debit),
+                "credit": str(total_credit),
+                "balanced": abs(total_debit - total_credit) < Decimal("0.01"),
             },
         }
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# General Ledger — FR-037
+# ─────────────────────────────────────────────────────────────────────────────
 class AccountReportGeneralLedger(_VirtualReport):
     _abstract = False
     _name = "account.report.general.ledger"
@@ -101,6 +142,7 @@ class AccountReportGeneralLedger(_VirtualReport):
         account_id: int | None = None,
         date_from: str | datetime.date | None = None,
         date_to: str | datetime.date | None = None,
+        company_id: int | None = None,
     ) -> dict[str, Any]:
         params: dict[str, Any] = {}
         where = ""
@@ -109,37 +151,124 @@ class AccountReportGeneralLedger(_VirtualReport):
             params["account_id"] = account_id
         if date_from:
             where += " AND m.date >= :date_from"
-            params["date_from"] = date_from
+            params["date_from"] = _as_date(date_from)
         if date_to:
             where += " AND m.date <= :date_to"
-            params["date_to"] = date_to
+            params["date_to"] = _as_date(date_to)
+        if company_id:
+            where += " AND a.company_id = :company_id"
+            params["company_id"] = company_id
 
         sql = f"""
             SELECT
+                a.id   AS account_id,
+                a.code AS account_code,
+                a.name AS account_name,
                 m.date,
                 m.name AS move_name,
                 p.name AS partner_name,
-                ml.name AS line_name,
-                ROUND(ml.debit::NUMERIC, 2) AS debit,
+                ml.name AS label,
+                ROUND(ml.debit::NUMERIC, 2)  AS debit,
                 ROUND(ml.credit::NUMERIC, 2) AS credit,
-                ROUND(SUM(ml.balance) OVER (
+                ROUND(SUM(ml.debit - ml.credit) OVER (
                     PARTITION BY ml.account_id ORDER BY m.date, ml.id
+                    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
                 )::NUMERIC, 2) AS running_balance
             FROM account_move_line ml
+            JOIN account_account a ON a.id = ml.account_id
             JOIN account_move m ON m.id = ml.move_id
             LEFT JOIN res_partner p ON p.id = ml.partner_id
-            WHERE m.{_POSTED}
-              AND ml.display_type NOT IN ('line_section','line_note')
-              {where}
-            ORDER BY m.date, ml.id
+            WHERE m.{_POSTED} AND {_REAL_LINE} {where}
+            ORDER BY a.code, a.id, m.date, ml.id
         """
         async with env.dml_conn() as conn:
             rows = await conn.execute(text(sql), params)
-            result = [dict(row._mapping) for row in rows]
+            raw = [dict(r._mapping) for r in rows]
 
-        return {"result": result}
+        # Group into per-account sections with an opening/closing balance.
+        accounts: list[dict[str, Any]] = []
+        cur: dict[str, Any] | None = None
+        for r in raw:
+            if cur is None or cur["account_id"] != r["account_id"]:
+                cur = {
+                    "account_id": r["account_id"],
+                    "code": r["account_code"],
+                    "name": r["account_name"],
+                    "lines": [],
+                    "total_debit": Decimal("0"),
+                    "total_credit": Decimal("0"),
+                }
+                accounts.append(cur)
+            cur["total_debit"] += _d(r["debit"])
+            cur["total_credit"] += _d(r["credit"])
+            cur["lines"].append(
+                {
+                    "date": r["date"].isoformat() if r["date"] else None,
+                    "move_name": r["move_name"],
+                    "partner_name": r["partner_name"],
+                    "label": r["label"],
+                    "debit": str(_d(r["debit"])),
+                    "credit": str(_d(r["credit"])),
+                    "running_balance": str(_d(r["running_balance"])),
+                }
+            )
+
+        grand_debit = sum((a["total_debit"] for a in accounts), Decimal("0"))
+        grand_credit = sum((a["total_credit"] for a in accounts), Decimal("0"))
+        return {
+            "accounts": [
+                {
+                    "code": a["code"],
+                    "name": a["name"],
+                    "lines": a["lines"],
+                    "total_debit": str(a["total_debit"]),
+                    "total_credit": str(a["total_credit"]),
+                    "balance": str(a["total_debit"] - a["total_credit"]),
+                }
+                for a in accounts
+            ],
+            "totals": {"debit": str(grand_debit), "credit": str(grand_credit)},
+        }
 
 
+async def _pl_rows(
+    env: Environment,
+    types: tuple[str, ...],
+    date_from: datetime.date | None,
+    date_to: datetime.date | None,
+    company_id: int | None,
+) -> list[dict[str, Any]]:
+    params: dict[str, Any] = {"types": list(types)}
+    where = ""
+    if date_from:
+        where += " AND m.date >= :date_from"
+        params["date_from"] = date_from
+    if date_to:
+        where += " AND m.date <= :date_to"
+        params["date_to"] = date_to
+    if company_id:
+        where += " AND a.company_id = :company_id"
+        params["company_id"] = company_id
+    sql = f"""
+        SELECT a.code, a.name, a.account_type,
+               ROUND(SUM(ml.debit - ml.credit)::NUMERIC, 2) AS balance
+        FROM account_move_line ml
+        JOIN account_account a ON a.id = ml.account_id
+        JOIN account_move m ON m.id = ml.move_id
+        WHERE m.{_POSTED} AND {_REAL_LINE}
+          AND a.account_type = ANY(:types) {where}
+        GROUP BY a.id, a.code, a.name, a.account_type
+        HAVING SUM(ml.debit - ml.credit) <> 0
+        ORDER BY a.code
+    """
+    async with env.dml_conn() as conn:
+        rows = await conn.execute(text(sql), params)
+        return [dict(r._mapping) for r in rows]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Profit & Loss — FR-038
+# ─────────────────────────────────────────────────────────────────────────────
 class AccountReportProfitLoss(_VirtualReport):
     _abstract = False
     _name = "account.report.profit.loss"
@@ -152,59 +281,47 @@ class AccountReportProfitLoss(_VirtualReport):
         date_to: str | datetime.date | None = None,
         company_id: int | None = None,
     ) -> dict[str, Any]:
-        params: dict[str, Any] = {}
-        where_date = ""
-        if date_from:
-            where_date += " AND m.date >= :date_from"
-            params["date_from"] = date_from
-        if date_to:
-            where_date += " AND m.date <= :date_to"
-            params["date_to"] = date_to
-        if company_id:
-            where_date += " AND a.company_id = :company_id"
-            params["company_id"] = company_id
+        df, dt = _as_date(date_from), _as_date(date_to)
+        rows = await _pl_rows(env, _PL_TYPES, df, dt, company_id)
 
-        sql = f"""
-            SELECT
-                a.account_type,
-                a.code,
-                a.name,
-                ROUND(SUM(ml.balance)::NUMERIC, 2) AS net_amount
-            FROM account_move_line ml
-            JOIN account_account a ON a.id = ml.account_id
-            JOIN account_move m ON m.id = ml.move_id
-            WHERE m.{_POSTED}
-              AND ml.display_type NOT IN ('line_section','line_note')
-              AND a.account_type IN (
-                  'income','income_other','expense','expense_other',
-                  'expense_depreciation','expense_direct_cost'
-              )
-              {where_date}
-            GROUP BY a.id, a.code, a.name, a.account_type
-            ORDER BY a.code
-        """
-        async with env.dml_conn() as conn:
-            rows = await conn.execute(text(sql), params)
-            accounts = [dict(row._mapping) for row in rows]
+        def _section(types: tuple[str, ...], flip: bool) -> dict[str, Any]:
+            sign = Decimal("-1") if flip else Decimal("1")
+            lines = [
+                {"code": r["code"], "name": r["name"], "amount": str(sign * _d(r["balance"]))}
+                for r in rows
+                if r["account_type"] in types
+            ]
+            total = sum((_d(line["amount"]) for line in lines), Decimal("0"))
+            return {"lines": lines, "total": str(total)}
 
-        income = sum(
-            Decimal(str(r["net_amount"]))
-            for r in accounts
-            if r["account_type"] in ("income", "income_other")
-        )
-        expense = sum(
-            Decimal(str(r["net_amount"]))
-            for r in accounts
-            if r["account_type"] not in ("income", "income_other")
-        )
+        income = _section(_INCOME_TYPES, flip=True)
+        cost = _section(_COST_TYPES, flip=False)
+        expense = _section(_EXPENSE_TYPES, flip=False)
+        gross = _d(income["total"]) - _d(cost["total"])
+        net = gross - _d(expense["total"])
         return {
-            "result": {
-                "income": str(income),
-                "expense": str(expense),
-                "net_profit": str(income - expense),
+            "sections": {
+                "income": income,
+                "cost_of_revenue": cost,
+                "gross_profit": str(gross),
+                "expenses": expense,
+                "net_profit": str(net),
             },
-            "accounts": accounts,
+            "date_from": df.isoformat() if df else None,
+            "date_to": dt.isoformat() if dt else None,
         }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Balance Sheet — FR-039
+# ─────────────────────────────────────────────────────────────────────────────
+_BS_GROUPS = [
+    ("current_assets", ("asset_receivable", "asset_cash", "asset_current", "asset_prepayments"), False),
+    ("fixed_assets", ("asset_fixed", "asset_non_current"), False),
+    ("current_liabilities", ("liability_payable", "liability_credit_card", "liability_current"), True),
+    ("non_current_liabilities", ("liability_non_current",), True),
+    ("equity", ("equity", "equity_unaffected"), True),
+]
 
 
 class AccountReportBalanceSheet(_VirtualReport):
@@ -218,64 +335,69 @@ class AccountReportBalanceSheet(_VirtualReport):
         date: str | datetime.date | None = None,
         company_id: int | None = None,
     ) -> dict[str, Any]:
-        params: dict[str, Any] = {}
-        where = ""
-        if date:
-            where += " AND m.date <= :date"
-            params["date"] = date
+        as_of = _as_date(date) or datetime.date.today()
+        params: dict[str, Any] = {"as_of": as_of}
+        where_company = ""
         if company_id:
-            where += " AND a.company_id = :company_id"
+            where_company = " AND a.company_id = :company_id"
             params["company_id"] = company_id
 
         sql = f"""
-            SELECT
-                a.account_type,
-                a.code,
-                a.name,
-                ROUND(SUM(ml.balance)::NUMERIC, 2) AS net_amount
+            SELECT a.code, a.name, a.account_type,
+                   ROUND(SUM(ml.debit - ml.credit)::NUMERIC, 2) AS balance
             FROM account_move_line ml
             JOIN account_account a ON a.id = ml.account_id
             JOIN account_move m ON m.id = ml.move_id
-            WHERE m.{_POSTED}
-              AND ml.display_type NOT IN ('line_section','line_note')
-              AND a.account_type NOT IN (
-                  'income','income_other','expense','expense_other',
-                  'expense_depreciation','expense_direct_cost','off_balance'
-              )
-              {where}
+            WHERE m.{_POSTED} AND {_REAL_LINE}
+              AND m.date <= :as_of {where_company}
             GROUP BY a.id, a.code, a.name, a.account_type
+            HAVING SUM(ml.debit - ml.credit) <> 0
             ORDER BY a.code
         """
         async with env.dml_conn() as conn:
             rows = await conn.execute(text(sql), params)
-            accounts = [dict(row._mapping) for row in rows]
+            data = [dict(r._mapping) for r in rows]
 
-        assets = sum(
-            Decimal(str(r["net_amount"]))
-            for r in accounts
-            if r["account_type"].startswith("asset_")
-        )
-        liabilities = sum(
-            Decimal(str(r["net_amount"]))
-            for r in accounts
-            if r["account_type"].startswith("liability_")
-        )
-        equity = sum(
-            Decimal(str(r["net_amount"]))
-            for r in accounts
-            if r["account_type"].startswith("equity")
-        )
-        balanced = abs(assets - (liabilities + equity)) < Decimal("0.01")
+        def _group(types: tuple[str, ...], flip: bool) -> dict[str, Any]:
+            sign = Decimal("-1") if flip else Decimal("1")
+            lines = [
+                {"code": r["code"], "name": r["name"], "amount": str(sign * _d(r["balance"]))}
+                for r in data
+                if r["account_type"] in types
+            ]
+            total = sum((_d(x["amount"]) for x in lines), Decimal("0"))
+            return {"lines": lines, "total": str(total)}
 
+        groups = {key: _group(types, flip) for key, types, flip in _BS_GROUPS}
+
+        # Current-year earnings = the P&L result up to the as-of date, sitting in equity.
+        pl = await _pl_rows(env, _PL_TYPES, None, as_of, company_id)
+        cye = -sum((_d(r["balance"]) for r in pl), Decimal("0"))
+
+        assets_total = _d(groups["current_assets"]["total"]) + _d(groups["fixed_assets"]["total"])
+        liabilities_total = (
+            _d(groups["current_liabilities"]["total"])
+            + _d(groups["non_current_liabilities"]["total"])
+        )
+        equity_total = _d(groups["equity"]["total"]) + cye
         return {
-            "result": {
-                "assets": str(assets),
-                "liabilities": str(liabilities),
-                "equity": str(equity),
-                "balanced": balanced,
+            "groups": groups,
+            "current_year_earnings": str(cye),
+            "totals": {
+                "assets": str(assets_total),
+                "liabilities": str(liabilities_total),
+                "equity": str(equity_total),
+                "liabilities_and_equity": str(liabilities_total + equity_total),
+                "balanced": abs(assets_total - (liabilities_total + equity_total)) < Decimal("0.01"),
             },
-            "accounts": accounts,
+            "as_of": as_of.isoformat(),
         }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Aged Receivable / Payable — FR-040
+# ─────────────────────────────────────────────────────────────────────────────
+_BUCKETS = ("b_0_30", "b_31_60", "b_61_90", "b_90_plus")
 
 
 class AccountReportAgedReceivable(_VirtualReport):
@@ -283,12 +405,7 @@ class AccountReportAgedReceivable(_VirtualReport):
     _name = "account.report.aged.receivable"
 
     @classmethod
-    async def get_report(
-        cls,
-        env: Environment,
-        date: str | datetime.date | None = None,
-        company_id: int | None = None,
-    ) -> dict[str, Any]:
+    async def get_report(cls, env, date=None, company_id=None):
         return await _aged_report(env, "asset_receivable", date, company_id)
 
 
@@ -297,13 +414,18 @@ class AccountReportAgedPayable(_VirtualReport):
     _name = "account.report.aged.payable"
 
     @classmethod
-    async def get_report(
-        cls,
-        env: Environment,
-        date: str | datetime.date | None = None,
-        company_id: int | None = None,
-    ) -> dict[str, Any]:
+    async def get_report(cls, env, date=None, company_id=None):
         return await _aged_report(env, "liability_payable", date, company_id)
+
+
+def _bucket_for(days: int) -> str:
+    if days <= 30:
+        return "b_0_30"
+    if days <= 60:
+        return "b_31_60"
+    if days <= 90:
+        return "b_61_90"
+    return "b_90_plus"
 
 
 async def _aged_report(
@@ -312,8 +434,8 @@ async def _aged_report(
     date: str | datetime.date | None = None,
     company_id: int | None = None,
 ) -> dict[str, Any]:
-    ref_date = date or datetime.date.today()
-    params: dict[str, Any] = {"atype": account_type, "ref_date": ref_date}
+    as_of = _as_date(date) or datetime.date.today()
+    params: dict[str, Any] = {"atype": account_type, "as_of": as_of}
     where_company = ""
     if company_id:
         where_company = " AND a.company_id = :company_id"
@@ -321,11 +443,10 @@ async def _aged_report(
 
     sql = f"""
         SELECT
-            p.id AS partner_id,
-            p.name AS partner_name,
-            ROUND(ml.amount_residual::NUMERIC, 2) AS residual,
+            COALESCE(p.name, '—') AS partner_name,
+            ROUND(ABS(ml.amount_residual)::NUMERIC, 2) AS residual,
             m.invoice_date_due AS due_date,
-            (CAST(:ref_date AS DATE) - m.invoice_date_due)::INTEGER AS days_overdue
+            (CAST(:as_of AS DATE) - COALESCE(m.invoice_date_due, m.date))::INTEGER AS days_overdue
         FROM account_move_line ml
         JOIN account_account a ON a.id = ml.account_id
         JOIN account_move m ON m.id = ml.move_id
@@ -333,34 +454,40 @@ async def _aged_report(
         WHERE m.{_POSTED}
           AND ml.display_type = 'payment_term'
           AND a.account_type = :atype
-          AND ml.amount_residual > 0
+          AND ABS(ml.amount_residual) > 0
+          AND m.date <= :as_of
           {where_company}
-        ORDER BY p.name, m.invoice_date_due
+        ORDER BY partner_name, m.invoice_date_due
     """
     async with env.dml_conn() as conn:
         rows = await conn.execute(text(sql), params)
-        lines = [dict(row._mapping) for row in rows]
+        raw = [dict(r._mapping) for r in rows]
 
-    # Bucket by days overdue
-    buckets = {
-        "0_30": Decimal("0"),
-        "31_60": Decimal("0"),
-        "61_90": Decimal("0"),
-        "90_plus": Decimal("0"),
+    partners: dict[str, dict[str, Any]] = {}
+    grand = {b: Decimal("0") for b in _BUCKETS}
+    grand_total = Decimal("0")
+    for r in raw:
+        days = max(int(r["days_overdue"] or 0), 0)
+        bucket = _bucket_for(days)
+        residual = _d(r["residual"])
+        name = r["partner_name"]
+        p = partners.setdefault(
+            name, {"partner_name": name, **{b: Decimal("0") for b in _BUCKETS}, "total": Decimal("0")}
+        )
+        p[bucket] += residual
+        p["total"] += residual
+        grand[bucket] += residual
+        grand_total += residual
+
+    return {
+        "partners": [
+            {
+                "partner_name": p["partner_name"],
+                **{b: str(p[b]) for b in _BUCKETS},
+                "total": str(p["total"]),
+            }
+            for p in sorted(partners.values(), key=lambda x: x["partner_name"])
+        ],
+        "totals": {**{b: str(grand[b]) for b in _BUCKETS}, "total": str(grand_total)},
+        "as_of": as_of.isoformat(),
     }
-    for line in lines:
-        days = line.get("days_overdue") or 0
-        if days is None or days < 0:
-            days = 0
-        residual = Decimal(str(line["residual"]))
-        if days <= 30:
-            line["bucket"] = "0_30"
-        elif days <= 60:
-            line["bucket"] = "31_60"
-        elif days <= 90:
-            line["bucket"] = "61_90"
-        else:
-            line["bucket"] = "90_plus"
-        buckets[line["bucket"]] += residual
-
-    return {"result": lines, "buckets": {k: str(v) for k, v in buckets.items()}}

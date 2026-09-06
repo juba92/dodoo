@@ -1,6 +1,15 @@
 import * as api from '/web/static/api.js';
 import { loadCatalog, applyDirection, t, currentLang } from '/web/static/i18n.js';
 
+// Bump on any web/account/localization static change. Appended as ?v= to every
+// lazily-imported view module so a new build is a new module URL — otherwise the
+// browser keeps the first-imported version of a view for the whole tab session
+// (hash navigation never reloads the document) and serves stale screens.
+const CLIENT_BUILD = '2026-09-06.6';
+
+/** Lazy-import a view module, cache-busted by the current build. */
+const _view = path => import(path + '?v=' + CLIENT_BUILD);
+
 // ── Global state ─────────────────────────────────────────────────────────────
 export const App = {
   state: {
@@ -75,6 +84,12 @@ const _ACC_LABELS = {
   'journals': 'Journals',
 };
 
+const _REPORT_LABELS = {
+  'trial-balance': 'Trial Balance', 'general-ledger': 'General Ledger',
+  'profit-loss': 'Profit & Loss', 'balance-sheet': 'Balance Sheet',
+  'aged-receivable': 'Aged Receivable', 'aged-payable': 'Aged Payable',
+};
+
 function _labelFromHash(hash) {
   if (hash === '#/home' || hash === '#/') return t('Home');
   if (hash === '#/login') return t('Login');
@@ -82,7 +97,9 @@ function _labelFromHash(hash) {
   let m;
   if ((m = hash.match(/^#\/accounting\/move\/new(\?.*)?$/)))    return t('New Invoice');
   if ((m = hash.match(/^#\/accounting\/move\/(\d+)$/)))         return t('Invoice #{id}', { id: m[1] });
-  if ((m = hash.match(/^#\/accounting\/reports\/([^/]+)$/)))    return t(m[1].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()));
+  if ((m = hash.match(/^#\/accounting\/account\/new$/)))        return t('New Account');
+  if ((m = hash.match(/^#\/accounting\/account\/(\d+)$/)))      return t('Account') + ' #' + m[1];
+  if ((m = hash.match(/^#\/accounting\/reports\/([^/]+)$/)))    return t(_REPORT_LABELS[m[1]] || m[1].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()));
   if ((m = hash.match(/^#\/accounting\/model\/([^/]+)\/new$/))) return t('New {name}', { name: m[1] });
   if ((m = hash.match(/^#\/accounting\/model\/([^/]+)\/(\d+)$/))) return `${m[1]} #${m[2]}`;
   if ((m = hash.match(/^#\/accounting\/model\/([^/]+)$/)))      return m[1];
@@ -266,7 +283,7 @@ function _renderSidebar(hash) {
 }
 
 async function _renderAccountingMenu(sidebar, currentHash) {
-  const { ACCOUNTING_MENU } = await import('/account/static/account-menu.js');
+  const { ACCOUNTING_MENU } = await _view('/account/static/account-menu.js');
   // Guard: if a new navigation replaced this sidebar, bail out
   if (!document.body.contains(sidebar)) return;
   sidebar.innerHTML = '';
@@ -274,6 +291,8 @@ async function _renderAccountingMenu(sidebar, currentHash) {
   const allItems = ACCOUNTING_MENU.flatMap(s => s.items);
   const directMatch = allItems.find(({ hash }) => currentHash === hash || currentHash.startsWith(hash + '/'));
   if (directMatch) _activeMenuHash = directMatch.hash;
+  // Account form lives under the Chart of Accounts menu entry.
+  else if (/^#\/accounting\/account\/(new|\d+)$/.test(currentHash)) _activeMenuHash = '#/accounting/chart-of-accounts';
 
   ACCOUNTING_MENU.forEach(({ section, items }) => {
     const title = document.createElement('div');
@@ -313,21 +332,23 @@ async function _handleLogout() {
 
 // ── Router ────────────────────────────────────────────────────────────────────
 const _ROUTES = [
-  [/^#\/login(\?.*)?$/, () => import('/web/static/views/login.js')],
-  [/^#\/home$/, () => import('/web/static/views/home.js')],
-  [/^#\/settings$/, () => import('/localization/static/views/settings.js')],
-  [/^#\/module\/(.+)$/, () => import('/web/static/views/home.js')],
+  [/^#\/login(\?.*)?$/, () => _view('/web/static/views/login.js')],
+  [/^#\/home$/, () => _view('/web/static/views/home.js')],
+  [/^#\/settings$/, () => _view('/localization/static/views/settings.js')],
+  [/^#\/module\/(.+)$/, () => _view('/web/static/views/home.js')],
   // Accounting-specific routes (must come before generic model routes)
-  [/^#\/accounting\/move\/(new|\d+)$/, () => import('/account/static/views/invoice-form.js')],
-  [/^#\/accounting\/reports\/([^/]+)$/, () => import('/account/static/views/report-view.js')],
-  [/^#\/accounting\/model\/([^/]+)\/new$/, () => import('/web/static/views/form.js')],
-  [/^#\/accounting\/model\/([^/]+)\/(\d+)$/, () => import('/web/static/views/form.js')],
-  [/^#\/accounting\/model\/([^/]+)$/, () => import('/web/static/views/list.js')],
-  [/^#\/accounting\/([^/]+)$/, () => import('/account/static/views/invoice-list.js')],
+  [/^#\/accounting\/move\/(new|\d+)$/, () => _view('/account/static/views/invoice-form.js')],
+  [/^#\/accounting\/chart-of-accounts$/, () => _view('/account/static/views/coa-list.js')],
+  [/^#\/accounting\/account\/(new|\d+)$/, () => _view('/account/static/views/account-form.js')],
+  [/^#\/accounting\/reports\/([^/]+)$/, () => _view('/account/static/views/report-view.js')],
+  [/^#\/accounting\/model\/([^/]+)\/new$/, () => _view('/web/static/views/form.js')],
+  [/^#\/accounting\/model\/([^/]+)\/(\d+)$/, () => _view('/web/static/views/form.js')],
+  [/^#\/accounting\/model\/([^/]+)$/, () => _view('/web/static/views/list.js')],
+  [/^#\/accounting\/([^/]+)$/, () => _view('/account/static/views/invoice-list.js')],
   // Generic model routes
-  [/^#\/model\/([^/]+)\/new$/, () => import('/web/static/views/form.js')],
-  [/^#\/model\/([^/]+)\/(\d+)$/, () => import('/web/static/views/form.js')],
-  [/^#\/model\/([^/]+)$/, () => import('/web/static/views/list.js')],
+  [/^#\/model\/([^/]+)\/new$/, () => _view('/web/static/views/form.js')],
+  [/^#\/model\/([^/]+)\/(\d+)$/, () => _view('/web/static/views/form.js')],
+  [/^#\/model\/([^/]+)$/, () => _view('/web/static/views/list.js')],
 ];
 
 function _parseHash(hash) {
@@ -346,6 +367,8 @@ function _paramsFromHash(hash) {
   let m;
   if ((m = base.match(/^#\/accounting\/move\/new$/)))                  return { id: 'new', moveType: qs.get('type') || 'out_invoice', editId: qs.get('edit') ? parseInt(qs.get('edit'), 10) : null };
   if ((m = base.match(/^#\/accounting\/move\/(\d+)$/)))                return { id: parseInt(m[1], 10) };
+  if ((m = base.match(/^#\/accounting\/account\/new$/)))               return { id: 'new' };
+  if ((m = base.match(/^#\/accounting\/account\/(\d+)$/)))             return { id: parseInt(m[1], 10) };
   if ((m = base.match(/^#\/accounting\/reports\/([^/]+)$/)))           return { report: m[1] };
   if ((m = base.match(/^#\/accounting\/model\/([^/]+)\/new$/)))        return { model: m[1], id: 'new' };
   if ((m = base.match(/^#\/accounting\/model\/([^/]+)\/(\d+)$/)))      return { model: m[1], id: parseInt(m[2], 10) };
@@ -365,7 +388,7 @@ async function _route() {
   // Guard: redirect to login if no session
   if (!App.state.token && !isLogin) {
     _buildLoginShell();
-    const { render } = await import('/web/static/views/login.js');
+    const { render } = await _view('/web/static/views/login.js');
     render(document.getElementById('main'), {});
     return;
   }
@@ -390,10 +413,6 @@ async function _route() {
   const { render } = await parsed.loader();
   render(document.getElementById('main'), _paramsFromHash(hash));
 }
-
-// Bump on any web/account/localization static change so it's obvious in the console
-// which bundle a browser actually loaded (helps spot a stale cache).
-const CLIENT_BUILD = '2026-09-06.3';
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
