@@ -5,10 +5,13 @@ from __future__ import annotations
 import pytest
 
 from dodoo.addons.hr.validators import (
+    AllocationCreate,
     ContractCreate,
     ContractSetState,
     DepartmentCreate,
     EmployeeCreate,
+    LeaveCreate,
+    PublicHolidayCreate,
     validate,
 )
 from dodoo.core.exceptions import DodooError
@@ -44,6 +47,33 @@ def test_contract_date_cross_field_rejected():
             ContractCreate,
             {"name": "c", "employee_id": 1, "company_id": 1, "date_start": "2026-06-01", "date_end": "2026-01-01"},
         )
+
+
+def test_p2_cross_field_rules():
+    with pytest.raises(DodooError, match="invalid_payload"):
+        validate(
+            AllocationCreate,
+            {"employee_id": 1, "leave_type_id": 1, "company_id": 1, "mode": "accrual"},
+        )
+    with pytest.raises(DodooError, match="invalid_payload"):
+        validate(
+            LeaveCreate,
+            {"employee_id": 1, "leave_type_id": 1, "date_from": "2026-06-05T00:00:00", "date_to": "2026-06-01T00:00:00"},
+        )
+    with pytest.raises(DodooError, match="invalid_payload"):
+        validate(PublicHolidayCreate, {"name": "x", "date_from": "2026-06-05", "date_to": "2026-06-01"})
+
+
+def test_p2_valid_payloads_pass():
+    validate(
+        AllocationCreate,
+        {"employee_id": 1, "leave_type_id": 1, "company_id": 1, "mode": "accrual", "accrual_rate": 1, "accrual_period": "month"},
+    )
+    m = validate(
+        LeaveCreate,
+        {"employee_id": 1, "leave_type_id": 1, "date_from": "2026-06-01T00:00:00", "date_to": "2026-06-05T00:00:00"},
+    )
+    assert m.employee_id == 1
 
 
 def test_valid_payloads_pass():

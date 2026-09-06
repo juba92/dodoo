@@ -24,7 +24,7 @@ export const HR_MENU = [
     section: 'Time Off', requires: null,
     items: [
       { label: 'Calendar',     hash: '#/hr/timeoff' },
-      { label: 'Allocations',  hash: '#/hr/allocations' },
+      { label: 'Allocations',  hash: '#/hr/model/hr.leave.allocation' },
       { label: 'Leave Types',  hash: '#/hr/model/hr.leave.type', requires: 'administrator' },
       { label: 'Public Holidays', hash: '#/hr/model/hr.public.holiday', requires: 'administrator' },
     ],

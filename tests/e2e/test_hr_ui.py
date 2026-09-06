@@ -68,6 +68,18 @@ def test_hr_menu_sections_render(page: Page):
     expect(page.locator(".sidebar-section-title", has_text="Employees")).to_be_visible()
 
 
+def test_timeoff_calendar_renders(page: Page):
+    _login(page)
+    page.goto(f"{_CLIENT}#/hr/timeoff")
+    expect(page.locator(".o-calendar, .alert-error")).to_be_visible()
+
+
+def test_timeoff_request_form_has_duration_preview(page: Page):
+    _login(page)
+    page.goto(f"{_CLIENT}#/hr/timeoff/new")
+    expect(page.locator(".o-duration-preview")).to_be_visible()
+
+
 def test_rtl_layout_when_arabic(page: Page):
     _login(page)
     # assumes the system default language is Arabic on a fresh install (feature 005)

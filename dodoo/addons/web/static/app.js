@@ -5,7 +5,7 @@ import { loadCatalog, applyDirection, t, currentLang } from '/web/static/i18n.js
 // lazily-imported view module so a new build is a new module URL — otherwise the
 // browser keeps the first-imported version of a view for the whole tab session
 // (hash navigation never reloads the document) and serves stale screens.
-const CLIENT_BUILD = '2026-09-06.7';
+const CLIENT_BUILD = '2026-09-06.8';
 
 /** Lazy-import a view module, cache-busted by the current build. */
 const _view = path => import(path + '?v=' + CLIENT_BUILD);
@@ -110,6 +110,10 @@ function _labelFromHash(hash) {
   if ((m = hash.match(/^#\/module\/(.+)$/)))                    return m[1];
   if (hash === '#/hr/employees')                                return t('Employees');
   if (hash === '#/hr/contracts')                                return t('Contracts');
+  if (hash === '#/hr/timeoff')                                  return t('Time Off');
+  if (hash === '#/hr/allocations')                              return t('Allocations');
+  if ((m = hash.match(/^#\/hr\/timeoff\/new$/)))               return t('New Request');
+  if ((m = hash.match(/^#\/hr\/timeoff\/(\d+)$/)))            return t('Request') + ' #' + m[1];
   if ((m = hash.match(/^#\/hr\/employee\/new$/)))               return t('New Employee');
   if ((m = hash.match(/^#\/hr\/employee\/(\d+)$/)))             return t('Employee') + ' #' + m[1];
   if ((m = hash.match(/^#\/hr\/model\/([^/]+)\/new$/)))         return t('New {name}', { name: m[1] });
@@ -401,6 +405,8 @@ const _ROUTES = [
   [/^#\/hr\/employees$/, () => _view('/hr/static/views/employee-kanban.js')],
   [/^#\/hr\/employee\/(new|\d+)$/, () => _view('/hr/static/views/employee-form.js')],
   [/^#\/hr\/contracts$/, () => _view('/hr/static/views/contract-list.js')],
+  [/^#\/hr\/timeoff$/, () => _view('/hr/static/views/timeoff-calendar.js')],
+  [/^#\/hr\/timeoff\/(new|\d+)$/, () => _view('/hr/static/views/timeoff-form.js')],
   [/^#\/hr\/model\/([^/]+)\/new$/, () => _view('/web/static/views/form.js')],
   [/^#\/hr\/model\/([^/]+)\/(\d+)$/, () => _view('/web/static/views/form.js')],
   [/^#\/hr\/model\/([^/]+)$/, () => _view('/web/static/views/list.js')],
@@ -435,6 +441,7 @@ function _paramsFromHash(hash) {
   if ((m = base.match(/^#\/accounting\/([^/]+)$/)))                    return { route: m[1] };
   if ((m = base.match(/^#\/module\/(.+)$/)))                           return { mode: 'module', name: m[1] };
   if ((m = base.match(/^#\/hr\/employee\/(new|\d+)$/)))                return { id: m[1] === 'new' ? 'new' : parseInt(m[1], 10) };
+  if ((m = base.match(/^#\/hr\/timeoff\/(new|\d+)$/)))                 return { id: m[1] === 'new' ? 'new' : parseInt(m[1], 10) };
   if ((m = base.match(/^#\/hr\/model\/([^/]+)\/new$/)))               return { model: m[1], id: 'new' };
   if ((m = base.match(/^#\/hr\/model\/([^/]+)\/(\d+)$/)))             return { model: m[1], id: parseInt(m[2], 10) };
   if ((m = base.match(/^#\/hr\/model\/([^/]+)$/)))                    return { model: m[1] };

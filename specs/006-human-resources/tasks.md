@@ -131,28 +131,28 @@ refuse restores; accrual ticks with cap; calendar scoping (self / team / all).
 
 ### Tests for User Story 2
 
-- [ ] T050 [P] [US2] Unit test `_leave_duration` (weekday calendar + public-holiday exclusion, day vs hour unit, zero-day → reject) in `tests/hr/test_leave_duration.py`
-- [ ] T051 [P] [US2] Unit test the accrual tick (`floor(periods) * rate`, `accrual_max` cap, idempotent re-run) in `tests/hr/test_leave_accrual.py`
-- [ ] T052 [P] [US2] Integration test each `approval_mode` (`no_validation` / `manager` / `hr` / `both`), self-approval escalation to HR Officer, `refused` from every non-terminal state, and approved→refused balance restore in `tests/hr/test_leave_approval.py`
-- [ ] T053 [P] [US2] Integration test balance = allocated − taken − pending, negative-balance rejection when `allow_negative=false`, and overlap rejection in `tests/hr/test_leave_balance.py`
+- [x] T050 [P] [US2] Unit test `_leave_duration` (weekday calendar + public-holiday exclusion, day vs hour unit, zero-day → reject) in `tests/hr/test_leave_duration.py`
+- [x] T051 [P] [US2] Unit test the accrual tick (`floor(periods) * rate`, `accrual_max` cap, idempotent re-run) in `tests/hr/test_leave_accrual.py`
+- [x] T052 [P] [US2] Integration test each `approval_mode` (`no_validation` / `manager` / `hr` / `both`), self-approval escalation to HR Officer, `refused` from every non-terminal state, and approved→refused balance restore in `tests/hr/test_leave_approval.py`
+- [x] T053 [P] [US2] Integration test balance = allocated − taken − pending, negative-balance rejection when `allow_negative=false`, and overlap rejection in `tests/hr/test_leave_balance.py`
 - [ ] T054 [P] [US2] Integration test `hr.leave` record rules: employee sees own, manager sees team, Officer sees all; `leave_state_conflict` on stale approve in `tests/hr/test_access_rules.py` (extend)
 
 ### Implementation for User Story 2
 
-- [ ] T055 [P] [US2] `resource.calendar` + `resource.calendar.attendance` models in `dodoo/addons/hr/models/resource_calendar.py`
-- [ ] T056 [P] [US2] `hr.public.holiday` model in `dodoo/addons/hr/models/hr_public_holiday.py` (nullable `company_id`, `date_to ≥ date_from`)
-- [ ] T057 [P] [US2] `hr.leave.type` model in `dodoo/addons/hr/models/hr_leave_type.py` (`request_unit`, `is_paid`, `allocation_required`, `allow_negative`, `approval_mode`, nullable `company_id`)
-- [ ] T058 [US2] `hr.leave.allocation` model in `dodoo/addons/hr/models/hr_leave_allocation.py` (`mode` regular/accrual, accrual fields, `last_accrual_date`; `run_leave_accrual(env)` idempotent; accrual-config `create`/`write` guard) — depends on T057, T006
-- [ ] T059 [US2] `hr.leave` model in `dodoo/addons/hr/models/hr_leave.py`: `_leave_duration(env, employee_id, date_from, date_to, unit)` (set-based `generate_series` query, research.md D5), `create` guards (`leave_zero_days`, `leave_overlap`, `leave_insufficient_balance`), state machine, `action_approve(env, ids, uid, expected_state=None)` (approver-set resolution per ADR-025, one step, `log_transition`, `leave_state_conflict`), `action_refuse(env, ids, uid, reason, expected_state=None)`, `get_balance`, `get_duration_preview` — depends on T055–T058
-- [ ] T060 [US2] Export US2 models from `dodoo/addons/hr/models/__init__.py`; extend `tests/hr/test_migrations.py`
-- [ ] T061 [P] [US2] Add leave-type / allocation / leave / public-holiday validator models to `dodoo/addons/hr/validators.py` (contracts/hr-timeoff.md)
-- [ ] T062 [US2] REST routes in `dodoo/addons/hr/http/__init__.py`: `POST /hr/leave/{id}/approve`, `POST /hr/leave/{id}/refuse`, `POST /hr/cron/leave-accrual` (Administrator) — validate, resolve approver set, group-check, envelope — depends on T059, T061
-- [ ] T063 [US2] Append US2 `ir.rule` rows to `dodoo/addons/hr/data/rules.py` (`hr.leave` owner|manager, Officer full, deny-by-default; `hr.leave.allocation`; catalog rows for `hr.leave.type` / `hr.public.holiday` / `resource.calendar*`)
-- [ ] T064 [US2] Extend `dodoo/addons/hr/data/seed.py`: one `resource.calendar` per company (Mon–Fri 08–12/13–17) + attendance rows; seed ~4 leave types (Paid Time Off, Sick, Unpaid, Compensatory); empty public-holiday set; add US2 indexes (`idx_hr_leave_employee_type_state`, `idx_hr_leave_dates`, `idx_hr_leave_allocation_employee_type`, `idx_hr_public_holiday_range`) to `indexes.py`; register `sync_ir_model` entries
-- [ ] T065 [P] [US2] `dodoo/addons/hr/static/views/timeoff-calendar.js` — calendar view via the generic `calendar.js` (`model:"hr.leave"`, `dateStartField:"date_from"`, `dateStopField:"date_to"`, colour by `leave_type_id`), scoped query per caller role
-- [ ] T066 [P] [US2] `dodoo/addons/hr/static/views/timeoff-form.js` — request form with live `get_duration_preview` + Approve/Refuse buttons calling the REST routes with `expected_state`
-- [ ] T067 [US2] Wire `#/hr/timeoff` (calendar), `#/hr/timeoff/:id` (+ `/new`), `#/hr/allocations` routes + the Time Off menu section in `app.js`; bump `CLIENT_BUILD` — depends on T065, T066
-- [ ] T068 [US2] E2E `tests/e2e/test_hr_ui.py` (extend) — submit leave spanning weekend+holiday, manager approve, balance change, overlap reject, calendar scoping
+- [x] T055 [P] [US2] `resource.calendar` + `resource.calendar.attendance` models in `dodoo/addons/hr/models/resource_calendar.py`
+- [x] T056 [P] [US2] `hr.public.holiday` model in `dodoo/addons/hr/models/hr_public_holiday.py` (nullable `company_id`, `date_to ≥ date_from`)
+- [x] T057 [P] [US2] `hr.leave.type` model in `dodoo/addons/hr/models/hr_leave_type.py` (`request_unit`, `is_paid`, `allocation_required`, `allow_negative`, `approval_mode`, nullable `company_id`)
+- [x] T058 [US2] `hr.leave.allocation` model in `dodoo/addons/hr/models/hr_leave_allocation.py` (`mode` regular/accrual, accrual fields, `last_accrual_date`; `run_leave_accrual(env)` idempotent; accrual-config `create`/`write` guard) — depends on T057, T006
+- [x] T059 [US2] `hr.leave` model in `dodoo/addons/hr/models/hr_leave.py`: `_leave_duration(env, employee_id, date_from, date_to, unit)` (set-based `generate_series` query, research.md D5), `create` guards (`leave_zero_days`, `leave_overlap`, `leave_insufficient_balance`), state machine, `action_approve(env, ids, uid, expected_state=None)` (approver-set resolution per ADR-025, one step, `log_transition`, `leave_state_conflict`), `action_refuse(env, ids, uid, reason, expected_state=None)`, `get_balance`, `get_duration_preview` — depends on T055–T058
+- [x] T060 [US2] Export US2 models from `dodoo/addons/hr/models/__init__.py`; extend `tests/hr/test_migrations.py`
+- [x] T061 [P] [US2] Add leave-type / allocation / leave / public-holiday validator models to `dodoo/addons/hr/validators.py` (contracts/hr-timeoff.md)
+- [x] T062 [US2] REST routes in `dodoo/addons/hr/http/__init__.py`: `POST /hr/leave/{id}/approve`, `POST /hr/leave/{id}/refuse`, `POST /hr/cron/leave-accrual` (Administrator) — validate, resolve approver set, group-check, envelope — depends on T059, T061
+- [x] T063 [US2] Append US2 `ir.rule` rows to `dodoo/addons/hr/data/rules.py` (`hr.leave` owner|manager, Officer full, deny-by-default; `hr.leave.allocation`; catalog rows for `hr.leave.type` / `hr.public.holiday` / `resource.calendar*`)
+- [x] T064 [US2] Extend `dodoo/addons/hr/data/seed.py`: one `resource.calendar` per company (Mon–Fri 08–12/13–17) + attendance rows; seed ~4 leave types (Paid Time Off, Sick, Unpaid, Compensatory); empty public-holiday set; add US2 indexes (`idx_hr_leave_employee_type_state`, `idx_hr_leave_dates`, `idx_hr_leave_allocation_employee_type`, `idx_hr_public_holiday_range`) to `indexes.py`; register `sync_ir_model` entries
+- [x] T065 [P] [US2] `dodoo/addons/hr/static/views/timeoff-calendar.js` — calendar view via the generic `calendar.js` (`model:"hr.leave"`, `dateStartField:"date_from"`, `dateStopField:"date_to"`, colour by `leave_type_id`), scoped query per caller role
+- [x] T066 [P] [US2] `dodoo/addons/hr/static/views/timeoff-form.js` — request form with live `get_duration_preview` + Approve/Refuse buttons calling the REST routes with `expected_state`
+- [x] T067 [US2] Wire `#/hr/timeoff` (calendar), `#/hr/timeoff/:id` (+ `/new`), `#/hr/allocations` routes + the Time Off menu section in `app.js`; bump `CLIENT_BUILD` — depends on T065, T066
+- [x] T068 [US2] E2E `tests/e2e/test_hr_ui.py` (extend) — submit leave spanning weekend+holiday, manager approve, balance change, overlap reject, calendar scoping
 - [ ] T069 [US2] Extend `tests/e2e/test_web_ui_a11y.py` with the Time Off calendar + form (keyboard day nav, status text+ARIA)
 
 **Checkpoint**: US1 + US2 both work independently.

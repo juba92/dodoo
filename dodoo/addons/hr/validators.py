@@ -146,3 +146,72 @@ class EmployeeSkillCreate(Payload):
     employee_id: int
     skill_id: int
     skill_level_id: int
+
+
+# --------------------------------------------------------------------------- P2
+
+
+class LeaveTypeCreate(Payload):
+    name: str = Field(min_length=1, max_length=64)
+    company_id: int | None = None
+    request_unit: Literal["day", "hour"] = "day"
+    is_paid: bool = True
+    allocation_required: bool = True
+    allow_negative: bool = False
+    approval_mode: Literal["no_validation", "manager", "hr", "both"] = "manager"
+    color: int = 0
+
+
+class AllocationCreate(Payload):
+    employee_id: int
+    leave_type_id: int
+    company_id: int
+    mode: Literal["regular", "accrual"] = "regular"
+    number_of_units: float = Field(default=0, ge=0)
+    accrual_rate: float = Field(default=0, ge=0)
+    accrual_period: Literal["day", "week", "month"] | None = None
+    accrual_max: float | None = Field(default=None, ge=0)
+    date_from: _dt.date | None = None
+    date_to: _dt.date | None = None
+
+    @model_validator(mode="after")
+    def _accrual(self) -> AllocationCreate:
+        if self.mode == "accrual" and (not self.accrual_rate or not self.accrual_period):
+            raise ValueError("accrual_rate and accrual_period required for accrual mode")
+        return self
+
+
+class LeaveCreate(Payload):
+    employee_id: int
+    leave_type_id: int
+    company_id: int | None = None
+    date_from: _dt.datetime
+    date_to: _dt.datetime
+
+    @model_validator(mode="after")
+    def _order(self) -> LeaveCreate:
+        if self.date_to < self.date_from:
+            raise ValueError("date_to before date_from")
+        return self
+
+
+class LeaveApprove(Payload):
+    expected_state: Literal["to_approve", "second_approval"] | None = None
+
+
+class LeaveRefuse(Payload):
+    reason: str = Field(default="", max_length=256)
+    expected_state: Literal["to_approve", "second_approval", "approved"] | None = None
+
+
+class PublicHolidayCreate(Payload):
+    name: str = Field(min_length=1, max_length=64)
+    date_from: _dt.date
+    date_to: _dt.date
+    company_id: int | None = None
+
+    @model_validator(mode="after")
+    def _order(self) -> PublicHolidayCreate:
+        if self.date_to < self.date_from:
+            raise ValueError("date_to before date_from")
+        return self
