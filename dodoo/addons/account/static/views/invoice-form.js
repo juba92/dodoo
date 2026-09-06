@@ -76,9 +76,20 @@ export async function render(container, params) {
   try {
     lines = await api.rpc('account.move.line', 'search_read',
       [[['move_id', '=', id], ['display_type', 'in', ['product', 'line_section', 'line_note']]]],
-      { fields: ['id', 'name', 'account_id', 'debit', 'credit', 'display_type', 'sequence'], order: 'sequence asc' }
+      { fields: ['id', 'name', 'account_id', 'debit', 'credit', 'quantity', 'price_unit',
+        'tax_ids', 'display_type', 'sequence'], order: 'sequence asc' }
     );
   } catch { /* show empty lines */ }
+
+  // Resolve tax names referenced by the lines
+  const taxNames = {};
+  const taxIds = [...new Set(lines.flatMap(l => Array.isArray(l.tax_ids) ? l.tax_ids : []))];
+  if (taxIds.length) {
+    try {
+      const txs = await api.rpc('account.tax', 'read', [taxIds], { fields: ['id', 'name'] });
+      txs.forEach(tx => { taxNames[tx.id] = tx.name; });
+    } catch { /* names optional */ }
+  }
 
   // Control panel
   if (cp) _buildCP(cp, move, id);
@@ -90,7 +101,7 @@ export async function render(container, params) {
   container.appendChild(_headerCard(move));
 
   // Lines
-  container.appendChild(_linesCard(lines));
+  container.appendChild(_linesCard(lines, taxNames));
 
   // Totals
   container.appendChild(_totalsCard(move));
@@ -258,7 +269,7 @@ function _headerCard(move) {
   return card;
 }
 
-function _linesCard(lines) {
+function _linesCard(lines, taxNames = {}) {
   const card = document.createElement('div');
   card.className = 'form-card';
 
@@ -272,7 +283,9 @@ function _linesCard(lines) {
 
   const thead = document.createElement('thead');
   const hr = document.createElement('tr');
-  [[t('Description'), ''], [t('Account'), ''], [t('Debit'), 'text-right'], [t('Credit'), 'text-right'], [t('Balance'), 'text-right']].forEach(([txt, cls]) => {
+  [[t('Description'), ''], [t('Account'), ''], [t('Quantity'), 'text-right'],
+   [t('Unit Price'), 'text-right'], [t('Taxes'), ''], [t('Debit'), 'text-right'],
+   [t('Credit'), 'text-right'], [t('Balance'), 'text-right']].forEach(([txt, cls]) => {
     const th = document.createElement('th');
     th.textContent = txt;
     if (cls) th.className = cls;
@@ -287,7 +300,7 @@ function _linesCard(lines) {
   if (productLines.length === 0) {
     const tr = document.createElement('tr');
     const td = document.createElement('td');
-    td.colSpan = 5;
+    td.colSpan = 8;
     td.className = 'empty-state';
     td.style.padding = '20px';
     td.textContent = t('No invoice lines.');
@@ -298,10 +311,17 @@ function _linesCard(lines) {
       const debit = parseFloat(line.debit || 0);
       const credit = parseFloat(line.credit || 0);
       const balance = debit - credit;
+      const qty = line.quantity === null || line.quantity === undefined ? null : parseFloat(line.quantity);
+      const unit = line.price_unit === null || line.price_unit === undefined ? null : parseFloat(line.price_unit);
+      const taxLabel = (Array.isArray(line.tax_ids) ? line.tax_ids : [])
+        .map(tid => taxNames[tid] || `#${tid}`).join(', ') || '—';
       const tr = document.createElement('tr');
       const cells = [
         { text: line.name || '—', cls: '' },
         { text: Array.isArray(line.account_id) ? line.account_id[1] : '—', cls: '' },
+        { text: qty === null ? '—' : formatNumber(qty, 2), cls: 'text-right' },
+        { text: unit === null ? '—' : _fmt(unit), cls: 'text-right' },
+        { text: taxLabel, cls: '' },
         { text: _fmt(debit), cls: 'text-right' },
         { text: _fmt(credit), cls: 'text-right' },
         { text: _fmt(balance), cls: 'text-right' },
@@ -495,6 +515,31 @@ function _journalTypes(moveType) {
   return ['sale', 'purchase', 'general'];
 }
 
+/** Which account.tax.type_tax_use applies to a move type ('' → none, e.g. journal entry). */
+function _taxUse(moveType) {
+  if (['out_invoice', 'out_refund', 'out_receipt'].includes(moveType)) return 'sale';
+  if (['in_invoice', 'in_refund', 'in_receipt'].includes(moveType)) return 'purchase';
+  return '';
+}
+
+/** Untaxed subtotal of a draft invoice line = unit price × quantity. */
+function _lineSubtotal(line) {
+  const q = parseFloat(line.quantity || 0);
+  const u = parseFloat(line.priceUnit || 0);
+  return (q > 0 && u !== 0) ? q * u : 0;
+}
+
+/** Raw (unrounded) amount of one tax on a base — mirrors AccountTax._compute_amount. */
+function _taxAmount(tax, base, quantity = 1) {
+  const amount = parseFloat(tax.amount || 0);
+  switch (tax.amount_type) {
+    case 'percent':  return base * amount / 100;
+    case 'fixed':    return amount * quantity;
+    case 'division': return (100 - amount) === 0 ? 0 : base * amount / (100 - amount);
+    default:         return 0;
+  }
+}
+
 function _accountDomain(moveType) {
   if (['out_invoice', 'out_refund'].includes(moveType))
     return [['account_type', 'in', ['income', 'income_other']]];
@@ -587,15 +632,21 @@ async function _renderNewInvoice(container, cp, moveType, editId = null) {
   }
 
   // ── Load data ──
-  let partners = [], journals = [], accounts = [], companies = [];
+  let partners = [], journals = [], accounts = [], companies = [], taxes = [];
+  const taxUse = _taxUse(moveType);
   try {
-    [partners, journals, accounts, companies] = await Promise.all([
+    [partners, journals, accounts, companies, taxes] = await Promise.all([
       api.rpc('res.partner', 'search_read', [[]], { fields: ['id', 'name'], limit: 200 }),
       api.rpc('account.journal', 'search_read', [[['type', 'in', _journalTypes(moveType)]]], { fields: ['id', 'name'] }),
       api.rpc('account.account', 'search_read',
         [[['active', '=', true], ..._accountDomain(moveType)]],
         { fields: ['id', 'code', 'name'], order: 'code asc', limit: 500 }),
       api.rpc('res.company', 'search_read', [[]], { fields: ['id', 'currency_id'], limit: 1 }),
+      taxUse
+        ? api.rpc('account.tax', 'search_read',
+            [[['active', '=', true], ['type_tax_use', '=', taxUse]]],
+            { fields: ['id', 'name', 'amount', 'amount_type'], order: 'amount desc' })
+        : Promise.resolve([]),
     ]);
     // Fall back to all accounts if type-filtered list is empty
     if (accounts.length === 0) {
@@ -623,7 +674,8 @@ async function _renderNewInvoice(container, cp, moveType, editId = null) {
         }).then(r => r[0]),
         api.rpc('account.move.line', 'search_read',
           [[['move_id', '=', editId], ['display_type', 'in', ['product', 'line_section', 'line_note']]]],
-          { fields: ['id', 'name', 'account_id', 'debit', 'credit', 'display_type', 'sequence'], order: 'sequence asc' }
+          { fields: ['id', 'name', 'account_id', 'debit', 'credit', 'quantity', 'price_unit',
+            'tax_ids', 'display_type', 'sequence'], order: 'sequence asc' }
         ),
       ]);
     } catch { /* fall back to empty */ }
@@ -683,7 +735,8 @@ async function _renderNewInvoice(container, cp, moveType, editId = null) {
   const headRow = document.createElement('tr');
   const colDefs = isEntry
     ? [[t('Description'), ''], [t('Account'), ''], [t('Debit'), 'text-right'], [t('Credit'), 'text-right'], ['', '']]
-    : [[t('Description'), ''], [t('Account'), ''], [t('Amount'), 'text-right'], ['', '']];
+    : [[t('Description'), ''], [t('Account'), ''], [t('Unit Price'), 'text-right'],
+       [t('Quantity'), 'text-right'], [t('Taxes'), ''], [t('Subtotal'), 'text-right'], ['', '']];
   colDefs.forEach(([txt, cls]) => {
     const th = document.createElement('th');
     th.textContent = txt;
@@ -703,32 +756,62 @@ async function _renderNewInvoice(container, cp, moveType, editId = null) {
   linesCard.appendChild(addBtn);
   container.appendChild(linesCard);
 
-  // Totals
+  // Totals — a single line for journal entries; untaxed / tax / total for invoices.
   const totalsCard = document.createElement('div');
   totalsCard.className = 'form-card totals-card';
-  const totalsRow = document.createElement('div');
-  totalsRow.className = 'totals-row';
-  const totalsLbl = document.createElement('span');
-  totalsLbl.className = 'totals-label';
-  totalsLbl.textContent = isEntry ? t('Total Debit') : t('Subtotal');
-  const subtotalEl = document.createElement('span');
-  subtotalEl.className = 'totals-value bold';
-  subtotalEl.textContent = _fmt(0);
-  totalsRow.appendChild(totalsLbl);
-  totalsRow.appendChild(subtotalEl);
-  totalsCard.appendChild(totalsRow);
+
+  function _totalsRow(labelText, bold) {
+    const row = document.createElement('div');
+    row.className = 'totals-row';
+    const lbl = document.createElement('span');
+    lbl.className = 'totals-label';
+    lbl.textContent = labelText;
+    const val = document.createElement('span');
+    val.className = 'totals-value' + (bold ? ' bold' : '');
+    val.textContent = _fmt(0);
+    row.appendChild(lbl);
+    row.appendChild(val);
+    totalsCard.appendChild(row);
+    return val;
+  }
+
+  const untaxedEl = isEntry ? null : _totalsRow(t('Untaxed Amount'), false);
+  const taxEl     = isEntry ? null : _totalsRow(t('Taxes'), false);
+  const totalEl   = _totalsRow(isEntry ? t('Total Debit') : t('Total'), true);
   container.appendChild(totalsCard);
 
+  const taxById = new Map(taxes.map(tx => [tx.id, tx]));
+
   function updateTotals() {
-    const total = lines.reduce((s, l) =>
-      s + (isEntry ? parseFloat(l.debit || 0) : parseFloat(l.amount || 0)), 0);
-    subtotalEl.textContent = _fmt(total);
+    if (isEntry) {
+      const total = lines.reduce((s, l) => s + parseFloat(l.debit || 0), 0);
+      totalEl.textContent = _fmt(total);
+      return;
+    }
+    let untaxed = 0;
+    const rawByTax = new Map();
+    for (const l of lines) {
+      const base = _lineSubtotal(l);
+      untaxed += base;
+      for (const tid of l.taxIds || []) {
+        const tax = taxById.get(tid);
+        if (!tax) continue;
+        rawByTax.set(tid, (rawByTax.get(tid) || 0) + _taxAmount(tax, base, parseFloat(l.quantity || 0)));
+      }
+    }
+    // Round-globally: one rounding per tax, then sum (ADR-003).
+    let taxTotal = 0;
+    for (const amt of rawByTax.values()) taxTotal += Math.round(amt * 100) / 100;
+    untaxed = Math.round(untaxed * 100) / 100;
+    untaxedEl.textContent = _fmt(untaxed);
+    taxEl.textContent = _fmt(taxTotal);
+    totalEl.textContent = _fmt(untaxed + taxTotal);
   }
 
   function addLine() {
-    const line = { name: '', accountId: '', amount: '', debit: '', credit: '' };
+    const line = { name: '', accountId: '', priceUnit: '', quantity: '1', taxIds: [], debit: '', credit: '' };
     lines.push(line);
-    tbody.appendChild(_buildNewLineRow(line, accounts, lines, isEntry, updateTotals));
+    tbody.appendChild(_buildNewLineRow(line, accounts, taxes, lines, isEntry, updateTotals));
     updateTotals();
   }
 
@@ -738,16 +821,20 @@ async function _renderNewInvoice(container, cp, moveType, editId = null) {
       const accId  = Array.isArray(el.account_id) ? el.account_id[0] : el.account_id;
       const debit  = parseFloat(el.debit  || 0);
       const credit = parseFloat(el.credit || 0);
-      const amount = isEntry ? '' : String(Math.max(debit, credit) || '');
+      const gross  = Math.max(debit, credit);
+      const qty    = parseFloat(el.quantity || 0) || 1;
+      const unit   = parseFloat(el.price_unit || 0) || (gross ? gross / qty : 0);
       const line   = {
         name: el.name || '',
         accountId: String(accId || ''),
-        amount,
+        priceUnit: isEntry ? '' : (unit ? String(unit) : ''),
+        quantity: isEntry ? '1' : String(qty),
+        taxIds: Array.isArray(el.tax_ids) ? el.tax_ids.slice() : [],
         debit:  isEntry && debit  ? String(debit)  : '',
         credit: isEntry && credit ? String(credit) : '',
       };
       lines.push(line);
-      tbody.appendChild(_buildNewLineRow(line, accounts, lines, isEntry, updateTotals));
+      tbody.appendChild(_buildNewLineRow(line, accounts, taxes, lines, isEntry, updateTotals));
       updateTotals();
     });
   } else {
@@ -763,7 +850,7 @@ async function _renderNewInvoice(container, cp, moveType, editId = null) {
   }
 }
 
-function _buildNewLineRow(line, accounts, lines, isEntry, onUpdate) {
+function _buildNewLineRow(line, accounts, taxes, lines, isEntry, onUpdate) {
   const tr = document.createElement('tr');
 
   const tdStyle = 'padding:4px 6px;border:1px solid rgba(0,0,0,.12);border-radius:3px;font-size:.875rem';
@@ -835,19 +922,69 @@ function _buildNewLineRow(line, accounts, lines, isEntry, onUpdate) {
     creditTd.appendChild(creditInput);
     tr.appendChild(creditTd);
   } else {
-    // Amount input
-    const amtTd = document.createElement('td');
-    amtTd.className = 'text-right';
-    const amtInput = document.createElement('input');
-    amtInput.type = 'number';
-    amtInput.placeholder = '0.00';
-    amtInput.min = '0';
-    amtInput.step = '0.01';
-    amtInput.style.cssText = `width:110px;text-align:right;${tdStyle}`;
-    if (line.amount) amtInput.value = line.amount;
-    amtInput.oninput = () => { line.amount = amtInput.value; onUpdate(); };
-    amtTd.appendChild(amtInput);
-    tr.appendChild(amtTd);
+    // Unit Price
+    const priceTd = document.createElement('td');
+    priceTd.className = 'text-right';
+    const priceInput = document.createElement('input');
+    priceInput.type = 'number';
+    priceInput.placeholder = '0.00';
+    priceInput.step = '0.01';
+    priceInput.style.cssText = `width:100px;text-align:right;${tdStyle}`;
+    if (line.priceUnit) priceInput.value = line.priceUnit;
+    priceTd.appendChild(priceInput);
+    tr.appendChild(priceTd);
+
+    // Quantity
+    const qtyTd = document.createElement('td');
+    qtyTd.className = 'text-right';
+    const qtyInput = document.createElement('input');
+    qtyInput.type = 'number';
+    qtyInput.placeholder = '1';
+    qtyInput.step = 'any';
+    qtyInput.min = '0';
+    qtyInput.style.cssText = `width:70px;text-align:right;${tdStyle}`;
+    qtyInput.value = line.quantity ?? '1';
+    qtyTd.appendChild(qtyInput);
+    tr.appendChild(qtyTd);
+
+    // Taxes (all taxes available for the company's country / tax type)
+    const taxTd = document.createElement('td');
+    const taxSel = document.createElement('select');
+    taxSel.multiple = true;
+    taxSel.size = Math.min(Math.max(taxes.length, 1), 4);
+    taxSel.style.cssText = `width:100%;min-width:150px;${tdStyle}`;
+    if (taxes.length === 0) {
+      const opt = document.createElement('option');
+      opt.disabled = true;
+      opt.textContent = t('— No taxes —');
+      taxSel.appendChild(opt);
+    }
+    taxes.forEach(tx => {
+      const opt = document.createElement('option');
+      opt.value = tx.id;
+      opt.textContent = tx.name;
+      opt.selected = (line.taxIds || []).includes(tx.id);
+      taxSel.appendChild(opt);
+    });
+    taxTd.appendChild(taxSel);
+    tr.appendChild(taxTd);
+
+    // Subtotal (read-only, live)
+    const subTd = document.createElement('td');
+    subTd.className = 'text-right';
+    subTd.textContent = _fmt(_lineSubtotal(line));
+    tr.appendChild(subTd);
+
+    const refresh = () => {
+      line.priceUnit = priceInput.value;
+      line.quantity  = qtyInput.value;
+      line.taxIds    = Array.from(taxSel.selectedOptions).map(o => parseInt(o.value, 10));
+      subTd.textContent = _fmt(_lineSubtotal(line));
+      onUpdate();
+    };
+    priceInput.oninput = refresh;
+    qtyInput.oninput   = refresh;
+    taxSel.onchange    = refresh;
   }
 
   // Remove button
@@ -883,7 +1020,7 @@ async function _saveNewInvoice(moveType, companyId, currencyId, partnerSel, jour
   const validLines = lines.filter(l => l.accountId && (
     isEntry
       ? (parseFloat(l.debit || 0) > 0 || parseFloat(l.credit || 0) > 0)
-      : parseFloat(l.amount || 0) > 0
+      : _lineSubtotal(l) > 0
   ));
   if (validLines.length === 0) {
     throw new Error(t('Please add at least one line with an account and amount.'));
@@ -894,23 +1031,35 @@ async function _saveNewInvoice(moveType, companyId, currencyId, partnerSel, jour
   async function _writeLines(targetId) {
     for (const line of validLines) {
       let debit, credit;
-      if (isEntry) {
-        debit  = parseFloat(line.debit  || 0);
-        credit = parseFloat(line.credit || 0);
-      } else {
-        debit  = isRevenue ? 0                       : parseFloat(line.amount);
-        credit = isRevenue ? parseFloat(line.amount) : 0;
-      }
-      await api.rpc('account.move.line', 'create', [{
+      const vals = {
         move_id:      targetId,
         display_type: 'product',
         name:         line.name || t('Service'),
         account_id:   parseInt(line.accountId, 10),
         date:         invoiceDate,
-        debit,
-        credit,
-      }]);
+      };
+      if (isEntry) {
+        debit  = parseFloat(line.debit  || 0);
+        credit = parseFloat(line.credit || 0);
+      } else {
+        const subtotal = _lineSubtotal(line);
+        debit  = isRevenue ? 0        : subtotal;
+        credit = isRevenue ? subtotal : 0;
+        vals.quantity       = parseFloat(line.quantity || 1) || 1;
+        vals.price_unit     = parseFloat(line.priceUnit || 0);
+        vals.price_subtotal = subtotal;
+        vals.tax_ids        = (line.taxIds || []).map(Number);
+      }
+      vals.debit  = debit;
+      vals.credit = credit;
+      await api.rpc('account.move.line', 'create', [vals]);
     }
+  }
+
+  async function _refreshTotals(targetId) {
+    try {
+      await api.rpc('account.move', 'recompute_totals', [[targetId]]);
+    } catch { /* totals are recomputed authoritatively on posting */ }
   }
 
   if (editId) {
@@ -925,6 +1074,7 @@ async function _saveNewInvoice(moveType, companyId, currencyId, partnerSel, jour
       [[['move_id', '=', editId], ['display_type', 'in', ['product', 'line_section', 'line_note']]]]);
     if (oldLineIds.length) await api.rpc('account.move.line', 'unlink', [oldLineIds]);
     await _writeLines(editId);
+    await _refreshTotals(editId);
     App.navigate(`#/accounting/move/${editId}`);
     return;
   }
@@ -940,5 +1090,6 @@ async function _saveNewInvoice(moveType, companyId, currencyId, partnerSel, jour
     ref,
   }]);
   await _writeLines(moveId);
+  await _refreshTotals(moveId);
   App.navigate(`#/accounting/move/${moveId}`);
 }
