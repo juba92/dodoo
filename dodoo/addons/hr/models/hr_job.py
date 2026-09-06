@@ -27,8 +27,12 @@ class HrJob(BaseModel):
     async def read(
         cls, env: Environment, ids: list[int], fields: list[str] | None = None
     ) -> list[dict[str, Any]]:
-        rows = await super().read(env, ids, fields)
-        if fields is None or "no_of_employees" in fields:
+        want = fields is None or "no_of_employees" in fields
+        fetch = fields
+        if want and fields is not None and "id" not in fields:
+            fetch = ["id", *fields]
+        rows = await super().read(env, ids, fetch)
+        if want and rows:
             counts = await cls._headcounts(env, [r["id"] for r in rows])
             for r in rows:
                 r["no_of_employees"] = counts.get(r["id"], 0)

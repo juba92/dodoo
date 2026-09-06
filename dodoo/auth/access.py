@@ -44,6 +44,20 @@ class AccessEnforcer:
         }
 
     @staticmethod
+    async def is_superuser(env: Environment, uid: int) -> bool:
+        """The ``Administrator`` group bypasses every record rule (Odoo SUPERUSER semantics)."""
+        async with env.dml_conn() as conn:
+            row = await conn.execute(
+                text(
+                    "SELECT 1 FROM res_users_groups_rel r "
+                    "JOIN res_groups g ON g.id = r.group_id "
+                    "WHERE r.user_id = :u AND g.name = 'Administrator' LIMIT 1"
+                ),
+                {"u": uid},
+            )
+            return row.fetchone() is not None
+
+    @staticmethod
     async def _fetch_rules(
         env: Environment, model_name: str, uid: int, operation: str
     ) -> tuple[list[list], list[list], bool]:
@@ -99,6 +113,8 @@ class AccessEnforcer:
         operation: str,
     ) -> list | None:
         try:
+            if await AccessEnforcer.is_superuser(env, uid):
+                return None
             globals_, groups_, has_group_rule = await AccessEnforcer._fetch_rules(
                 env, model_name, uid, operation
             )

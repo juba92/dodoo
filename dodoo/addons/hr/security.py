@@ -36,6 +36,56 @@ _ANCESTORS: dict[str, list[str]] = {
 }
 
 
+async def ensure_rule_junction(env: Any) -> None:
+    """Guarantee ``ir_rule_group_rel`` has ``rule_id`` / ``group_id`` columns.
+
+    A database first migrated before ``ir.rule.group_ids`` declared explicit junction
+    columns has ``ir_rule_id`` / ``res_groups_id`` instead, which ``AccessEnforcer``'s
+    join does not match (every group-scoped rule then silently fails open). Rename the
+    columns when the table carries data, else drop and recreate.
+    """
+    async with env.dml_conn() as conn:
+        cols = {
+            r[0]
+            for r in await conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'ir_rule_group_rel'"
+                )
+            )
+        }
+        if not cols or {"rule_id", "group_id"} <= cols:
+            return
+        n = 0
+        if "ir_rule_id" in cols:
+            n = (
+                await conn.execute(text("SELECT COUNT(*) FROM ir_rule_group_rel"))
+            ).scalar_one()
+        if n:
+            if "ir_rule_id" in cols:
+                await conn.execute(
+                    text("ALTER TABLE ir_rule_group_rel RENAME COLUMN ir_rule_id TO rule_id")
+                )
+            if "res_groups_id" in cols:
+                await conn.execute(
+                    text(
+                        "ALTER TABLE ir_rule_group_rel RENAME COLUMN res_groups_id TO group_id"
+                    )
+                )
+        else:
+            await conn.execute(text("DROP TABLE IF EXISTS ir_rule_group_rel"))
+            await conn.execute(
+                text(
+                    "CREATE TABLE ir_rule_group_rel ("
+                    "  rule_id INTEGER NOT NULL,"
+                    "  group_id INTEGER NOT NULL,"
+                    "  PRIMARY KEY (rule_id, group_id))"
+                )
+            )
+        await conn.commit()
+        _log.info("hr: repaired ir_rule_group_rel column names")
+
+
 async def seed_groups(env: Any) -> dict[str, int]:
     """Create the three HR groups if absent; return ``{name: id}``."""
     ids: dict[str, int] = {}

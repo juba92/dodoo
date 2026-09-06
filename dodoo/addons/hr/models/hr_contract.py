@@ -161,10 +161,16 @@ class HrContract(BaseModel):
     async def read(
         cls, env: Environment, ids: list[int], fields: list[str] | None = None
     ) -> list[dict[str, Any]]:
-        rows = await super().read(env, ids, fields)
+        fetch = fields
+        if fields is not None and "state" in fields and "date_end" not in fields:
+            fetch = [*fields, "date_end"]
+        rows = await super().read(env, ids, fetch)
+        drop_end = fetch is not fields
         for r in rows:
             if "state" in r:
                 r["state"] = cls._effective_state(r)
+            if drop_end:
+                r.pop("date_end", None)
         return rows
 
     @classmethod

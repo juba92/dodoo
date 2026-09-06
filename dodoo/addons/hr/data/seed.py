@@ -42,6 +42,9 @@ def _load_areas() -> None:
 
 async def seed_hr_data(env: Any) -> None:
     _load_areas()
+    from dodoo.addons.hr.security import ensure_rule_junction
+
+    await ensure_rule_junction(env)
     await sync_ir_model(env, IR_MODELS)
     await groups.seed(env)
     await ensure_indexes(env, INDEXES)

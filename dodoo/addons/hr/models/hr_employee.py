@@ -195,7 +195,7 @@ class HrEmployee(BaseModel):
         from dodoo.addons.hr.validators import group_names
 
         held = await group_names(env, uid)
-        return bool(held & {"HR Officer", "HR Administrator"})
+        return bool(held & {"HR Officer", "HR Administrator", "Administrator"})
 
     # ------------------------------------------------------------------ helpers
     @classmethod

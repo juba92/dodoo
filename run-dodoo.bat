@@ -74,9 +74,12 @@ set "DATABASE_MIGRATION_URL=%DATABASE_URL%"
 set "SESSION_EXPIRY_HOURS=8"
 
 echo.
-echo === [5/6] Install / update the localization module ===
-echo ^(pulls in base, account, web; seeds Arabic + Egypt on a fresh database^)
-%PY% -m dodoo module install localization || (echo [ERROR] module install failed. & pause & exit /b 1)
+echo === [5/6] Install / update modules ===
+echo ^(localization: base, account, web + Arabic/Egypt seed^)
+%PY% -m dodoo module install localization || (echo [ERROR] localization install failed. & pause & exit /b 1)
+echo ^(fleet: pulls in hr — Employees, Contracts, Skills, Time Off, Recruitment,^)
+echo ^( Appraisals, Referrals + Fleet; seeds sample HR + fleet data^)
+%PY% -m dodoo module install fleet || (echo [ERROR] fleet install failed. & pause & exit /b 1)
 
 echo.
 echo === [6/6] Start the web app ===

@@ -63,8 +63,13 @@ async def is_member(env: Any, uid: int | None, name: str) -> bool:
 
 
 async def require_groups(env: Any, uid: int | None, *names: str) -> None:
-    """Raise ``AccessError`` unless the user is in at least one of ``names``."""
+    """Raise ``AccessError`` unless the user is in at least one of ``names``.
+
+    The ``Administrator`` superuser group always passes.
+    """
     held = await group_names(env, uid)
+    if "Administrator" in held:
+        return
     if held.isdisjoint(names):
         raise AccessError(f"requires one of: {', '.join(names)}")
 

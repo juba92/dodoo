@@ -57,6 +57,10 @@ class HrAppraisalFeedback(BaseModel):
             # No authenticated caller (system / cron / launch) → no "opposite side" to
             # hide from; the per-side gate only applies to a real caller.
             return rows
+        from dodoo.addons.hr.validators import group_names
+
+        if "Administrator" in await group_names(env, uid):
+            return rows
         sides: dict[int, str | None] = {}
         for r in rows:
             aid = r.get("appraisal_id")
