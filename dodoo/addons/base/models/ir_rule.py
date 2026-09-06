@@ -17,7 +17,16 @@ class IrRule(BaseModel):
     perm_create = Boolean(default=True)
     perm_unlink = Boolean(default=True)
     global_rule = Boolean(default=False)
-    group_ids = Many2many("res.groups", relation_table="ir_rule_group_rel")
+    # Explicit junction columns so the table matches AccessEnforcer's query
+    # (`rg.rule_id` / `rg.group_id`); without these the MigrationRunner would name
+    # the columns `ir_rule_id` / `res_groups_id` and every group-scoped rule would
+    # silently fail its join (→ get_merged_domain returns None → access allowed).
+    group_ids = Many2many(
+        "res.groups",
+        relation_table="ir_rule_group_rel",
+        column1="rule_id",
+        column2="group_id",
+    )
 
     @classmethod
     async def write(cls, env: Any, ids: list[int], vals: dict[str, Any]) -> bool:
