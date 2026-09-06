@@ -21,7 +21,12 @@ INDEXES: list[str] = []
 AREA_SEEDS: list[Any] = []
 
 
+def _load_areas() -> None:
+    from dodoo.addons.fleet.data import vehicles  # noqa: F401
+
+
 async def seed_fleet_data(env: Any) -> None:
+    _load_areas()
     await sync_ir_model(env, IR_MODELS)
     await groups.seed(env)
     await ensure_indexes(env, INDEXES)

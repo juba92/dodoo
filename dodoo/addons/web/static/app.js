@@ -5,7 +5,7 @@ import { loadCatalog, applyDirection, t, currentLang } from '/web/static/i18n.js
 // lazily-imported view module so a new build is a new module URL — otherwise the
 // browser keeps the first-imported version of a view for the whole tab session
 // (hash navigation never reloads the document) and serves stale screens.
-const CLIENT_BUILD = '2026-09-06.11';
+const CLIENT_BUILD = '2026-09-06.12';
 
 /** Lazy-import a view module, cache-busted by the current build. */
 const _view = path => import(path + '?v=' + CLIENT_BUILD);
@@ -50,6 +50,8 @@ export const App = {
     if (appNameEl) {
       appNameEl.textContent = hash.startsWith('#/accounting') ? t('Accounting')
         : hash.startsWith('#/hr') ? t('Human Resources')
+      : hash.startsWith('#/fleet') ? t('Fleet')
+        : hash.startsWith('#/fleet') ? t('Fleet')
         : hash === '#/settings' ? t('Settings')
         : t('Dodoo ERP');
     }
@@ -123,6 +125,10 @@ function _labelFromHash(hash) {
   if ((m = hash.match(/^#\/hr\/appraisal\/(\d+)$/)))        return t('Appraisal') + ' #' + m[1];
   if (hash === '#/hr/referrals')                                return t('My Referrals');
   if (hash === '#/hr/referral/new')                             return t('Refer a Friend');
+  if (hash === '#/fleet/vehicles')                              return t('Vehicles');
+  if (hash === '#/fleet/alerts')                                return t('Fleet Alerts');
+  if ((m = hash.match(/^#\/fleet\/vehicle\/(\d+)$/)))        return t('Vehicle') + ' #' + m[1];
+  if ((m = hash.match(/^#\/fleet\/model\/([^/]+)$/)))         return m[1];
   if ((m = hash.match(/^#\/hr\/employee\/new$/)))               return t('New Employee');
   if ((m = hash.match(/^#\/hr\/employee\/(\d+)$/)))             return t('Employee') + ' #' + m[1];
   if ((m = hash.match(/^#\/hr\/model\/([^/]+)\/new$/)))         return t('New {name}', { name: m[1] });
@@ -271,6 +277,7 @@ function _renderSidebar(hash) {
   if (appNameEl) {
     appNameEl.textContent = hash.startsWith('#/accounting') ? t('Accounting')
       : hash.startsWith('#/hr') ? t('Human Resources')
+      : hash.startsWith('#/fleet') ? t('Fleet')
       : hash === '#/settings' ? t('Settings')
       : t('Dodoo ERP');
   }
@@ -289,6 +296,11 @@ function _renderSidebar(hash) {
 
   if (hash.startsWith('#/hr')) {
     _renderHrMenu(sidebar, hash).catch(() => {});
+    return;
+  }
+
+  if (hash.startsWith('#/fleet')) {
+    _renderFleetMenu(sidebar, hash).catch(() => {});
     return;
   }
 
@@ -384,6 +396,31 @@ async function _renderHrMenu(sidebar, currentHash) {
   });
 }
 
+async function _renderFleetMenu(sidebar, currentHash) {
+  const { FLEET_MENU } = await _view('/fleet/static/fleet-menu.js');
+  if (!document.body.contains(sidebar)) return;
+  sidebar.innerHTML = '';
+  FLEET_MENU.forEach(({ section, requires, items }) => {
+    if (requires === 'fleet_manager' && !App.state.fleetManager) return;
+    const title = document.createElement('div');
+    title.className = 'sidebar-section-title';
+    title.textContent = t(section);
+    sidebar.appendChild(title);
+    const ul = document.createElement('ul');
+    ul.className = 'sidebar-list';
+    items.forEach(({ label, hash }) => {
+      const li = document.createElement('li');
+      const btn = document.createElement('button');
+      btn.textContent = t(label);
+      if (currentHash === hash || currentHash.startsWith(hash + '/')) btn.className = 'active';
+      btn.onclick = () => { App.breadcrumb = []; App.navigate(hash); };
+      li.appendChild(btn);
+      ul.appendChild(li);
+    });
+    sidebar.appendChild(ul);
+  });
+}
+
 async function _handleLogout() {
   try { await api.logout(); } catch { /* ignore errors on logout */ }
   App.state.token = null;
@@ -425,6 +462,13 @@ const _ROUTES = [
   [/^#\/hr\/model\/([^/]+)\/new$/, () => _view('/web/static/views/form.js')],
   [/^#\/hr\/model\/([^/]+)\/(\d+)$/, () => _view('/web/static/views/form.js')],
   [/^#\/hr\/model\/([^/]+)$/, () => _view('/web/static/views/list.js')],
+  // Fleet routes
+  [/^#\/fleet\/vehicles$/, () => _view('/fleet/static/views/vehicle-kanban.js')],
+  [/^#\/fleet\/vehicle\/(\d+)$/, () => _view('/fleet/static/views/vehicle-form.js')],
+  [/^#\/fleet\/alerts$/, () => _view('/fleet/static/views/fleet-alerts.js')],
+  [/^#\/fleet\/model\/([^/]+)\/new$/, () => _view('/web/static/views/form.js')],
+  [/^#\/fleet\/model\/([^/]+)\/(\d+)$/, () => _view('/web/static/views/form.js')],
+  [/^#\/fleet\/model\/([^/]+)$/, () => _view('/web/static/views/list.js')],
   // Generic model routes
   [/^#\/model\/([^/]+)\/new$/, () => _view('/web/static/views/form.js')],
   [/^#\/model\/([^/]+)\/(\d+)$/, () => _view('/web/static/views/form.js')],
@@ -462,6 +506,10 @@ function _paramsFromHash(hash) {
   if ((m = base.match(/^#\/hr\/appraisal\/(new|\d+)$/)))              return { id: m[1] === 'new' ? 'new' : parseInt(m[1], 10) };
   if (base === '#/hr/referrals')                                       return { mode: 'list' };
   if (base === '#/hr/referral/new')                                    return { mode: 'new' };
+  if ((m = base.match(/^#\/fleet\/vehicle\/(\d+)$/)))                return { id: parseInt(m[1], 10) };
+  if ((m = base.match(/^#\/fleet\/model\/([^/]+)\/new$/)))          return { model: m[1], id: 'new' };
+  if ((m = base.match(/^#\/fleet\/model\/([^/]+)\/(\d+)$/)))       return { model: m[1], id: parseInt(m[2], 10) };
+  if ((m = base.match(/^#\/fleet\/model\/([^/]+)$/)))               return { model: m[1] };
   if ((m = base.match(/^#\/hr\/model\/([^/]+)\/new$/)))               return { model: m[1], id: 'new' };
   if ((m = base.match(/^#\/hr\/model\/([^/]+)\/(\d+)$/)))             return { model: m[1], id: parseInt(m[2], 10) };
   if ((m = base.match(/^#\/hr\/model\/([^/]+)$/)))                    return { model: m[1] };

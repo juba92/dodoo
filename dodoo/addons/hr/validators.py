@@ -19,9 +19,13 @@ _M = TypeVar("_M", bound=BaseModel)
 
 
 class Payload(BaseModel):
-    """Base for every action payload model — forbids unknown fields."""
+    """Base for every action payload model — forbids unknown fields.
 
-    model_config = ConfigDict(extra="forbid")
+    ``protected_namespaces=()`` so ORM-style field names like ``model_id`` don't trip
+    Pydantic v2's ``model_`` reservation.
+    """
+
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
 
 
 def validate(model_cls: type[_M], payload: dict[str, Any] | None) -> _M:
