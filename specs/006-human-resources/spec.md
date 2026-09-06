@@ -8,6 +8,18 @@
 
 **Input**: User description: "Add a Human Resources module to dodoo that reproduces the Odoo 19.0 'Human Resources' application section — Employees, Recruitment, Time Off, Appraisals, Referrals, and Fleet — built as one or more dodoo addons (dodoo/addons/hr/, plus dodoo/addons/fleet/) following the existing architecture, and modelled on the Odoo 19.0 hr, hr_contract, hr_skills, hr_org_chart, hr_holidays, hr_recruitment, hr_appraisal, hr_referral, and fleet addons."
 
+## Clarifications
+
+### Session 2026-09-06
+
+*(Resolved autonomously per the project's Speckit Automation Rules — priority order: constitution → dodoo architecture → Odoo 19.0 → minimal scope.)*
+
+- Q: Are the configuration catalogs (leave types, skill taxonomy, recruitment stages, contract types, refusal reasons, vehicle brands/models, employee tags) shared across companies or company-specific? → A: Each catalog record carries an **optional `company_id`**; `NULL` means shared/global, a set value means company-scoped and only visible in that company. Per Odoo 19.0: skill type/skill/level, employee categories, applicant refusal reasons, and vehicle brands/models are global (no `company_id`); leave types, recruitment stages, and contract types carry a nullable `company_id`.
+- Q: Does the HR addon depend on the 003-accounting (`account`) addon? → A: **No.** `hr` depends on `base` + `web` + `localization` (005); `fleet` depends on `hr`. Wage and fleet contract/service amounts are monetary values in the company currency (`res.currency`, already provided by base/005) with **no** journal entries, vendor bills, or accounting posting. This keeps the branch a clean diff on `master` after 005 without pulling in 003.
+- Q: Are the new presentations (card/Kanban, calendar, org chart) generic reusable view types or HR-specific screens? → A: **Kanban and Calendar are added to the web client as generic, metadata-driven view types** reusable by any model (extending the 002-web-ui view architecture); the **org chart is a bespoke HR form widget** on the employee form, mirroring Odoo's `hr_org_chart` (a widget, not a view type). The employee "card view" is the generic Kanban view type applied to `hr.employee`.
+- Q: How are concurrent/stale workflow transitions handled? → A: Every state transition performs a **server-side from-state precondition check**: if the record is no longer in the expected source state, the transition is rejected with a conflict error and logged (per FR-066), with no side effects. No new client-side version token is introduced; plain form field edits keep the 002-web-ui save semantics.
+- Q: Is a login user auto-created when an employee is added or an applicant is converted? → A: **No auto-provisioning.** The employee ↔ `res.users` link is set explicitly by an HR Officer or HR Administrator. Applicant-to-employee conversion (FR-038) carries name, contact, job, and department but never creates a user.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Employee directory, org structure, contracts and skills (Priority: P1)
@@ -282,8 +294,11 @@ both appear in the expiry alert list. Add a service log and confirm it is listed
 - **Odometer log lower than a previous reading**: allowed but flagged as inconsistent.
 - **Multi-company**: every operational record (employee, department, job, contract, leave,
   allocation, applicant, appraisal, referral, vehicle) carries a company and is only visible within
-  that company's scope; reference catalogs (skill types, leave types, recruitment stages, vehicle
-  brands/models, refusal reasons) may be shared or company-specific.
+  that company's scope. Configuration catalogs carry an optional `company_id`: `NULL` = shared
+  across all companies, a set value = visible only in that company. Per the Odoo 19.0 reference,
+  skill type / skill / skill level, employee categories, applicant refusal reasons, and vehicle
+  brands/models are global (no `company_id`); leave types, recruitment stages, and contract types
+  carry a nullable `company_id`.
 
 ## Requirements *(mandatory)*
 
@@ -305,7 +320,9 @@ both appear in the expiry alert list. Add a service log and confirm it is listed
 - **FR-004**: The system MUST provide an Employee Category (tag) record and allow an employee to
   carry zero or more tags.
 - **FR-005**: The system MUST allow an employee to be linked to at most one login user per company
-  and MUST expose a way to resolve the employee record of the currently authenticated user.
+  and MUST expose a way to resolve the employee record of the currently authenticated user. The
+  link MUST be set explicitly by an HR Officer or HR Administrator; the system MUST NOT
+  auto-provision a login user when an employee is created.
 - **FR-006**: The system MUST allow each employee to have a manager (another employee) and a coach
   (another employee), independently, and MUST reject a manager assignment that creates a management
   cycle.
@@ -398,7 +415,8 @@ both appear in the expiry alert list. Add a service log and confirm it is listed
   its data and reason.
 - **FR-038**: The system MUST provide an "create employee from applicant" action that creates an
   employee carrying the applicant's name, contact details, job position, and department, links the
-  applicant to that employee, and is idempotent (a second run returns the existing employee).
+  applicant to that employee, and is idempotent (a second run returns the existing employee). The
+  action MUST NOT create a login user for the new employee.
 
 #### Appraisals (P3)
 
@@ -472,6 +490,11 @@ both appear in the expiry alert list. Add a service log and confirm it is listed
   Manager group; a driver MAY read the vehicle(s) assigned to them.
 - **FR-064**: Every record rule MUST enforce company scope in addition to the role-based conditions
   above.
+- **FR-064a**: Configuration catalog records (leave types, recruitment stages, contract types, and
+  any other catalog that carries a nullable `company_id`) MUST be visible when their `company_id` is
+  `NULL` (shared) or equals a company the user may access; catalogs modelled as global in Odoo 19.0
+  (skill type / skill / skill level, employee categories, applicant refusal reasons, vehicle
+  brands/models) carry no `company_id` and are visible to all companies.
 
 #### Input validation, logging, workflow integrity (cross-cutting)
 
@@ -485,6 +508,11 @@ both appear in the expiry alert list. Add a service log and confirm it is listed
 - **FR-067**: All workflow actions MUST be authorization-checked: the acting user MUST hold a group
   and/or relationship (manager of, HR officer, fleet manager, record owner) that permits the
   transition, else it is denied and logged.
+- **FR-067a**: Every state transition MUST re-check the record's current state server-side against
+  the transition's expected source state before applying it; if the record has already moved on
+  (a concurrent or stale action), the transition MUST be rejected with a conflict error and no side
+  effects, and the rejection MUST be logged per FR-066. Plain (non-workflow) field edits retain the
+  web client's existing save semantics from feature 002.
 - **FR-068**: A fresh install MUST seed sample data: a small department tree, several job positions,
   a set of leave types, skill types with skills and levels, a set of recruitment stages, at least
   one appraisal template, and a set of vehicle brands with models.
@@ -547,8 +575,10 @@ both appear in the expiry alert list. Add a service log and confirm it is listed
   (independent). Bound to record rules that combine role conditions with company scope. Modelled on
   Odoo `hr.group_hr_user` / `hr.group_hr_manager` and `fleet.fleet_group_manager`.
 - **Reused core entities**: `res.users`, `res.groups`, `res.company`, `ir.rule`-equivalent record
-  rules, `res.lang` (from 005) for translation/RTL. The feature adds records and rules in these
-  existing models; it introduces no parallel user/group/company structures.
+  rules, `res.lang` (from 005) for translation/RTL, and `res.currency` for monetary amounts (wage,
+  fleet amounts) — read only, no journal/posting. The feature adds records and rules in these
+  existing models; it introduces no parallel user/group/company/currency structures and does not
+  depend on the accounting addon.
 
 ### Security Requirements
 
@@ -690,11 +720,16 @@ both appear in the expiry alert list. Add a service log and confirm it is listed
   `ir.rule`-equivalent mechanism from 001-erp-core.
 - **Multi-company & localization**: every operational record carries `company_id` and obeys the
   multi-company visibility rules from 001; screens consume the translation/RTL layer from 002/005.
-  Monetary fields use the company currency from 003/005.
+  Monetary fields (wage, fleet contract/service amounts) are plain amounts in the company currency
+  (`res.currency`, provided by base/005) with no accounting posting; the `hr` and `fleet` addons do
+  **not** depend on the 003-accounting (`account`) addon.
 - **Dependencies**: requires the completed 001-erp-core (models, record rules, HTTP/RPC, users &
-  groups), 002-web-ui (list/form/sidebar and the new card/Kanban/calendar/org-chart view types),
-  and 005-localization-settings (language, RTL, company currency/country). New view types
-  (card/Kanban, calendar, org chart) are additive to the web client.
+  groups), 002-web-ui (generic view architecture, list/form/sidebar), and 005-localization-settings
+  (language, RTL, company currency/country). This feature extends the web client with two new
+  generic, metadata-driven view types — **Kanban** and **Calendar** — reusable by any model; the
+  employee card view is the Kanban view type applied to `hr.employee`. The **org chart** is a
+  bespoke widget on the employee form (per Odoo `hr_org_chart`), not a generic view type. No
+  dependency on 003-accounting.
 - **ADRs to be filed during planning**: the contract-state engine; the time-off approval + accrual
   design; the appraisal cycle model; and the fleet contract/alert model.
 

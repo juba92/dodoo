@@ -38,4 +38,8 @@
   FR/SC/ACC/PERF sections stay behaviour-focused.
 - All clarifiable points resolved via informed defaults recorded in Assumptions and Out of Scope
   (payroll, attendances, portals, chatter, referral gamification, fleet-accounting all excluded).
-- Ready for `/speckit-clarify` (autonomous per project rules) or `/speckit-plan`.
+- `/speckit-clarify` session 2026-09-06 completed: 5 questions resolved autonomously (catalog
+  company-scoping, no `account` dependency, generic Kanban/Calendar view types + org-chart widget,
+  from-state precondition check on transitions, no user auto-provisioning). Integrated into
+  Clarifications, FR-005/FR-038/FR-064a/FR-067a, edge cases, and Assumptions.
+- Ready for `/speckit-plan`.
