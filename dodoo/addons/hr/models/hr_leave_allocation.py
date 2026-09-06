@@ -97,12 +97,13 @@ class HrLeaveAllocation(BaseModel):
                 periods = elapsed // period_days
                 if periods <= 0:
                     continue
-                add = periods * float(a["accrual_rate"])
-                new_total = float(a["number_of_units"]) + add
+                units_now = float(a["number_of_units"] or 0)
+                add = periods * float(a["accrual_rate"] or 0)
+                new_total = units_now + add
                 cap = a["accrual_max"]
                 if cap:
                     new_total = min(new_total, float(cap))
-                    add = new_total - float(a["number_of_units"])
+                    add = new_total - units_now
                 if add <= 0:
                     await conn.execute(
                         text(

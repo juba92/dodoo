@@ -29,21 +29,20 @@ HR_RULES: list[dict[str, Any]] = []
 # model has no applicable rule). Callers add `deny_all("hr.contract")` for such models.
 
 
-def deny_all(model: str) -> dict[str, Any]:
-    return {
-        "name": f"{model}: deny by default",
-        "model": model,
-        "domain": [["id", "=", 0]],
-        "groups": None,
-        "perms": "rwck",
-    }
+def deny_all(model: str) -> None:
+    """No-op. With the Odoo rule semantics in ``AccessEnforcer.get_merged_domain`` a
+    model that has *any* group-scoped rule automatically denies a caller who is in none
+    of those groups — an explicit global deny rule is unnecessary (and would also
+    AND-deny the grouped users). Kept as a call so the intent stays visible in the
+    per-area rule lists; ``seed_rules`` skips ``None`` entries."""
+    return None
 
 
 def officer_full(model: str) -> dict[str, Any]:
     return {
         "name": f"{model}: HR Officer/Administrator full (company scope)",
         "model": model,
-        "domain": [["company_id", "=", "uid.company_id"]],
+        "domain": [["company_id", "in", "$company_ids"]],
         "groups": [GROUP_OFFICER, GROUP_ADMIN],
         "perms": "rwck",
     }
@@ -54,7 +53,7 @@ def catalog_read(model: str) -> dict[str, Any]:
     return {
         "name": f"{model}: catalog read (shared or in scope)",
         "model": model,
-        "domain": ["|", ["company_id", "=", False], ["company_id", "=", "uid.company_id"]],
+        "domain": ["|", ["company_id", "=", None], ["company_id", "in", "$company_ids"]],
         "groups": [GROUP_EMPLOYEE, GROUP_OFFICER, GROUP_ADMIN],
         "perms": "r",
     }

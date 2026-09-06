@@ -61,11 +61,11 @@ async def test_run_expiry_flips_state_idempotently(env, vehicle):
         env, {"vehicle_id": vehicle, "cost_type": "leasing", "start_date": "2025-01-01", "expiration_date": past}
     )
     first = await FleetVehicleLogContract.run_fleet_contract_expiry(env)
-    assert first["expired"] == 1
-    second = await FleetVehicleLogContract.run_fleet_contract_expiry(env)
-    assert second["expired"] == 0
+    assert first["expired"] >= 1  # at least this one (other tests may add more)
     rows = await FleetVehicleLogContract.read(env, [cid], ["state"])
     assert rows[0]["state"] == "expired"
+    second = await FleetVehicleLogContract.run_fleet_contract_expiry(env)
+    assert second["expired"] == 0  # idempotent — nothing left to flip
 
 
 async def test_bad_dates_rejected(env, vehicle):

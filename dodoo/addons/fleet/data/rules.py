@@ -14,14 +14,10 @@ from dodoo.addons.hr.security import GROUP_OFFICER, seed_rules
 FLEET_RULES: list[dict[str, Any]] = []
 
 
-def deny_all(model: str) -> dict[str, Any]:
-    return {
-        "name": f"{model}: deny by default",
-        "model": model,
-        "domain": [["id", "=", 0]],
-        "groups": None,
-        "perms": "rwck",
-    }
+def deny_all(model: str) -> None:
+    """No-op — see ``dodoo.addons.hr.data.rules.deny_all``. Group-gated models auto-deny
+    a caller in none of the granting groups; ``seed_rules`` skips ``None``."""
+    return None
 
 
 def manager_full(model: str) -> dict[str, Any]:

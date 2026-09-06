@@ -53,9 +53,10 @@ class HrAppraisalFeedback(BaseModel):
     ) -> list[dict[str, Any]]:
         rows = await super().read(env, ids, fields)
         uid = get_uid()
-        if not rows:
+        if not rows or uid is None:
+            # No authenticated caller (system / cron / launch) → no "opposite side" to
+            # hide from; the per-side gate only applies to a real caller.
             return rows
-        # Group by appraisal to resolve the caller's side once per appraisal.
         sides: dict[int, str | None] = {}
         for r in rows:
             aid = r.get("appraisal_id")

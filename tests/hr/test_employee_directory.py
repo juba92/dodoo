@@ -39,21 +39,30 @@ async def test_manager_cycle_rejected(env, base):
 
     a = await HrEmployee.create(env, {"name": "A", "company_id": base["company_id"]})
     b = await HrEmployee.create(env, {"name": "B", "company_id": base["company_id"], "manager_id": a})
-    await HrEmployee.write(env, [a], {"manager_id": b})  # a→b, b→a is a cycle
-    # the write above should raise; if it didn't, assert the guard explicitly
+    # b already reports to a; making a report to b closes the loop → rejected.
     with pytest.raises(DodooError, match="employee_cycle"):
         await HrEmployee.write(env, [a], {"manager_id": b})
+    # direct self-management is also rejected
+    with pytest.raises(DodooError, match="employee_cycle"):
+        await HrEmployee.write(env, [a], {"manager_id": a})
 
 
 async def test_user_unique_per_company(env, base):
+    from sqlalchemy import text
+
     from dodoo.addons.hr.models.hr_employee import HrEmployee
 
+    async with env.dml_conn() as conn:
+        uid = (await conn.execute(text(
+            "INSERT INTO res_users (login,name,active,create_date,write_date) "
+            "VALUES ('uniq','Uniq',TRUE,now(),now()) RETURNING id"))).scalar_one()
+        await conn.commit()
     await HrEmployee.create(
-        env, {"name": "Owner", "company_id": base["company_id"], "user_id": 1}
+        env, {"name": "Owner", "company_id": base["company_id"], "user_id": uid}
     )
     with pytest.raises(DodooError, match="user_already_linked"):
         await HrEmployee.create(
-            env, {"name": "Other", "company_id": base["company_id"], "user_id": 1}
+            env, {"name": "Other", "company_id": base["company_id"], "user_id": uid}
         )
 
 

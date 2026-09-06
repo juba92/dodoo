@@ -117,13 +117,18 @@ class ModuleInstaller:
         # Import the package (makes models register themselves via metaclass)
         _import_package(pkg_dir)
 
-        # Register any models newly defined by this package (skip abstract ones)
+        # Register this package's models into the env registry. We can't rely on the
+        # before/after diff alone: if the package was already imported earlier in this
+        # process (common in a multi-session test run), `_import_package` is a no-op and
+        # nothing would look "new" — yet a freshly-created Environment's registry still
+        # needs them so migrations run. Match by module path as well.
+        pkg_prefixes = (f"dodoo.addons.{name}.", f"{name}.")
         for model_cls in _ALL_MODELS:
-            if (
-                id(model_cls) not in before
-                and not getattr(model_cls, "_abstract", False)
-                and model_cls._name
-            ):
+            if getattr(model_cls, "_abstract", False) or not model_cls._name:
+                continue
+            is_new = id(model_cls) not in before
+            from_pkg = str(getattr(model_cls, "__module__", "")).startswith(pkg_prefixes)
+            if is_new or from_pkg:
                 try:
                     self._env.registry.register(model_cls)
                 except Exception:

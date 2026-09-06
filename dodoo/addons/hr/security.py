@@ -84,6 +84,8 @@ async def seed_rules(env: Any, rules: list[dict[str, Any]]) -> None:
     """
     async with env.dml_conn() as conn:
         for spec in rules:
+            if spec is None:
+                continue
             exists = await conn.execute(
                 text("SELECT id FROM ir_rule WHERE name = :n"), {"n": spec["name"]}
             )

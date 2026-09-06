@@ -158,8 +158,12 @@ class FleetVehicle(BaseModel):
     async def read(
         cls, env: Environment, ids: list[int], fields: list[str] | None = None
     ) -> list[dict[str, Any]]:
-        rows = await super().read(env, ids, fields)
-        if fields is None or "odometer" in fields:
+        want_odo = fields is None or "odometer" in fields
+        fetch = fields
+        if want_odo and fields is not None and "id" not in fields:
+            fetch = ["id", *fields]
+        rows = await super().read(env, ids, fetch)
+        if want_odo and rows:
             latest = await cls._latest_odometers(env, [r["id"] for r in rows])
             for r in rows:
                 r["odometer"] = latest.get(r["id"], r.get("odometer") or 0.0)

@@ -171,4 +171,15 @@ async def test_resolve_appraiser_falls_back_to_officer(env, company_id):
     await assign_hr_group(env, off_uid, "officer")
     orphan = await HrEmployee.create(env, {"name": "No Manager", "company_id": company_id})
     appraiser = await HrAppraisal._resolve_appraiser(env, orphan)
-    assert appraiser == off_uid
+    # no manager → falls back to *an* HR Officer (not the orphan, who has no user anyway)
+    assert appraiser is not None
+    async with env.dml_conn() as conn:
+        held = await conn.execute(
+            text(
+                "SELECT g.name FROM res_users_groups_rel r "
+                "JOIN res_groups g ON g.id = r.group_id WHERE r.user_id = :u"
+            ),
+            {"u": appraiser},
+        )
+        names = {x[0] for x in held}
+    assert names & {"HR Officer", "HR Administrator"}

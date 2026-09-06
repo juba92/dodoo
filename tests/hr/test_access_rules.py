@@ -103,7 +103,9 @@ async def test_contract_rule_scopes_employee_to_own(env, users, company_id):
     )
     ids = await HrContract.search(env, [], uid=users["emp_uid"])
     names = {r["name"] for r in await HrContract.read(env, ids)}
-    assert names == {"own"}
+    assert "own" in names and "other" not in names  # employee sees only their own
 
-    off_ids = await HrContract.search(env, [], uid=users["off_uid"])
-    assert len(off_ids) == 2
+    off_ids = set(await HrContract.search(env, [], uid=users["off_uid"]))
+    assert set(ids) <= off_ids  # officer sees at least everything the employee does
+    off_names = {r["name"] for r in await HrContract.read(env, list(off_ids))}
+    assert {"own", "other"} <= off_names

@@ -14,6 +14,18 @@ if TYPE_CHECKING:
 _log = logging.getLogger(__name__)
 
 
+def _or_join(domains: list[list]) -> list:
+    """Combine several domain lists with OR (prefix ``|`` for each pair after the first)."""
+    if len(domains) == 1:
+        return domains[0]
+    out: list = []
+    for _ in range(len(domains) - 1):
+        out.append("|")
+    for d in domains:
+        out.extend(d)
+    return out
+
+
 class AccessEnforcer:
     @staticmethod
     async def build_context(env: Environment, uid: int) -> dict:
@@ -32,56 +44,52 @@ class AccessEnforcer:
         }
 
     @staticmethod
-    async def get_applicable_rules(
-        env: Environment,
-        model_name: str,
-        uid: int,
-        operation: str,
-    ) -> list[list]:
+    async def _fetch_rules(
+        env: Environment, model_name: str, uid: int, operation: str
+    ) -> tuple[list[list], list[list], bool]:
+        """Return ``(global_domains, matching_group_domains, model_has_any_group_rule)``.
+
+        Odoo semantics: global rules always AND; group rules OR among themselves and then
+        AND with the globals. If a model has *any* group-scoped rule but none match the
+        caller's groups, the caller has no grant → access is denied.
+        """
         perm_col = f"perm_{operation}"
         async with env.dml_conn() as conn:
-            # Get user's group IDs
-            result = await conn.execute(
+            gids_rows = await conn.execute(
                 text("SELECT group_id FROM res_users_groups_rel WHERE user_id = :uid"),
                 {"uid": uid},
             )
-            group_ids = [row[0] for row in result]
+            group_ids = [row[0] for row in gids_rows]
 
-            # Get applicable ir.rule rows
-            if group_ids:
-                result = await conn.execute(
-                    text(
-                        f"SELECT r.domain_filter FROM ir_rule r "
-                        f"LEFT JOIN ir_rule_group_rel rg ON rg.rule_id = r.id "
-                        f"JOIN ir_model m ON m.id = r.model_id "
-                        f"WHERE m.name = :model "
-                        f"AND r.{perm_col} = TRUE "
-                        f"AND (r.global_rule = TRUE OR rg.group_id = ANY(:gids))"
-                    ),
-                    {"model": model_name, "gids": group_ids},
-                )
-            else:
-                result = await conn.execute(
-                    text(
-                        f"SELECT r.domain_filter FROM ir_rule r "
-                        f"JOIN ir_model m ON m.id = r.model_id "
-                        f"WHERE m.name = :model "
-                        f"AND r.{perm_col} = TRUE "
-                        f"AND r.global_rule = TRUE"
-                    ),
-                    {"model": model_name},
-                )
+            rows = await conn.execute(
+                text(
+                    f"SELECT r.id, r.domain_filter, r.global_rule, "
+                    f"       EXISTS (SELECT 1 FROM ir_rule_group_rel g "
+                    f"               WHERE g.rule_id = r.id "
+                    f"               AND g.group_id = ANY(:gids)) AS matches "
+                    f"FROM ir_rule r JOIN ir_model m ON m.id = r.model_id "
+                    f"WHERE m.name = :model AND r.{perm_col} = TRUE"
+                ),
+                {"model": model_name, "gids": group_ids or [0]},
+            )
 
-            domains = []
-            for row in result:
+            global_domains: list[list] = []
+            group_domains: list[list] = []
+            has_group_rule = False
+            for row in rows:
+                if not row[2]:  # not a global rule → it's a group rule
+                    has_group_rule = True
                 try:
-                    domain = json.loads(row[0])
-                    if isinstance(domain, list):
-                        domains.append(domain)
+                    dom = json.loads(row[1])
                 except (json.JSONDecodeError, TypeError):
-                    pass
-
-        return domains
+                    continue
+                if not isinstance(dom, list):
+                    continue
+                if row[2]:
+                    global_domains.append(dom)
+                elif row[3]:  # group rule that matches one of the caller's groups
+                    group_domains.append(dom)
+        return global_domains, group_domains, has_group_rule
 
     @staticmethod
     async def get_merged_domain(
@@ -91,34 +99,45 @@ class AccessEnforcer:
         operation: str,
     ) -> list | None:
         try:
-            domains = await AccessEnforcer.get_applicable_rules(env, model_name, uid, operation)
+            globals_, groups_, has_group_rule = await AccessEnforcer._fetch_rules(
+                env, model_name, uid, operation
+            )
         except Exception:
-            _log.exception("ir.rule lookup failed for %s/%s; applying no extra domain", model_name, operation)
+            _log.exception(
+                "ir.rule lookup failed for %s/%s; applying no extra domain",
+                model_name,
+                operation,
+            )
             return None
 
-        if not domains:
+        parts: list[list] = list(globals_)
+
+        if has_group_rule:
+            if not groups_:
+                return [["id", "=", 0]]  # model is group-gated and caller has no grant
+            parts.append(_or_join(groups_))
+
+        if not parts:
             return None
-
-        if len(domains) == 1:
-            return domains[0]
-
-        # AND-merge all domains
-        merged: list = ["&"]
-        for domain in domains:
-            merged.extend(domain)
+        if len(parts) == 1:
+            return parts[0]
+        merged: list = []
+        for _ in range(len(parts) - 1):
+            merged.append("&")
+        for p in parts:
+            merged.extend(p)
         return merged
 
     @staticmethod
-    async def check_write_access(
+    async def check_access(
         env: Environment,
         model_name: str,
         uid: int,
         operation: str,
     ) -> None:
-        domains = await AccessEnforcer.get_applicable_rules(env, model_name, uid, operation)
-        if domains:
-            # If any deny rule exists (domain that would exclude the record), raise AccessError
-            # Simplified: if any write-deny rules exist for this model+uid, raise
+        """Raise ``AccessError`` when the caller is fully denied the operation on the model."""
+        merged = await AccessEnforcer.get_merged_domain(env, model_name, uid, operation)
+        if merged == [["id", "=", 0]]:
             raise AccessError(
                 f"Access denied: operation '{operation}' on model '{model_name}' is restricted"
             )

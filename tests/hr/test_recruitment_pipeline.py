@@ -19,6 +19,7 @@ async def recruiting(env, company_id):
             "INSERT INTO res_users (login,name,active,create_date,write_date) "
             "VALUES ('rec','Rec',TRUE,now(),now()) RETURNING id"))).scalar_one()
         await conn.commit()
+    async with env.dml_conn() as conn:
         stages = await conn.execute(
             text("SELECT id, is_hired_stage FROM hr_recruitment_stage ORDER BY sequence")
         )

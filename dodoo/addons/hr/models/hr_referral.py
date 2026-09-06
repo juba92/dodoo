@@ -121,14 +121,20 @@ class HrReferral(BaseModel):
     async def read(
         cls, env: Environment, ids: list[int], fields: list[str] | None = None
     ) -> list[dict[str, Any]]:
-        rows = await super().read(env, ids, fields)
         want = fields is None or "status" in fields
+        fetch = fields
+        if want and fields is not None and "applicant_id" not in fields:
+            fetch = [*fields, "applicant_id"]
+        rows = await super().read(env, ids, fetch)
         if not want or not rows:
             return rows
         app_ids = [r["applicant_id"] for r in rows if r.get("applicant_id")]
         status_by_app = await cls._applicant_status(env, app_ids)
+        drop_app = fetch is not None and fields is not None and "applicant_id" not in fields
         for r in rows:
             r["status"] = status_by_app.get(r.get("applicant_id"), "submitted")
+            if drop_app:
+                r.pop("applicant_id", None)
         return rows
 
     @classmethod

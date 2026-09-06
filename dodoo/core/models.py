@@ -296,10 +296,23 @@ async def _access_context(env: Environment, uid: int) -> dict[str, Any]:
 
 
 def _make_resolver(env: Environment):
-    """Return a resolver ``(model_name) -> (table, fields_map)`` for dotted-path rule leaves."""
+    """Return a resolver ``(model_name) -> (table, fields_map)`` for dotted-path rule leaves.
+
+    Prefers the environment's registry; falls back to the global ``_ALL_MODELS`` list so a
+    dotted-path rule still resolves when the caller holds an ``Environment`` whose registry
+    was not eagerly populated (e.g. models imported directly rather than via ``load_installed``).
+    """
 
     def resolve(model_name: str) -> tuple[Any, dict[str, Any]]:
-        model = env.registry.lookup(model_name)
+        try:
+            model = env.registry.lookup(model_name)
+        except Exception:
+            model = next(
+                (m for m in _ALL_MODELS if getattr(m, "_name", None) == model_name),
+                None,
+            )
+            if model is None:
+                raise
         return (
             model._sa_table(),
             {**model._fields, **{f: None for f in _SYSTEM_FIELDS}},

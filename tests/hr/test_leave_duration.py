@@ -9,9 +9,16 @@ from dodoo.core.exceptions import DodooError
 
 @pytest.fixture
 async def setup(env, company_id):
+    from sqlalchemy import text
+
     from dodoo.addons.hr.models.hr_employee import HrEmployee
     from dodoo.addons.hr.models.hr_leave_allocation import HrLeaveAllocation
     from dodoo.addons.hr.models.hr_leave_type import HrLeaveType
+
+    # isolate from public holidays other tests may have left in the shared DB
+    async with env.dml_conn() as conn:
+        await conn.execute(text("DELETE FROM hr_public_holiday"))
+        await conn.commit()
 
     emp = await HrEmployee.create(env, {"name": "Leaver", "company_id": company_id})
     ptype = await HrLeaveType.create(

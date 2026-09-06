@@ -57,7 +57,10 @@ class Integer(Field):
         return int(value)
 
     def to_sa_column(self) -> sa.Column:  # type: ignore[type-arg]
-        return sa.Column(self.name, sa.Integer(), nullable=not self.required)
+        kwargs: dict[str, Any] = {"nullable": not self.required}
+        if self.default is not None:
+            kwargs["server_default"] = str(int(self.default))
+        return sa.Column(self.name, sa.Integer(), **kwargs)
 
 
 class Boolean(Field):
@@ -75,7 +78,10 @@ class Boolean(Field):
 
 class Float(Field):
     def to_sa_column(self) -> sa.Column:  # type: ignore[type-arg]
-        return sa.Column(self.name, sa.Float(), nullable=not self.required)
+        kwargs: dict[str, Any] = {"nullable": not self.required}
+        if self.default is not None:
+            kwargs["server_default"] = str(float(self.default))
+        return sa.Column(self.name, sa.Float(), **kwargs)
 
 
 class Date(Field):

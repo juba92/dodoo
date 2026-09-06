@@ -74,7 +74,7 @@ class HrLeave(BaseModel):
                 # No calendar → Monday–Friday, 8h/day fallback.
                 rows = await conn.execute(
                     text(
-                        "SELECT COUNT(*) FROM generate_series(:d0::date, :d1::date, '1 day') AS d "
+                        "SELECT COUNT(*) FROM generate_series(CAST(:d0 AS date), CAST(:d1 AS date), '1 day') AS d "
                         "WHERE EXTRACT(ISODOW FROM d) < 6 "
                         "AND NOT EXISTS (SELECT 1 FROM hr_public_holiday h "
                         "  WHERE (h.company_id = :c OR h.company_id IS NULL) "
@@ -90,7 +90,7 @@ class HrLeave(BaseModel):
                 rows = await conn.execute(
                     text(
                         "SELECT COALESCE(SUM(a.hour_to - a.hour_from), 0) "
-                        "FROM generate_series(:d0::date, :d1::date, '1 day') AS d "
+                        "FROM generate_series(CAST(:d0 AS date), CAST(:d1 AS date), '1 day') AS d "
                         "JOIN resource_calendar_attendance a "
                         "  ON a.calendar_id = :cal "
                         "  AND a.dayofweek = (EXTRACT(ISODOW FROM d)::int - 1)::text "
@@ -104,7 +104,7 @@ class HrLeave(BaseModel):
             rows = await conn.execute(
                 text(
                     "SELECT COUNT(DISTINCT d::date) "
-                    "FROM generate_series(:d0::date, :d1::date, '1 day') AS d "
+                    "FROM generate_series(CAST(:d0 AS date), CAST(:d1 AS date), '1 day') AS d "
                     "WHERE EXISTS (SELECT 1 FROM resource_calendar_attendance a "
                     "  WHERE a.calendar_id = :cal "
                     "  AND a.dayofweek = (EXTRACT(ISODOW FROM d)::int - 1)::text) "
