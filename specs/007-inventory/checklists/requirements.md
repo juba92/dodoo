@@ -37,3 +37,7 @@
   (constitution → dodoo architecture → Odoo 19.0 reference → minimal scope).
 - All items pass on first validation pass; no spec updates required before `/speckit-clarify` or
   `/speckit-plan`.
+- `/speckit-clarify` (2026-09-13) resolved five additional architecture-impacting ambiguities
+  autonomously (stock/account addon boundary, Product Type scope, Transfer contact field,
+  reservation default, reordering-rule trigger mechanism) — see spec.md's Clarifications section.
+  All checklist items remain passing after integration; no regressions.

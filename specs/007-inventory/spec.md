@@ -8,14 +8,26 @@
 
 **Input**: User description: "Add an Inventory module to dodoo that reproduces the Odoo 19.0 'Inventory' application section — Products & Variants, Units of Measure, Warehouses & Locations, Operation Types (Receipts, Delivery Orders, Internal Transfers, Returns), Transfers/Stock Moves, Physical Inventory (Inventory Adjustments/Counts), Lots & Serial Numbers, Packages, Putaway Rules, Storage Categories, Routes & Reordering Rules (Replenishment), Scrap, and Valuation reporting — built as one or more dodoo addons (dodoo/addons/product/, dodoo/addons/stock/) following the existing architecture, and modelled on the Odoo 19.0 product, uom, stock, and stock_account addons. The stock addon depends on the new product addon plus base, web, and localization (005); valuation posts journal entries into the existing account addon (003) the same way stock_account integrates with account in Odoo 19.0."
 
+## Clarifications
+
+### Session 2026-09-13
+
+*(Resolved autonomously per the project's Speckit Automation Rules — priority order: constitution → dodoo architecture → Odoo 19.0 → minimal scope.)*
+
+- Q: Does `stock` depend directly on `account` (003), or does valuation live in a separate addon? → A: **A separate `dodoo/addons/stock_account/` addon** depending on `stock` + `account`, mirroring Odoo 19.0's own `stock` / `stock_account` split exactly. `product` and `stock` themselves carry no dependency on `account`; only `stock_account` does, keeping the branch a clean diff on top of 003 + 005 without forcing every Inventory installation to pull in accounting.
+- Q: Does the Product Type include Odoo 17+'s "combo" value even though Sales/Point of Sale (which alone give combos meaning) are out of scope here? → A: **No.** Product Type is **Goods or Service only** in this feature; "combo" is deferred to a future Sales/POS feature. The "track inventory" (`is_storable`) flag remains applicable only to Goods, per Odoo 19.0.
+- Q: Do Transfers reference a vendor/customer contact? → A: **Yes** — a Transfer carries an **optional `partner_id`** reusing the existing `res.partner` model from `base` (already used by 003-accounting), matching Odoo 19.0's `stock.picking.partner_id`. It is informational/reporting only in this feature (no partner-triggered document generation, since Purchase/Sales are out of scope).
+- Q: Is reservation automatic when a Transfer is confirmed, or does it require a separate manual step by default? → A: **Automatic and immediate by default** for every operation type: confirming a Transfer always attempts reservation in the same action, matching Odoo 19.0's default for immediate transfers. The per-operation-type flag (FR-018) may only make reservation stricter (e.g. require manual confirmation before searching for stock) — it cannot be used to skip reservation entirely.
+- Q: How is replenishment for a Reordering Rule triggered — a background scheduler/cron job, or on demand? → A: **On demand only**, via a manual "Run Reordering Rules" action (or by opening the replenishment view, which computes deficits live). Dodoo has no background scheduler/cron subsystem today — HR's accrual (006) is likewise computed on demand rather than via a cron job — so Inventory follows the same established pattern instead of introducing new infrastructure.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Product catalog, variants, and units of measure (Priority: P1)
 
 An inventory manager builds the product catalog: categories in a hierarchy, units of measure grouped
 by measurement category (e.g. Unit, Weight, Volume), and products. A product is defined once as a
-template (name, category, product type — goods, service, or combo — unit of measure, sales/cost
-price, barcode) and, when it carries one or more attributes (e.g. Color, Size), the system generates
+template (name, category, product type — goods or service — unit of measure, sales/cost price,
+barcode) and, when it carries one or more attributes (e.g. Color, Size), the system generates
 one product variant per combination of attribute values. Goods can be flagged to track inventory
 (stock is followed) or left untracked (always available, no on-hand quantity). Variants can each
 override their own barcode and add an extra price on top of the template price.
@@ -261,8 +273,8 @@ product's route.
    that product/location falls below the minimum, **Then** a replenishment proposal for enough
    quantity to reach the maximum is generated, following the product's route.
 5. **Given** a reordering rule that has already generated a pending replenishment covering the
-   deficit, **When** the scheduler runs again before it is received, **Then** it does not create a
-   duplicate replenishment for the same deficit.
+   deficit, **When** "Run Reordering Rules" is triggered again before it is received, **Then** it
+   does not create a duplicate replenishment for the same deficit.
 6. **Given** a product with no route resolving to a supply source, **When** replenishment is
    attempted, **Then** it is reported as unresolved rather than silently doing nothing.
 
@@ -373,7 +385,8 @@ ledger's stock valuation account balance.
   as its own source (directly or transitively within the same route) is rejected at configuration
   time.
 - **Reordering rule already covered**: a reordering rule does not generate a second replenishment
-  proposal while an existing incoming transfer already covers the computed deficit.
+  proposal while an existing incoming transfer already covers the computed deficit, even if "Run
+  Reordering Rules" is triggered again before it is received.
 - **Costing method change mid-history**: changing a category's costing method applies prospectively
   to moves from that point forward; existing valuation layers and their journal entries are not
   retroactively recomputed.
@@ -403,7 +416,7 @@ ledger's stock valuation account balance.
   unit fields that does not belong to the same unit-of-measure category as the product's primary
   unit.
 - **FR-004**: The system MUST provide a Product Template record with a name, category, product type
-  (goods, service, or combo), a "track inventory" flag (applicable only to goods), a primary unit of
+  (goods or service), a "track inventory" flag (applicable only to goods), a primary unit of
   measure, a sales price, a cost, and a barcode.
 - **FR-005**: The system MUST provide Product Attribute, Attribute Value, and Attribute Line records
   allowing a template to declare one or more attributes with a set of possible values.
@@ -443,7 +456,8 @@ ledger's stock valuation account balance.
   internal — warehouse, default source location, default destination location, naming sequence) and
   MUST seed Receipts, Delivery Orders, Internal Transfers, and Returns per warehouse.
 - **FR-018**: An Operation Type MUST support configuration flags controlling whether reservation is
-  automatic on confirmation and whether creating a backorder is required, optional, or never offered.
+  attempted immediately on confirmation (the default) or deferred to a later manual trigger, and
+  whether creating a backorder is required, optional, or never offered.
 - **FR-019**: A Returns transfer MUST reference the operation type appropriate to reversing its
   originating transfer's direction (e.g. a delivery's return uses a Returns-configured incoming
   operation type).
@@ -462,9 +476,14 @@ ledger's stock valuation account balance.
 - **FR-024**: A Transfer MUST contain one or more Stock Move records (product, demanded quantity,
   unit of measure, source location, destination location) derived from the transfer's operation type
   defaults, overridable per move.
-- **FR-025**: Confirming a Transfer MUST attempt to reserve the demanded quantity of each tracked
-  move from available (on-hand minus already-reserved) quantity at the source location, moving fully
-  reserved transfers to ready and partially/unreservable ones to waiting.
+- **FR-024a**: A Transfer MUST support an optional contact (`partner_id`, reusing `res.partner` from
+  `base`) identifying the vendor/customer/counterparty the goods are received from or delivered to;
+  it is informational/reporting only and does not trigger any document generation.
+- **FR-025**: Confirming a Transfer MUST, by default and immediately, attempt to reserve the demanded
+  quantity of each tracked move from available (on-hand minus already-reserved) quantity at the
+  source location, moving fully reserved transfers to ready and partially/unreservable ones to
+  waiting; an operation type MAY be configured to defer this reservation attempt (FR-018) but MUST
+  NOT be configured to skip reservation altogether.
 - **FR-026**: The system MUST provide a Stock Move Line record capturing the actual quantity moved for
   a stock move, with its own source/destination location (which MAY differ from the move's, e.g. via
   putaway), and, where applicable, a lot/serial and a package.
@@ -568,15 +587,19 @@ ledger's stock valuation account balance.
 - **FR-062**: The system MUST reject a Rule configuration whose destination location is also its own
   source, directly or transitively, within the same route.
 - **FR-063**: The system MUST provide a Reordering Rule record (product, warehouse or location,
-  minimum quantity, maximum quantity, and a multiple/rounding quantity) triggering replenishment when
-  forecasted quantity (on-hand + incoming − outgoing) for that product/location falls below the
-  minimum.
-- **FR-064**: Triggering replenishment for a Reordering Rule MUST generate a proposal/transfer for a
-  quantity that brings forecasted quantity up to at least the maximum, rounded up to the configured
-  multiple, following the product's applicable route to determine the supplying operation type and
-  source location.
+  minimum quantity, maximum quantity, and a multiple/rounding quantity) identifying when forecasted
+  quantity (on-hand + incoming − outgoing) for that product/location has fallen below the minimum.
+- **FR-063a**: The system MUST provide an on-demand "Run Reordering Rules" action (and a
+  replenishment view that computes deficits live) that evaluates every Reordering Rule in scope;
+  there is no background scheduler/cron job, consistent with dodoo's existing architecture (no
+  scheduler subsystem exists yet; HR accrual, 006, is likewise computed on demand).
+- **FR-064**: Running replenishment for a Reordering Rule below its minimum MUST generate a
+  proposal/transfer for a quantity that brings forecasted quantity up to at least the maximum,
+  rounded up to the configured multiple, following the product's applicable route to determine the
+  supplying operation type and source location.
 - **FR-065**: The system MUST NOT generate a duplicate replenishment for a Reordering Rule while an
-  existing, not-yet-received incoming transfer already covers the computed deficit.
+  existing, not-yet-received incoming transfer already covers the computed deficit, even if the
+  "Run Reordering Rules" action is triggered again.
 - **FR-066**: If a product's applicable route resolves to no usable supply source, the system MUST
   report the reordering rule as unresolved rather than silently skipping it.
 
@@ -673,7 +696,7 @@ ledger's stock valuation account balance.
   units, one of which is the reference unit; other units carry a conversion ratio. Modelled on Odoo
   `uom.category`, `uom.uom`.
 - **Product Template**: the shared definition of a sellable/stockable thing — name, category, type
-  (goods/service/combo), track-inventory flag, unit of measure, prices, barcode, optional
+  (goods/service), track-inventory flag, unit of measure, prices, barcode, optional
   `company_id`. Modelled on Odoo `product.template`.
 - **Product Attribute / Attribute Value / Attribute Line**: the taxonomy used to generate variants.
   Modelled on Odoo `product.attribute`, `product.attribute.value`, `product.template.attribute.line`.
@@ -686,7 +709,8 @@ ledger's stock valuation account balance.
 - **Operation Type (Picking Type)**: a named kind of transfer (Receipts, Delivery Orders, Internal
   Transfers, Returns) with default source/destination locations and a naming sequence. Modelled on
   Odoo `stock.picking.type`.
-- **Transfer (Picking)**: a document grouping one or more Stock Moves under an operation type, with a
+- **Transfer (Picking)**: a document grouping one or more Stock Moves under an operation type, with
+  an optional contact (`res.partner`) and a
   workflow state. Modelled on Odoo `stock.picking`.
 - **Stock Move**: a planned movement of a product/quantity between two locations belonging to a
   Transfer. Modelled on Odoo `stock.move`.
@@ -716,7 +740,8 @@ ledger's stock valuation account balance.
   role conditions with company scope. Modelled on Odoo `stock.group_stock_user` /
   `stock.group_stock_manager`.
 - **Reused core entities**: `res.company` (multi-company scope), `res.currency` (valuation and price
-  amounts), `res.lang` (translation/RTL from 005), and the accounting addon's `account.move` /
+  amounts), `res.partner` (optional Transfer contact, FR-024a), `res.lang` (translation/RTL from
+  005), and the accounting addon's `account.move` /
   `account.move.line` / `account.account` (journal entries and accounts targeted by valuation
   postings, FR-075/FR-078) and `account.journal` (the stock journal postings are made into). The
   feature adds new records and rules; it introduces no parallel currency or company structures.
@@ -813,18 +838,19 @@ ledger's stock valuation account balance.
   and `stock_account` addons (models, field groupings, states, menus, security groups, workflows, and
   costing methods). Where the Odoo source is available at `../odoo-19.0` it is the authority on
   field-level detail during planning; where it is not, established Odoo 19.0 semantics are assumed
-  (e.g. the `product.template.type` in {goods, service, combo} plus a separate `is_storable`/"track
-  inventory" flag introduced in Odoo 17 and carried into 19.0).
+  (e.g. the `product.template.type` restricted here to {goods, service} — omitting Odoo 17+'s
+  "combo" value, which is meaningful only with Sales/Point of Sale — plus a separate
+  `is_storable`/"track inventory" flag introduced in Odoo 17 and carried into 19.0).
 - **Architecture**: implemented as `dodoo/addons/product/` (Categories + Units of Measure + Templates
   + Attributes + Variants) and `dodoo/addons/stock/` (Warehouses/Locations/Operation Types +
   Transfers/Moves + Physical Inventory + Lots/Serials + Packages + Putaway/Storage Categories +
   Routes/Reordering + Scrap), on the existing FastAPI routing, SQLAlchemy Core async, Pydantic v2,
   vanilla-JS SPA, and the ORM / view / record-rule patterns from 001-erp-core and 002-web-ui. `stock`
-  depends on `product`, `base`, `web`, and `localization` (005). Valuation (Stock Valuation Layers and
-  journal posting into `account`, 003) may be delivered inside `stock` or split into a separate
-  `dodoo/addons/stock_account/` addon depending on `stock` + `account` — mirroring Odoo's own split —
-  the exact addon boundary for valuation is a planning decision; the delivered functional scope is
-  `product` + `stock` + valuation as described in User Story 8.
+  depends on `product`, `base`, `web`, and `localization` (005), with **no** dependency on `account`.
+  Valuation (Stock Valuation Layers and journal posting into `account`, 003) is delivered in a
+  separate `dodoo/addons/stock_account/` addon depending on `stock` + `account`, mirroring Odoo
+  19.0's own `stock` / `stock_account` split (per Clarifications). The delivered functional scope is
+  `product` + `stock` + `stock_account` as described in User Story 8.
 - **Scope boundaries — explicitly out of scope**: Purchase (RFQs/purchase orders) and Sales (sales
   orders) apps and any automatic document generation into them; Manufacturing (bills of materials,
   manufacturing orders) and any "manufacture" route action; batch/wave picking
@@ -849,9 +875,11 @@ ledger's stock valuation account balance.
   Catalog configuration (product category, unit of measure, storage category) carries an optional,
   nullable `company_id` (shared when `NULL`), matching Odoo 19.0.
 - **Dependencies**: requires the completed 001-erp-core (models, record rules, HTTP/RPC, users &
-  groups), 002-web-ui (generic view architecture, list/form/kanban/sidebar), 003-accounting (journal,
-  account, account move/move line — the posting target for valuation), and 005-localization-settings
-  (language, RTL, company currency/country). No dependency on 004-accounting-ui or 006-human-resources.
+  groups, `res.partner`), 002-web-ui (generic view architecture, list/form/kanban/sidebar), and
+  005-localization-settings (language, RTL, company currency/country) for `product` and `stock`.
+  003-accounting (journal, account, account move/move line — the posting target for valuation) is a
+  dependency of `stock_account` only, per Clarifications. No dependency on 004-accounting-ui or
+  006-human-resources.
 - **ADRs to be filed during planning**: the transfer/reservation state engine; the putaway/storage
   capacity resolution algorithm; the route/reordering-rule replenishment resolution (including the
   no-Purchase-app fallback); and the costing-method (standard/average/FIFO) valuation engine and its
