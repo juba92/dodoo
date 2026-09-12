@@ -110,6 +110,40 @@ achieves the same traceability outcome without a new top-level entity, and can b
 procurement-group model later without breaking the traceability contract if multi-warehouse routing
 grows more complex than this feature requires.
 
+## D6. Triggering `stock_account` valuation from `stock`'s moves without a reverse dependency
+
+**Decision**: Every path that produces a "done" stock move — transfer validation, physical-inventory
+count application, and scrap confirmation — is redesigned to converge on the single choke point
+`StockMove.action_set_state(env, [move_id], "done", uid=uid)` (never a direct `write({"state":
+"done"})`). `stock_account/__init__.py` wraps that one classmethod at Python import time: the wrapper
+calls the original `action_set_state`, and only on success (and only for `is_storable` products)
+calls `StockValuationLayer.value_move`. The wrap is applied unconditionally at import time — a
+deployment that never imports `dodoo.addons.stock_account` simply never applies it, so `stock`'s own
+source carries no reference to `stock_account`, no try/except import, and no "is stock_account
+installed" runtime check.
+
+**Rationale**: The codebase has no hook/event/signal registry today (confirmed by search — no addon
+currently needs one; HR/Fleet only ever read each other's data via a plain FK, never intercepted an
+action). Odoo's own `_inherit` achieves this same effect through a registry that rebuilds every
+model's MRO from all installed modules' contributions; dodoo's `_inherit` is deliberately narrower — a
+single-table `_type` discriminator only (`core/models.py`), not a method-overriding mechanism.
+Function wrapping at import time reproduces the needed effect with no new core subsystem, and — this
+is the important part — keeps the *direction* of the dependency intact at the behavioural level, not
+just the schema level: `stock` never imports, mentions, or branches on `stock_account`, exactly
+mirroring what ADR-033 already established for the data layer. Converging on one choke point
+(`action_set_state`) rather than three separate hook points (validate/count/scrap) keeps the wrap
+surface minimal and testable.
+
+**Alternatives considered**: A generic hook/event-bus added to `dodoo/core/` — rejected as new core
+infrastructure for a single integration point with no other current consumer. `stock` dynamically
+importing an optional "valuation callback" module by string name, wrapped in `try/except
+ImportError` — rejected because it still requires `stock`'s own source to know the string
+`"stock_account"` and reason about whether it is present, which is the soft form of exactly the
+coupling the Clarifications ruled out. A periodic reconciliation job scanning for newly-done moves
+since the last run — rejected: valuation must post atomically with the move (FR-072/075), and a
+polling job reopens the "no scheduler" problem this project has otherwise consistently avoided
+(ADR-032/FR-063a).
+
 ## OWASP Top 10 review (SEC-005)
 
 - **A01 Broken Access Control**: closed by `ir.rule` company-scope domains on every model (FR-083)

@@ -14,13 +14,15 @@ references are to `spec.md`.
 | Identity | `name` | Char(128), required | |
 | Hierarchy | `parent_id` | Many2one("product.category") | optional; FR-001 |
 | Scope | `company_id` | Many2one("res.company") | nullable = shared (FR-001, FR-010) |
-| Valuation | `costing_method` | Selection([standard, average, fifo]), default `standard` | FR-071; plain data field, no FK — read by `stock_account`, adds no dependency (ADR-033) |
-| *(stock_account extension)* | `property_stock_valuation_account_id` | INTEGER FK → `account_account.id` | added via `ALTER TABLE` by `stock_account`, not a declared `Field` on this model (D1) |
-| *(stock_account extension)* | `property_stock_input_account_id` | INTEGER FK → `account_account.id` | added via `ALTER TABLE` (D1) |
-| *(stock_account extension)* | `property_stock_output_account_id` | INTEGER FK → `account_account.id` | added via `ALTER TABLE` (D1) |
 
 **Rules**: `parent_id` cycle rejected (same check style as `hr.department`). `company_id = NULL` ⇒
 visible to all companies (FR-001).
+
+**Not declared here**: `costing_method` and the three stock-valuation account properties are added
+to this table by `stock_account` via `ALTER TABLE` (D1/ADR-033) — see the Area P3 — Valuation section
+below. `product.category`'s own model file has no knowledge of costing or accounting, matching the
+Clarifications' "`product` carries zero dependency on `account`" rule (and, transitively, no
+knowledge of `stock` either).
 
 ### `uom.category` / `uom.uom`
 
@@ -77,14 +79,20 @@ is rejected (FR-003).
 | Identity | `barcode` | Char(64) | overridable per variant (FR-007) |
 | Pricing | `price_extra` | Monetary, default 0 | added on top of `template_id.list_price` (FR-007) |
 | Composition | `attribute_value_ids` | Many2many("product.attribute.value", relation_table="product_product_attribute_value_rel", column1="product_id", column2="value_id") | the exact combination this variant represents |
-| Tracking | `tracking` | Selection([none, lot, serial]), default `none` | FR-043; meaningful only when `template_id.is_storable` |
-| Costing | `standard_price` | Monetary | per-variant cost override for average/FIFO running values (ADR-033, D3) |
 
 **Rules** (FR-006): saving a template's attribute lines generates one `product.product` per element of
 the Cartesian product of `value_ids` across all lines, skipping combinations that already have a
 variant (idempotent regeneration on line edit). A template with zero attribute lines has exactly one
-implicit variant (`attribute_value_ids = []`) auto-created with the template. `tracking` MUST NOT
-change once the variant has any `stock.quant` or `stock.move.line` history (FR-043).
+implicit variant (`attribute_value_ids = []`) auto-created with the template.
+
+**Not declared here**: `tracking` (none/lot/serial) is added to this table by `stock` via
+`ALTER TABLE` (same D1 idiom, one dependency level down — see Area P2 below), because enforcing "MUST
+NOT change once the variant has any `stock.quant`/`stock.move.line` history" (FR-043) requires reading
+`stock`'s own tables, which `product`'s model file must never do. Likewise the running average/FIFO
+cost used by valuation (`stock_avg_cost`) is added by `stock_account`, not stored here — `product.
+template.standard_price` above is only the catalog's plain, user-set cost (the standard-costing basis
+and the FIFO/average *seed* value for a product's first receipt), never system-recomputed by
+`product` itself.
 
 **Indexes** (PERF-001): `CREATE INDEX idx_product_product_template ON product_product (template_id)`;
 `CREATE INDEX idx_product_template_search ON product_template (company_id, category_id,
@@ -236,11 +244,14 @@ No new model — an inventory count is a *view* over `stock.quant` (filtered by 
 category, `counted_quantity` made editable) plus an `apply_count` action
 (`StockQuant.apply_count(env, quant_ids, uid)`) that, for every line where `counted_quantity !=
 quantity`, creates a `stock.move`/`stock.move.line` pair between the location and its warehouse's
-`scrap_location`-flagged (or a dedicated inventory-loss-usage) location for the delta, sets
-`quantity = counted_quantity`, and clears `counted_quantity` (FR-038/039). Every applied line is
-recorded to a lightweight `stock.inventory.adjustment.log` model (append-only) capturing
-`quant_snapshot` (product/location/lot), `qty_before`, `qty_after`, `difference`, `uid`, `date` for
-FR-040's audit trail.
+`scrap_location`-flagged (or a dedicated inventory-loss-usage) location for the delta and drives it to
+done via `StockMove.action_set_state(env, [move_id], "done", uid=uid)` — the same choke point every
+other "done" move goes through (ADR-030), which is exactly why `stock_account` only needs to hook that
+one function (ADR-034/D6) to also value inventory adjustments — then sets `quantity =
+counted_quantity` and clears `counted_quantity` (FR-038/039). Every applied line is recorded to a
+lightweight `stock.inventory.adjustment.log` model (append-only) capturing `quant_snapshot`
+(product/location/lot), `qty_before`, `qty_after`, `difference`, `uid`, `date` for FR-040's audit
+trail.
 
 ### `stock.inventory.adjustment.log`
 
@@ -254,6 +265,19 @@ FR-040's audit trail.
 ---
 
 ## Area P2 — Lots, serial numbers, packages
+
+### `product.product` extension column (added by `stock`, D1)
+
+| Field | Type | Notes |
+|---|---|---|
+| `tracking` | VARCHAR(64) (Selection: none/lot/serial), default `none` | FR-043; added to the existing `product_product` table via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` in `stock/data/product_product_ext.py`, the same idiom as `stock_account`'s extension of `product.category` (D1/ADR-033) applied one dependency level down — `product` never declares this field itself |
+
+**Rules**: meaningful only when the variant's template `is_storable`. Being absent from
+`ProductProduct._fields`, `tracking` is invisible to `product.product.read()`/`.write()`;
+`StockProductExt.set_tracking(env, product_id, tracking, uid)` (raw `UPDATE`, exposed via `POST
+/stock/product/{id}/tracking`) is the sole write path and rejects a change once the variant has any
+`stock.quant` row or `stock.move.line` history — a check only `stock` can make, which is exactly why
+the field and its guard both live here rather than on `product.product`'s own model class.
 
 ### `stock.lot`
 
@@ -365,9 +389,11 @@ location_id)`.
 | `state` | Selection([draft, done]) | FR-067 |
 | `move_id` | Many2one("stock.move") | the generated stock move |
 
-**Rules**: confirming (`state → done`) rejects a `quantity` exceeding available on-hand at
-`location_src_id` (FR-068); a done record is immutable (no `write`/`unlink` once `state = done`,
-mirroring `AccountMove`'s posted-state guard) (FR-069).
+**Rules**: confirming rejects a `quantity` exceeding available on-hand at `location_src_id` (FR-068);
+on success it creates `move_id` and drives it to done via `StockMove.action_set_state(env, [move_id],
+"done", uid=uid)` (the ADR-030/ADR-034 choke point) before setting `stock.scrap.state = "done"`
+itself. A done record is immutable (no `write`/`unlink` once `state = done`, mirroring `AccountMove`'s
+posted-state guard) (FR-069).
 
 ---
 
@@ -387,13 +413,16 @@ mirroring `AccountMove`'s posted-state guard) (FR-069).
 | `account_move_id` | Many2one("account.move"), required | the posted journal entry (FR-075) |
 | `company_id` | Many2one("res.company"), required | |
 
-**Rules** (ADR-033): `StockValuationLayer.value_move(env, move_id)` runs once per validated move of a
-`is_storable` product whose category's `costing_method` is set: `standard` — value at
-`product.standard_price`; `average` — recompute `product.standard_price` as the new
-quantity-weighted average across on-hand and value the move at the *pre-update* average for outgoing,
-the move's own unit cost for incoming; `fifo` — incoming opens a new layer at the move's unit cost,
-outgoing consumes open layers (`remaining_qty > 0`) oldest-`create_date`-first, splitting the last
-consumed layer when needed (FR-073/074). Every layer's `value` posts a balanced `account.move`
+**Rules** (ADR-033): `StockValuationLayer.value_move(env, move_id)` is invoked by `stock_account`'s
+import-time wrapper around `StockMove.action_set_state` (ADR-034/D6) — never called from `stock`'s own
+code — once per move driven to `"done"` for an `is_storable` product whose category's
+`costing_method` is set: `standard` — value at the product's
+plain `product.template.standard_price` (the catalog's own field, unchanged by valuation); `average`
+— recompute the extension column `product_product.stock_avg_cost` as the new quantity-weighted
+average across on-hand and value the move at the *pre-update* average for outgoing, the move's own
+unit cost for incoming; `fifo` — incoming opens a new layer at the move's unit cost, outgoing
+consumes open layers (`remaining_qty > 0`) oldest-`create_date`-first, splitting the last consumed
+layer when needed (FR-073/074). Every layer's `value` posts a balanced `account.move`
 (`move_type="entry"`) via `AccountMove.create` + line inserts + `AccountMove.action_post`, debiting/
 crediting `product.category.property_stock_valuation_account_id` against
 `property_stock_input_account_id` (incoming) or `property_stock_output_account_id` (outgoing), or an
@@ -405,11 +434,23 @@ afterward (FR-079, Edge Cases).
 WHERE remaining_qty <> 0` (partial index — FIFO's "open layers" query never scans consumed layers);
 `CREATE INDEX idx_svl_move ON stock_valuation_layer (stock_move_id)`.
 
-### `product.category` extension columns (added by `stock_account`, D1)
+### Extension columns added by `stock_account` (D1/ADR-033)
 
-`property_stock_valuation_account_id`, `property_stock_input_account_id`,
-`property_stock_output_account_id` — see the P1 catalog area above; declared here rather than in
-`product`'s own model file (ADR-033).
+| Table (owning addon) | Column | Type | Notes |
+|---|---|---|---|
+| `product_category` (`product`) | `costing_method` | VARCHAR(64) (Selection: standard/average/fifo), default `standard` | FR-071 |
+| `product_category` (`product`) | `property_stock_valuation_account_id` | INTEGER FK → `account_account.id` | FR-075 |
+| `product_category` (`product`) | `property_stock_input_account_id` | INTEGER FK → `account_account.id` | FR-075 |
+| `product_category` (`product`) | `property_stock_output_account_id` | INTEGER FK → `account_account.id` | FR-075 |
+| `product_product` (`product`) | `stock_avg_cost` | NUMERIC(20,6), default 0 | running average cost for `average`-costing products; FIFO products don't use this column (their running value is the sum of open layers) |
+
+All five are added by `stock_account/data/product_category_ext.py` /
+`product_product_ext.py` via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, never as declared `Field`s
+on `product`'s own model classes (D1). Because they are absent from `ProductCategory._fields` /
+`ProductProduct._fields`, `BaseModel.create/read/write` silently ignore them (confirmed by
+`account`'s identical, already-shipped `res_partner.property_account_*` columns, which the codebase
+only ever touches via raw SQL) — they are read/written exclusively through
+`GET`/`POST /stock_account/category/{id}/configure` (`contracts/stock-valuation.md`).
 
 ---
 

@@ -21,13 +21,16 @@ split exactly (per spec Clarifications). Reused precedents from 001–006: the `
 `ir.rule` company-scoped record rules, the REST-route + `validate()`/`require_groups()` boundary
 pattern, the hardcoded `_render<Area>Menu` sidebar-menu dispatch in `web/static/app.js`, the
 list/form/kanban/calendar view types (already shipped by 006 — no new view type needed), and the
-state-machine + structured-transition-logging idiom from `hr_contract.py`/`hr/_audit.py`. Five ADRs
-are filed (029–033) for the non-trivial designs: warehouse step→topology generation, the
+state-machine + structured-transition-logging idiom from `hr_contract.py`/`hr/_audit.py`. Six ADRs
+are filed (029–034) for the non-trivial designs: warehouse step→topology generation, the
 transfer/reservation/backorder state engine, putaway/storage-category capacity resolution, route/rule
-replenishment resolution, and the costing-method valuation engine (including the cross-addon
+replenishment resolution, the costing-method valuation engine (including the cross-addon
 `ALTER TABLE` field-extension pattern — precedented by `account`'s own extension of `res_partner` —
-needed to attach stock-valuation account properties to `product.category` from `stock_account` without
-giving `product` a dependency on `account`).
+needed to attach stock-valuation account properties, `product.category.costing_method`, and
+`product.product`'s `tracking`/`stock_avg_cost` columns from `stock`/`stock_account` without giving
+`product` a dependency on `stock` or `account`), and the import-time function-wrapping mechanism
+`stock_account` uses to trigger valuation from `stock`'s single move-completion choke point without
+`stock` ever depending on or referencing `stock_account`.
 
 ## Technical Context
 
@@ -48,12 +51,15 @@ to know which values are actually selected per line), `product_product`,
 `stock_move_line`, `stock_quant`, `stock_lot`, `stock_quant_package`, `stock_package_type`,
 `stock_storage_category`, `stock_storage_category_location_rel` (M2M), `stock_putaway_rule`,
 `stock_route`, `stock_route_product_rel` / `stock_route_category_rel` / `stock_route_warehouse_rel`
-(M2M), `stock_rule`, `stock_warehouse_orderpoint`, `stock_scrap`. `stock_account`:
-`stock_valuation_layer`, plus three columns added to the existing `product_category` table via
-`ALTER TABLE ... ADD COLUMN IF NOT EXISTS` (the `account`→`res_partner` precedent in
-`account/data/account_data.py`): `property_stock_valuation_account_id`,
-`property_stock_input_account_id`, `property_stock_output_account_id` (all `INTEGER REFERENCES
-account_account(id)`), and one new `account_journal` row ("Inventory Valuation", type `general`).
+(M2M), `stock_rule`, `stock_warehouse_orderpoint`, `stock_scrap`, plus one column added to the
+existing `product_product` table via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` (the same
+`account`→`res_partner` precedent, one dependency level down): `tracking` (VARCHAR(64), default
+`'none'`). `stock_account`: `stock_valuation_layer`, plus four columns added to the existing
+`product_category` table the same way: `costing_method` (VARCHAR(64), default `'standard'`),
+`property_stock_valuation_account_id`, `property_stock_input_account_id`,
+`property_stock_output_account_id` (all three `INTEGER REFERENCES account_account(id)`); plus one
+column added to `product_product`: `stock_avg_cost` (`NUMERIC(20,6)`, default 0); and one new
+`account_journal` row ("Inventory Valuation", type `general`).
 
 **Testing**: `tests/product/`, `tests/stock/`, `tests/stock_account/` (unit — UoM conversion math,
 variant-generation Cartesian product, transfer state-transition guards, putaway/storage capacity
@@ -100,7 +106,7 @@ class.
 **Scale/Scope**: 3 addons, 23 new `BaseModel` classes across `product` + `stock`, 1 new model
 (`stock.valuation.layer`) + 3 extension columns in `stock_account`, ~89 functional requirements
 (FR-001…FR-089 plus FR-024a/FR-063a), 8 user stories (P1×3: US1–US3; P2×3: US4–US6; P3×2: US7–US8),
-5 ADRs (029–033), 9 contract files.
+6 ADRs (029–034), 9 contract files.
 
 ## Constitution Check
 
@@ -129,12 +135,13 @@ class.
 - [X] **IV. Performance**: PERF-001…005 targets are stated above with the concrete index/query
   strategy for each; `tests/benchmarks/test_inventory_perf.py` runs them in CI alongside 001–006's
   existing benchmarks (PERF-005 requires no regression there).
-- [X] **V. Documentation**: ADR-029…033 filed below for every non-trivial design decision
+- [X] **V. Documentation**: ADR-029…034 filed below for every non-trivial design decision
   (warehouse topology generation, transfer/reservation state engine, putaway/storage-category
   resolution, route/rule replenishment resolution, costing-method valuation engine +
-  cross-addon account-property extension). Inline comments follow the WHY-only policy already
-  demonstrated in `hr_contract.py`/`account_move.py` (state-machine rationale, rounding rationale —
-  never restating field names).
+  cross-addon account-property extension, and the cross-addon action-hooking mechanism for
+  triggering valuation without a reverse dependency). Inline comments follow the WHY-only policy
+  already demonstrated in `hr_contract.py`/`account_move.py` (state-machine rationale, rounding
+  rationale — never restating field names).
 - [X] **VI. Accessibility**: ACC-001…004 restate WCAG 2.1 AA targets; no new view type is needed —
   Inventory reuses the list/form/kanban/calendar types already shipped by 006, so their existing
   accessibility work (keyboard nav, ARIA labelling, RTL tab order) is inherited rather than
@@ -259,25 +266,33 @@ decisions that needed explicit justification rather than being a bare gate pass.
 
 **ADR-033: Costing-method valuation engine and `stock_account`/`account` integration**
 
-- **Decision**: `product.category.costing_method` (Selection: `standard`/`average`/`fifo`, added by
-  the `product` addon as a plain data field — no FK, no dependency on `account`) drives
-  `stock_account`'s `StockValuationLayer.value_move(env, move_id)`, called once per validated
-  `stock.move` of a tracked product. Standard/average valuation stores/reads a running
-  `standard_price`/`avg_cost` on `product.product`; FIFO consumes open layers oldest-first
-  (`ORDER BY create_date`), splitting a layer when the outgoing quantity is smaller than its
-  `remaining_qty`. Every layer immediately calls
+- **Decision**: `product.category.costing_method` (Selection: `standard`/`average`/`fifo`) and its
+  three sibling account properties (`property_stock_valuation_account_id`,
+  `property_stock_input_account_id`, `property_stock_output_account_id`) are **all four** added to
+  the **existing** `product_category` table by `stock_account`'s own data-seed module via
+  `ALTER TABLE product_category ADD COLUMN IF NOT EXISTS ...` — not declared as `Field`s on
+  `product`'s own `ProductCategory` model class, since even the plain `costing_method` enum is
+  meaningless (and unused) until `stock_account` exists. `stock` similarly adds a `tracking`
+  (none/lot/serial) column to `product_product` via the same idiom (one dependency level down), and
+  `stock_account` adds a `stock_avg_cost` column to `product_product` for average-costing's running
+  value. `StockValuationLayer.value_move(env, move_id)` (called once per validated `stock.move` of an
+  `is_storable` product) reads `costing_method` and, for `standard`, values at the product's plain
+  `product.template.standard_price`; for `average`, recomputes `stock_avg_cost`; for `fifo`, opens/
+  consumes `stock.valuation.layer` rows oldest-first (`ORDER BY create_date`), splitting a layer when
+  the outgoing quantity is smaller than its `remaining_qty`. Every layer immediately calls
   `AccountMove.create(...) → insert account.move.line rows → AccountMove.action_post(...)`
   (the exact `move_type="entry"` flow already used by `account`'s own manual-entry path), crediting/
-  debiting `product.category`'s three account properties. Those three properties
-  (`property_stock_valuation_account_id`, `property_stock_input_account_id`,
-  `property_stock_output_account_id`) are added to the **existing** `product_category` table by
-  `stock_account`'s own data-seed module via `ALTER TABLE product_category ADD COLUMN IF NOT EXISTS
-  ... REFERENCES account_account(id)` — the identical idiom `account/data/account_data.py` already
-  uses to add `property_account_receivable_id` etc. to `res_partner` (a table it does not own). A
-  default seed reuses the already-seeded chart-of-accounts code `1100` ("Inventory", `asset_current`)
-  as the default valuation account and adds two new interim accounts plus one new `general`-type
-  "Inventory Valuation" journal (account_journal has no dedicated stock/inventory journal type — none
-  is needed, per the fork research).
+  debiting the category's three account properties — the identical `ALTER TABLE` idiom
+  `account/data/account_data.py` already uses to add `property_account_receivable_id` etc. to
+  `res_partner` (a table it does not own). A default seed reuses the already-seeded chart-of-accounts
+  code `1100` ("Inventory", `asset_current`) as the default valuation account and adds two new interim
+  accounts plus one new `general`-type "Inventory Valuation" journal (account_journal has no dedicated
+  stock/inventory journal type — none is needed, per the fork research). Because these
+  `ALTER TABLE`-added columns are never registered in `ProductCategory._fields` (confirmed:
+  `account` itself never registers `res_partner`'s equivalent `property_account_*` columns either —
+  `BaseModel.write()` silently drops unknown keys), reading/writing them goes through a dedicated
+  raw-SQL REST action (`GET`/`POST /stock_account/category/{id}/configure`), not a generic
+  `product.category.write()` call — see `contracts/stock-valuation.md`.
 - **Rationale**: The `ALTER TABLE`-on-a-foreign-table idiom is not a new pattern invented for this
   feature — it is the *only* precedent in the codebase for "addon B needs a field on addon A's model
   that only makes sense once B is installed," and it is exactly this feature's situation (Clarifications:
@@ -292,6 +307,33 @@ decisions that needed explicit justification rather than being a bare gate pass.
   already proven safe by `account`'s own use on `res_partner`. Giving `product` a soft/optional
   dependency on `account` — rejected outright; the Clarifications session already closed this
   question in favour of `stock_account` as the sole dependency holder.
+
+**ADR-034: Cross-addon action hooking — triggering valuation from `stock` without a reverse
+dependency**
+
+- **Decision**: `stock`'s three "a move becomes done" paths (transfer validation, physical-inventory
+  count application, scrap confirmation) are all implemented to converge on one choke point,
+  `StockMove.action_set_state(env, [move_id], "done", uid=uid)`, rather than each writing
+  `state="done"` independently. `stock_account/__init__.py` wraps that single classmethod at Python
+  import time: the wrapper calls the original, and only on success (and only for `is_storable`
+  products) calls `StockValuationLayer.value_move`. The wrap is applied unconditionally at import
+  time — a deployment that never imports `dodoo.addons.stock_account` never applies it, so `stock`'s
+  own source carries no reference to `stock_account` anywhere (research.md D6).
+- **Rationale**: dodoo has no hook/event/signal registry (confirmed by search of the codebase — no
+  existing addon needs one; every prior cross-addon interaction, HR↔Fleet included, is a plain FK
+  read, never behavioural interception). Odoo's own `_inherit` achieves this effect through a registry
+  rebuilding every model's MRO from all installed modules; dodoo's `_inherit` is deliberately narrower
+  (a single-table `_type` discriminator only, per `core/models.py`). Import-time function wrapping
+  reproduces the needed effect with zero new core infrastructure while preserving the *direction* of
+  the dependency at the behavioural level, not just the schema level — the same one-way guarantee
+  ADR-033 established for data.
+- **Alternatives rejected**: A generic hook/event-bus in `dodoo/core/` — disproportionate new
+  infrastructure for this feature's single integration point. `stock` dynamically importing an
+  optional callback module by string name (`try/except ImportError`) — rejected because it still
+  requires `stock`'s own source to know and reason about `"stock_account"`, the soft form of exactly
+  the coupling Clarifications ruled out. A periodic reconciliation job — rejected: valuation must post
+  atomically with the move (FR-072/075), and polling reopens the "no scheduler" problem this project
+  otherwise avoids (ADR-032/FR-063a).
 
 ## Project Structure
 
@@ -331,7 +373,8 @@ dodoo/addons/product/
 │                                      #   ProductTemplateCreate, AttributeCreate, AttributeLineSet, ...
 ├── models/
 │   ├── __init__.py
-│   ├── product_category.py           # product.category (+ costing_method field, ADR-033)
+│   ├── product_category.py           # product.category (no costing/account fields — those are
+│   │                                  #   ALTER TABLE extensions added by stock_account, ADR-033)
 │   ├── uom.py                        # uom.category, uom.uom (+ conversion helper)
 │   ├── product_template.py           # product.template
 │   ├── product_attribute.py          # product.attribute, product.attribute.value,
@@ -368,14 +411,21 @@ dodoo/addons/stock/
 │   ├── stock_picking.py              # stock.picking (+ derived state, backorder, return — ADR-030)
 │   ├── stock_move.py                 # stock.move (+ action_reserve/action_set_state — ADR-030)
 │   ├── stock_move_line.py            # stock.move.line
-│   ├── stock_quant.py                # stock.quant (+ on-hand/forecast aggregation, count apply)
+│   ├── stock_quant.py                # stock.quant (+ on-hand/forecast aggregation); apply_count
+│   │                                  #   routes its adjustment move through
+│   │                                  #   StockMove.action_set_state(..., "done", ...) — the single
+│   │                                  #   choke point stock_account hooks (ADR-034)
 │   ├── stock_lot.py                  # stock.lot
 │   ├── stock_package.py              # stock.quant.package, stock.package.type
 │   ├── stock_storage_category.py     # stock.storage.category (+ has_capacity, ADR-031)
 │   ├── stock_putaway_rule.py         # stock.putaway.rule (+ resolve_destination, ADR-031)
 │   ├── stock_route.py                # stock.route, stock.rule (+ get_applicable_route, ADR-032)
 │   ├── stock_orderpoint.py           # stock.warehouse.orderpoint (+ run_reordering, ADR-032)
-│   └── stock_scrap.py                # stock.scrap
+│   ├── stock_scrap.py                # stock.scrap; confirm routes its move through
+│   │                                  #   StockMove.action_set_state(..., "done", ...) (ADR-034)
+│   └── product_product_ext.py        # set_tracking(env, product_id, tracking, uid) guard — the
+│                                      #   only write path for the `tracking` column stock adds to
+│                                      #   product_product (D1, one dependency level below ADR-033)
 ├── _audit.py                         # log_transition/log_conflict (mirrors hr/_audit.py exactly)
 ├── http/
 │   ├── __init__.py
@@ -391,6 +441,8 @@ dodoo/addons/stock/
 │   ├── groups.py                     # seed_groups() for Inventory User/Manager
 │   ├── rules.py                      # ir.rule specs (officer_full-style per FR-081/082)
 │   ├── indexes.py                    # PERF-002/003 covering indexes
+│   ├── product_product_ext.py        # ALTER TABLE product_product ADD COLUMN IF NOT EXISTS tracking
+│   │                                  #   VARCHAR(64) DEFAULT 'none' (D1) — run before groups/rules
 │   └── seed.py                       # FR-089: default warehouse + locations/operation types
 └── static/
     ├── stock-menu.js                 # STOCK_MENU export (mirrors hr-menu.js shape)
@@ -401,7 +453,9 @@ dodoo/addons/stock/
         └── traceability-view.js
 
 dodoo/addons/stock_account/
-├── __init__.py                       # imports http + models; post_install seeds COA/journal extension
+├── __init__.py                       # imports http + models; wraps StockMove.action_set_state at
+│                                      #   import time to trigger value_move on "done" (ADR-034/D6);
+│                                      #   post_install seeds COA/journal extension
 ├── __manifest__.py                   # {"name": "Inventory Accounting", "depends": ["stock", "account"],
 │                                      #   "application": False}
 ├── validators.py                     # (none beyond re-exporting stock's require_groups pattern —
@@ -415,7 +469,12 @@ dodoo/addons/stock_account/
 │   └── valuation.py                  # GET valuation report (FR-077/078)
 └── data/
     ├── __init__.py
-    ├── product_category_ext.py       # ALTER TABLE product_category ADD COLUMN ... (ADR-033)
+    ├── product_category_ext.py       # ALTER TABLE product_category ADD COLUMN IF NOT EXISTS
+    │                                  #   costing_method, property_stock_valuation_account_id,
+    │                                  #   property_stock_input_account_id,
+    │                                  #   property_stock_output_account_id (ADR-033)
+    ├── product_product_ext.py        # ALTER TABLE product_product ADD COLUMN IF NOT EXISTS
+    │                                  #   stock_avg_cost NUMERIC(20,6) DEFAULT 0 (ADR-033)
     ├── indexes.py                    # PERF-004 partial index on remaining_qty
     └── seed.py                       # default valuation/interim accounts + "Inventory Valuation" journal
 
@@ -477,3 +536,4 @@ built.
 |-----------|------------|-------------------------------------|
 | Cross-addon `ALTER TABLE` on `product_category` from `stock_account` (ADR-033) instead of a normal `Field` declaration | `product.category` needs stock-valuation account properties once `stock_account` is installed, but `product` itself must carry zero dependency on `account` (Clarifications) | A new `stock.account.category.config` side-table avoids the raw DDL but adds a join to every valuation lookup and diverges from the codebase's one existing precedent (`account`→`res_partner`) for exactly this situation; giving `product` a dependency on `account` was already rejected in the spec's Clarifications |
 | On-demand "Run Reordering Rules" REST action (FR-063a) instead of a background scheduler | Dodoo has no cron/scheduler subsystem today | Building one now would be new infrastructure far outside this feature's scope; `hr`'s own `/hr/cron/contract-expiry` manually-triggered REST endpoint is the exact precedent for "cron-shaped work without a cron subsystem," reused verbatim as `/stock/orderpoint/run` |
+| `stock_account` monkey-patches `StockMove.action_set_state` at import time instead of `stock` calling it directly (ADR-034) | Valuation must post atomically when a move completes, but `stock` cannot import `stock_account` (reverse dependency) and no hook/event system exists in the codebase | A new core hook/event-bus would be genuinely new infrastructure for one integration point; a string-based dynamic/optional import inside `stock` was rejected because it still makes `stock`'s own source reason about `stock_account`'s presence, the exact coupling Clarifications ruled out |

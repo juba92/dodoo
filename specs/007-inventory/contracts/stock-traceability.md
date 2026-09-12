@@ -1,8 +1,14 @@
 # Contract: Lots, Serial Numbers & Packages (US5)
 
 JSON-RPC for CRUD on `stock.lot` / `stock.quant.package` / `stock.package.type`; REST for the
-traceability lookup and the package-move action. `require_groups(env, uid, "Inventory User",
-"Inventory Manager")` on all mutation routes.
+traceability lookup, the package-move action, and reading/setting a variant's `tracking` mode.
+`require_groups(env, uid, "Inventory User", "Inventory Manager")` on all mutation routes.
+
+**Note**: `tracking` is a raw `ALTER TABLE`-added column on `product_product` (D1, owned by `stock`,
+not by `product`) and is therefore **not** in `ProductProduct._fields` — it is invisible to
+`product.product.read()`/`.write()` and must be read/written through the dedicated routes below
+(raw SQL), exactly like `stock_account`'s category valuation columns
+(`contracts/stock-valuation.md`).
 
 ## JSON-RPC
 
@@ -28,6 +34,16 @@ Same shape as above, scoped to a package (FR-054).
 Body: `{location_dest_id: int}`. Generates one Internal Transfer picking moving every quant
 currently keyed to the package to `location_dest_id` (FR-052). Returns `{picking_id}`.
 
+### `GET /stock/product/{product_id}/tracking`
+
+Raw-SQL read of the `tracking` column. Returns `{product_id, tracking}`.
+
+### `POST /stock/product/{product_id}/tracking`
+
+Body: `{tracking: "none"|"lot"|"serial"}`. `StockProductExt.set_tracking` rejects the change (`409`)
+if the variant has any `stock.quant` row or `stock.move.line` history (FR-043); else raw `UPDATE
+product_product SET tracking = :t WHERE id = :id`. Returns `{product_id, tracking}`.
+
 ## Validation models (`stock/validators.py`)
 
 ```text
@@ -36,4 +52,7 @@ class LotCreate(Payload):
 
 class PackageMove(Payload):
     location_dest_id: int
+
+class TrackingUpdate(Payload):
+    tracking: Literal["none", "lot", "serial"]
 ```
