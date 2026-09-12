@@ -150,7 +150,7 @@ returns, and cancellation, safe under concurrent reservation (ADR-030, D2).
 - [ ] T059 [US3] `stock.quant` model (`product_id`, `location_id`, `lot_id`, `package_id`, `quantity`, `reserved_quantity`, `counted_quantity`) with the `(product_id, location_id, lot_id, package_id)` upsert key in `dodoo/addons/stock/models/stock_quant.py`
 - [ ] T060 [US3] `stock.move` model + `action_reserve` (`SELECT ... FOR UPDATE` on candidate quants, D2) + `action_set_state(env, ids, target, uid, expected_state)` (the single "done" choke point, ADR-030/034) in `dodoo/addons/stock/models/stock_move.py` (depends on T059)
 - [ ] T061 [US3] `stock.move.line` model (`move_id`, `qty_done`, `location_src_id`/`location_dest_id`, `lot_id`, `package_id`, `result_package_id`) in `dodoo/addons/stock/models/stock_move_line.py` (depends on T060)
-- [ ] T062 [US3] `stock.picking` model with **derived** `state` (computed from its moves, ADR-030), `action_create_backorder`, and the Return action (FR-030) in `dodoo/addons/stock/models/stock_picking.py` (depends on T060, T061)
+- [ ] T062 [US3] `stock.picking` model (`picking_type_id`, `partner_id` optional per FR-024a, `origin`, `backorder_id`, `scheduled_date`, `date_done`) with **derived** `state` (computed from its moves, ADR-030), `action_create_backorder`, and the Return action (FR-030) in `dodoo/addons/stock/models/stock_picking.py` (depends on T060, T061)
 - [ ] T063 [US3] REST actions `POST /stock/picking/{id}/{confirm,validate,cancel,return}` in `dodoo/addons/stock/http/transfers.py` (depends on T062)
 - [ ] T064 [US3] REST action `GET /stock/product/{id}/forecast` (on-hand/reserved/incoming/outgoing/forecasted, FR-011/034) in `dodoo/addons/stock/http/transfers.py` (depends on T059)
 - [ ] T065 [US3] Validators `TransferCreate`, `TransferValidate`, `TransferCancel`, `MoveLineUpdate` in `dodoo/addons/stock/validators.py` (depends on T060–T062)
@@ -183,6 +183,7 @@ confirm the resulting adjustment (or its absence).
 
 - [ ] T074 [US4] `stock.inventory.adjustment.log` model (`product_id`, `location_id`, `lot_id`, `qty_before`, `qty_after`, `difference`, `uid`, `move_id`) in `dodoo/addons/stock/models/stock_inventory_adjustment.py`
 - [ ] T075 [US4] `StockQuant.apply_count(env, quant_ids, uid)` (creates the adjustment move and drives it to done via `action_set_state`, FR-038) + count-set staging in `dodoo/addons/stock/models/stock_quant.py` (depends on T059, T060, T074)
+- [ ] T075a [US4] `user_or_manager_operate` record rule for `stock.inventory.adjustment.log` appended to `STOCK_RULES`, scoped via the dotted-path domain `["location_id.warehouse_id.company_id", "in", "$company_ids"]` (ADR-028's relational-traversal engine, FR-042/SEC-003) (depends on T014, T074)
 - [ ] T076 [US4] REST actions `POST /stock/inventory/count/set`, `POST /stock/inventory/count/apply` in `dodoo/addons/stock/http/inventory.py` (depends on T075)
 - [ ] T077 [US4] Validators `CountSet`, `CountApply` in `dodoo/addons/stock/validators.py` (depends on T075)
 - [ ] T078 [P] [US4] `dodoo/addons/stock/static/views/inventory-count-list.js`
@@ -276,7 +277,7 @@ rejected.
 - [ ] T112 [US7] `stock.scrap` model + confirm action (creates its `stock.move` and drives it to done via `action_set_state`, ADR-030/034) in `dodoo/addons/stock/models/stock_scrap.py` (depends on T059, T060)
 - [ ] T113 [US7] REST action `POST /stock/scrap/{id}/confirm` in `dodoo/addons/stock/http/scrap.py` (depends on T112)
 - [ ] T114 [US7] Validator `ScrapCreate` in `dodoo/addons/stock/validators.py` (depends on T112)
-- [ ] T115 [US7] `user_or_manager_operate` record rule for `stock.scrap` appended to `STOCK_RULES` (depends on T014, T112)
+- [ ] T115 [US7] `user_or_manager_operate` record rule for `stock.scrap` appended to `STOCK_RULES`, scoped via the dotted-path domain `["location_src_id.warehouse_id.company_id", "in", "$company_ids"]` (FR-070/SEC-003) (depends on T014, T112)
 - [ ] T116 [P] [US7] `dodoo/addons/stock/static/views/scrap-form.js`
 - [ ] T117 [P] [US7] Add "Scrap" entry to `stock-menu.js`
 
