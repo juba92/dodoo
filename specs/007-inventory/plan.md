@@ -415,6 +415,7 @@ dodoo/addons/stock/
 │   │                                  #   routes its adjustment move through
 │   │                                  #   StockMove.action_set_state(..., "done", ...) — the single
 │   │                                  #   choke point stock_account hooks (ADR-034)
+│   ├── stock_inventory_adjustment.py # stock.inventory.adjustment.log (FR-040 audit trail)
 │   ├── stock_lot.py                  # stock.lot
 │   ├── stock_package.py              # stock.quant.package, stock.package.type
 │   ├── stock_storage_category.py     # stock.storage.category (+ has_capacity, ADR-031)
@@ -439,7 +440,9 @@ dodoo/addons/stock/
 │   ├── __init__.py
 │   ├── ir_model_sync.py
 │   ├── groups.py                     # seed_groups() for Inventory User/Manager
-│   ├── rules.py                      # ir.rule specs (officer_full-style per FR-081/082)
+│   ├── rules.py                      # ir.rule specs: manager_full/user_or_manager_operate/
+│   │                                  #   catalog_read/catalog_admin_write/valuation_manager_read
+│   │                                  #   helpers (officer_full-style, per FR-081/082)
 │   ├── indexes.py                    # PERF-002/003 covering indexes
 │   ├── product_product_ext.py        # ALTER TABLE product_product ADD COLUMN IF NOT EXISTS tracking
 │   │                                  #   VARCHAR(64) DEFAULT 'none' (D1) — run before groups/rules
