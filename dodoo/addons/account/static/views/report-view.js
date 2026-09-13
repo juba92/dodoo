@@ -126,6 +126,10 @@ const REPORTS = {
     label: 'Tax Report', filter: 'range', endpoint: '/account/report/tax-report',
     render: renderTaxReport,
   },
+  'analytic-report': {
+    label: 'Analytic Report', filter: 'range', endpoint: '/account/report/analytic',
+    render: renderAnalyticReport,
+  },
 };
 
 export async function render(container, params) {
@@ -445,6 +449,20 @@ function renderTaxReport(parent, data) {
     { txt: t('Total'), strong: true },
     _money(tt.base_amount, { strong: true }), _money(tt.tax_amount, { strong: true }),
   ], { cls: 'report-total-row' });
+  _mount(parent, table);
+}
+
+// ── Analytic Report ──────────────────────────────────────────────────────────
+function renderAnalyticReport(parent, data) {
+  const lines = data.lines || [];
+  if (lines.length === 0) { _empty(parent); return; }
+  const { table, tbody } = _table([t('Analytic Account'), { txt: t('Amount'), right: true }]);
+  lines.forEach(r => {
+    _row(tbody, [r.analytic_account_name, _money(r.amount)]);
+  });
+  const tt = data.totals || {};
+  _row(tbody, [{ txt: t('Total'), strong: true }, _money(tt.amount, { strong: true })],
+    { cls: 'report-total-row' });
   _mount(parent, table);
 }
 

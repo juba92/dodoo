@@ -514,28 +514,29 @@ across them, and confirm the analytic report's roll-up.
 
 ### Tests for User Story 6
 
-- [ ] T104 [P] [US6] Unit test `analytic_distribution` validation (unknown analytic-account id, an
+- [X] T104 [P] [US6] Unit test `analytic_distribution` validation (unknown analytic-account id, an
   archived/`active=False` analytic-account id, and percentages ≠ 100 ± 0.01 — all three rejected)
   (FR-038) in `tests/analytic/test_analytic_distribution.py`
-- [ ] T105 [P] [US6] Integration test `analytic.plan`/`analytic.account` CRUD in
+- [X] T105 [P] [US6] Integration test `analytic.plan`/`analytic.account` CRUD in
   `tests/analytic/test_analytic_accounts.py`
-- [ ] T106 [P] [US6] Integration test `AccountReportAnalytic` roll-up by analytic account/plan
+- [X] T106 [P] [US6] Integration test `AccountReportAnalytic` roll-up by analytic account/plan
   (FR-039) in `tests/accounting/test_analytic_accounting.py`
 
 ### Implementation for User Story 6
 
-- [ ] T107 [US6] Add a validation step to `AccountMoveLine.create`/`write` in
+- [X] T107 [US6] Add a validation step to `AccountMoveLine.create`/`write` in
   `account_move_line.py`: when `analytic_distribution` (existing `Json`) is set, every key must
   resolve to an active `analytic.account` id and the values must sum to `100` (±0.01), else
   `DodooError` (FR-038, ADR-045) (depends on T010)
-- [ ] T108 [US6] Add `AccountReportAnalytic` class to `account_report.py`: aggregates posted
+- [X] T108 [US6] Add `AccountReportAnalytic` class to `account_report.py`: aggregates posted
   `account_move_line.balance × analytic_distribution[key]` grouped by `analytic_account_id` for a
   date range; add `GET /account/report/analytic` route (FR-039) (depends on T107)
-- [ ] T109 [P] [US6] Create `dodoo/addons/analytic/static/views/analytic-account-list.js` /
-  `analytic-plan-list.js` (reuse existing list/form types)
-- [ ] T110 [US6] Add "Analytic Accounts" and "Analytic Report" entries to
+- [X] T109 [P] [US6] ~~Create `analytic-account-list.js`/`analytic-plan-list.js`~~ — superseded
+  by registering `analytic.account`/`analytic.plan` in `app.js`'s generic model-view registry
+  (same rationale as T053/T078)
+- [X] T110 [US6] Add "Analytic Accounts" and "Analytic Report" entries to
   `dodoo/addons/account/static/account-menu.js`
-- [ ] T111 [US6] Update `dodoo/addons/account/data/i18n/{en,ar}.json` and create
+- [X] T111 [US6] Update `dodoo/addons/account/data/i18n/{en,ar}.json` and create
   `dodoo/addons/analytic/data/i18n/{en,ar}.json` with new UI strings per
   `[[i18n-per-addon-catalogs]]`
 

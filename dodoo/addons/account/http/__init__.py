@@ -393,6 +393,22 @@ async def report_tax(request: Request) -> JSONResponse:
         return JSONResponse({"error": str(e)}, status_code=400)
 
 
+@route("/account/report/analytic", methods=["GET"], auth="session")
+async def report_analytic(request: Request) -> JSONResponse:
+    from dodoo.addons.account.models.account_report import AccountReportAnalytic
+
+    try:
+        return JSONResponse(
+            await AccountReportAnalytic.get_report(
+                request.app.state.env,
+                date_from=_q(request, "date_from"),
+                date_to=_q(request, "date_to"),
+            )
+        )
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
 @route("/account/fiscal-year/close", methods=["POST"], auth="session")
 async def fiscal_year_close(request: Request) -> JSONResponse:
     """FR-037. Requires "Accounting Manager"."""

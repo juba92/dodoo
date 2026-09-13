@@ -33,6 +33,7 @@ export const ACCOUNTING_MENU = [
         hash: '#/accounting/model/account.lock.exception',
         requires: 'manager',
       },
+      { label: 'Analytic Accounts', hash: '#/accounting/model/analytic.account' },
     ],
   },
   {
@@ -45,6 +46,7 @@ export const ACCOUNTING_MENU = [
       { label: 'Aged Receivable', hash: '#/accounting/reports/aged-receivable' },
       { label: 'Aged Payable',    hash: '#/accounting/reports/aged-payable' },
       { label: 'Tax Report',      hash: '#/accounting/reports/tax-report' },
+      { label: 'Analytic Report', hash: '#/accounting/reports/analytic-report' },
     ],
   },
 ];

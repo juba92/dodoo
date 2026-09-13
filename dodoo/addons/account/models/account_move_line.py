@@ -75,6 +75,8 @@ class AccountMoveLine(BaseModel):
             raise DodooError(
                 f"display_type='{dtype}' lines are system-generated and cannot be created directly"
             )
+        if vals.get("analytic_distribution"):
+            await cls._validate_analytic_distribution(env, vals["analytic_distribution"])
         cls._apply_price_defaults(vals)
         return await super().create(env, vals)
 
@@ -101,8 +103,50 @@ class AccountMoveLine(BaseModel):
                     f"Line(s) {locked} belong to a posted/cancelled move; cannot change. "
                     "Reset to draft first."
                 )
+        if vals.get("analytic_distribution"):
+            await cls._validate_analytic_distribution(env, vals["analytic_distribution"])
         cls._apply_price_defaults(vals)
         return await super().write(env, ids, vals)
+
+    @classmethod
+    async def _validate_analytic_distribution(
+        cls, env: Environment, distribution: dict[str, Any]
+    ) -> None:
+        """FR-038, ADR-045: every key must resolve to an active
+        `analytic.account` id and the values must sum to 100 (±0.01)."""
+        if not isinstance(distribution, dict) or not distribution:
+            raise DodooError("analytic_distribution must be a non-empty object")
+
+        try:
+            account_ids = [int(k) for k in distribution]
+        except (TypeError, ValueError) as exc:
+            raise DodooError(
+                "analytic_distribution keys must be analytic.account ids"
+            ) from exc
+
+        from sqlalchemy import text
+
+        async with env.dml_conn() as conn:
+            rows = await conn.execute(
+                text(
+                    "SELECT id FROM analytic_account WHERE id = ANY(:ids) AND active = TRUE"
+                ),
+                {"ids": account_ids},
+            )
+            found = {r[0] for r in rows}
+
+        missing = set(account_ids) - found
+        if missing:
+            raise DodooError(
+                f"analytic_distribution references unknown or archived analytic.account "
+                f"id(s): {sorted(missing)}"
+            )
+
+        total = sum(Decimal(str(v)) for v in distribution.values())
+        if abs(total - Decimal("100")) > Decimal("0.01"):
+            raise DodooError(
+                f"analytic_distribution percentages must sum to 100 (got {total})"
+            )
 
     @staticmethod
     def _apply_price_defaults(vals: dict[str, Any]) -> None:

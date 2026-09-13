@@ -29,6 +29,7 @@ from dodoo.addons.account.models.account_reconcile import (
 from dodoo.addons.account.models.account_report import (
     AccountReportAgedPayable,
     AccountReportAgedReceivable,
+    AccountReportAnalytic,
     AccountReportBalanceSheet,
     AccountReportGeneralLedger,
     AccountReportProfitLoss,
@@ -70,4 +71,5 @@ __all__ = [
     "AccountReportAgedReceivable",
     "AccountReportAgedPayable",
     "AccountReportTax",
+    "AccountReportAnalytic",
 ]

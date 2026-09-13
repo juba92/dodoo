@@ -721,3 +721,68 @@ class AccountReportTax(_VirtualReport):
             "date_from": df.isoformat() if df else None,
             "date_to": dt.isoformat() if dt else None,
         }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Analytic Report — FR-039, ADR-045
+# ─────────────────────────────────────────────────────────────────────────────
+class AccountReportAnalytic(_VirtualReport):
+    """Aggregates posted `account_move_line.balance × analytic_distribution[key]`
+    grouped by `analytic_account_id` for a date range."""
+
+    _abstract = False
+    _name = "account.report.analytic"
+
+    @classmethod
+    async def get_report(
+        cls,
+        env: Environment,
+        date_from: str | datetime.date | None = None,
+        date_to: str | datetime.date | None = None,
+        company_id: int | None = None,
+    ) -> dict[str, Any]:
+        df, dt = _as_date(date_from), _as_date(date_to)
+        params: dict[str, Any] = {}
+        where = ""
+        if df:
+            where += " AND m.date >= :date_from"
+            params["date_from"] = df
+        if dt:
+            where += " AND m.date <= :date_to"
+            params["date_to"] = dt
+        if company_id:
+            where += " AND m.company_id = :company_id"
+            params["company_id"] = company_id
+
+        sql = f"""
+            SELECT aa.id AS analytic_account_id, aa.name AS analytic_account_name,
+                   ROUND(SUM(
+                       ml.balance * (kv.value::NUMERIC / 100)
+                   )::NUMERIC, 2) AS amount
+            FROM account_move_line ml
+            JOIN account_move m ON m.id = ml.move_id
+            CROSS JOIN LATERAL jsonb_each_text(ml.analytic_distribution) AS kv(key, value)
+            JOIN analytic_account aa ON aa.id = kv.key::INTEGER
+            WHERE m.{_POSTED} AND {_REAL_LINE}
+              AND ml.analytic_distribution IS NOT NULL {where}
+            GROUP BY aa.id, aa.name
+            ORDER BY aa.name
+        """
+        async with env.dml_conn() as conn:
+            rows = await conn.execute(text(sql), params)
+            lines = [dict(r._mapping) for r in rows]
+
+        total = sum((_d(r["amount"]) for r in lines), Decimal("0"))
+        return {
+            "lines": [
+                {
+                    "analytic_account_id": r["analytic_account_id"],
+                    "analytic_account_name": r["analytic_account_name"],
+                    "amount": str(_d(r["amount"])),
+                }
+                for r in lines
+            ],
+            "totals": {"amount": str(total)},
+            "date_from": df.isoformat() if df else None,
+            "date_to": dt.isoformat() if dt else None,
+        }
