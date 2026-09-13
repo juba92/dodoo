@@ -22,6 +22,15 @@ class ModuleInstaller:
         self._env = env
         self._loader = AddonLoader()
         self._runner: MigrationRunner | None = None
+        # Models this instance has already migrated / discriminator-checked, so a
+        # later install() call whose dependency chain re-walks an already-installed
+        # module (e.g. installing 'stock' after 'account' both need 'base') doesn't
+        # redo a full-registry DB round-trip pass per model for names it already
+        # verified earlier in this same run. A fresh process (next deploy) still
+        # gets a full, empty-memo pass, so schema drift is still always caught.
+        self._migrated: set[str] = set()
+        self._discriminated: set[str] = set()
+        self._installed_this_run: set[str] = set()
 
     def _get_runner(self) -> MigrationRunner:
         if self._runner is None:
@@ -97,6 +106,16 @@ class ModuleInstaller:
                     break
 
     async def _install_single(self, name: str, paths: list[str]) -> None:
+        # A module already fully processed earlier in this same run doesn't need
+        # its import / migration / seed / ir_module upsert redone just because a
+        # later install() call's dependency chain walks over it again (e.g.
+        # entrypoint.sh installing 'account' then 'web' then 'hr' each re-resolve
+        # 'base' as a dependency). Nothing about an already-imported module's code
+        # can change mid-process, so this is safe — a fresh process (next deploy)
+        # starts with an empty set and always fully reverifies everything.
+        if name in self._installed_this_run:
+            return
+
         # Find the package directory
         pkg_dir: Path | None = None
         for path in paths:
@@ -138,13 +157,19 @@ class ModuleInstaller:
         runner = self._get_runner()
 
         for model_cls in self._env.registry.all_models():
+            if model_cls._name in self._migrated:
+                continue
             await runner.install(model_cls)
+            self._migrated.add(model_cls._name)
 
         # Handle STI discriminator columns
         for model_cls in self._env.registry.all_models():
+            if model_cls._name in self._discriminated:
+                continue
             if model_cls._inherit:
                 parent_cls = self._env.registry.lookup(model_cls._inherit)
                 await runner.add_discriminator(parent_cls._table_name())
+            self._discriminated.add(model_cls._name)
 
         from sqlalchemy import text
 
@@ -181,6 +206,7 @@ class ModuleInstaller:
             if callable(post_install):
                 await post_install(self._env)
 
+        self._installed_this_run.add(name)
         _log.info("Installed module '%s' version %s", name, version)
 
 
