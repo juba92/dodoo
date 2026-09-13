@@ -477,6 +477,9 @@ class AccountMove(BaseModel):
 
         # raw_tax_amounts: tax_id → accumulated raw (or per-line-rounded) signed Decimal
         raw_tax_amounts: dict[int, Decimal] = {}
+        # tax_base_amounts: tax_id → accumulated taxable base across every
+        # product line this tax applied to (FR-016, for the Tax Report).
+        tax_base_amounts: dict[int, Decimal] = {}
         tax_meta: dict[int, dict] = {}
 
         for pl in product_lines:
@@ -544,6 +547,9 @@ class AccountMove(BaseModel):
                 if round_per_line:
                     contribution = _round(contribution, rounding)
                 raw_tax_amounts[tax["id"]] = raw_tax_amounts.get(tax["id"], Decimal("0")) + contribution
+                tax_base_amounts[tax["id"]] = tax_base_amounts.get(tax["id"], Decimal("0")) + sign * (
+                    net_magnitude - extracted
+                )
                 net_magnitude -= extracted
 
             # 2) Add on-top (not price-included) taxes on the resulting net base.
@@ -555,6 +561,9 @@ class AccountMove(BaseModel):
                 if round_per_line:
                     contribution = _round(contribution, rounding)
                 raw_tax_amounts[tax["id"]] = raw_tax_amounts.get(tax["id"], Decimal("0")) + contribution
+                tax_base_amounts[tax["id"]] = (
+                    tax_base_amounts.get(tax["id"], Decimal("0")) + sign * net_magnitude
+                )
 
             # Rewrite the line's own subtotal/ledger amount to the true net
             # value once any price-included tax has been extracted, so the
@@ -627,13 +636,15 @@ class AccountMove(BaseModel):
             else:
                 debit, credit = Decimal("0"), -amount
 
+            base_amount = _round(tax_base_amounts.get(tid, Decimal("0")), rounding)
             await conn.execute(
                 text(
                     "INSERT INTO account_move_line "
                     "(move_id, sequence, account_id, date, display_type, "
-                    "debit, credit, balance, tax_line_id, create_date, write_date) "
+                    "debit, credit, balance, tax_line_id, tax_base_amount, "
+                    "create_date, write_date) "
                     "VALUES (:mid, 9999, :acct, :dt, 'tax', "
-                    ":debit, :credit, :balance, :tax_id, now(), now())"
+                    ":debit, :credit, :balance, :tax_id, :base, now(), now())"
                 ),
                 {
                     "mid": move_id,
@@ -643,6 +654,7 @@ class AccountMove(BaseModel):
                     "credit": str(credit),
                     "balance": str(debit - credit),
                     "tax_id": tid,
+                    "base": str(base_amount),
                 },
             )
 
@@ -1441,6 +1453,132 @@ class AccountMove(BaseModel):
                 },
             )
         return True
+
+    @classmethod
+    async def close_fiscal_year(
+        cls,
+        env: Environment,
+        company_id: int,
+        fiscal_year_end: datetime.date,
+        uid: int | None = None,
+    ) -> int | None:
+        """FR-037, ADR-044: post one multi-line entry zeroing every P&L
+        account's net fiscal-year result into the seeded `equity_unaffected`
+        ("Retained Earnings") account, so the Balance Sheet's fiscal-year-
+        scoped current-year-earnings figure (T091) and this account's
+        cumulative balance together show current vs. prior-years' earnings
+        correctly. Returns the closing move's id, or ``None`` if there was
+        nothing to close.
+        """
+        from dodoo.addons.account.models.account_report import (
+            _PL_TYPES,
+            _company_fiscal_year_columns,
+            _pl_rows,
+            company_fiscal_year_start,
+        )
+
+        last_month, last_day = await _company_fiscal_year_columns(env, company_id)
+        fy_start = company_fiscal_year_start(fiscal_year_end, last_month, last_day)
+        pl_rows = await _pl_rows(env, _PL_TYPES, fy_start, fiscal_year_end, company_id)
+        pl_rows = [r for r in pl_rows if Decimal(str(r["balance"])) != 0]
+        if not pl_rows:
+            return None
+
+        async with env.dml_conn() as conn:
+            retained_row = await conn.execute(
+                text(
+                    "SELECT id FROM account_account WHERE account_type='equity_unaffected' "
+                    "AND company_id=:cid LIMIT 1"
+                ),
+                {"cid": company_id},
+            )
+            retained_id = retained_row.scalar_one_or_none()
+            if not retained_id:
+                raise DodooError(
+                    f"Company {company_id} has no equity_unaffected (Retained Earnings) "
+                    "account configured"
+                )
+            journal_row = await conn.execute(
+                text(
+                    "SELECT id FROM account_journal WHERE type='general' AND company_id=:cid LIMIT 1"
+                ),
+                {"cid": company_id},
+            )
+            journal_id = journal_row.scalar_one()
+            currency_row = await conn.execute(
+                text("SELECT currency_id FROM res_company WHERE id=:cid"), {"cid": company_id}
+            )
+            currency_id = currency_row.scalar_one()
+
+        move_id = await cls.create(
+            env,
+            {
+                "move_type": "entry",
+                "journal_id": journal_id,
+                "company_id": company_id,
+                "currency_id": currency_id,
+                "date": fiscal_year_end,
+                "ref": f"Fiscal year close {fy_start.isoformat()} to {fiscal_year_end.isoformat()}",
+            },
+        )
+
+        net_result = Decimal("0")
+        async with env.dml_conn() as conn:
+            for row in pl_rows:
+                balance = Decimal(str(row["balance"]))
+                net_result += balance
+                debit = -balance if balance < 0 else Decimal("0")
+                credit = balance if balance > 0 else Decimal("0")
+                await conn.execute(
+                    text(
+                        "INSERT INTO account_move_line "
+                        "(move_id, account_id, date, display_type, debit, credit, balance, "
+                        "create_date, write_date) "
+                        "VALUES (:mid, :acct, :dt, 'product', :d, :c, :bal, now(), now())"
+                    ),
+                    {
+                        "mid": move_id,
+                        "acct": row["account_id"],
+                        "dt": fiscal_year_end,
+                        "d": str(debit),
+                        "c": str(credit),
+                        "bal": str(debit - credit),
+                    },
+                )
+
+            retained_debit = net_result if net_result > 0 else Decimal("0")
+            retained_credit = -net_result if net_result < 0 else Decimal("0")
+            await conn.execute(
+                text(
+                    "INSERT INTO account_move_line "
+                    "(move_id, account_id, date, display_type, debit, credit, balance, "
+                    "create_date, write_date) "
+                    "VALUES (:mid, :acct, :dt, 'product', :d, :c, :bal, now(), now())"
+                ),
+                {
+                    "mid": move_id,
+                    "acct": retained_id,
+                    "dt": fiscal_year_end,
+                    "d": str(retained_debit),
+                    "c": str(retained_credit),
+                    "bal": str(retained_debit - retained_credit),
+                },
+            )
+            await conn.commit()
+
+        await cls.action_post(env, [move_id])
+
+        _log.info(
+            "account.move fiscal year closed",
+            extra={
+                "model": "account.move",
+                "record_id": move_id,
+                "event": "close_fiscal_year",
+                "company_id": company_id,
+                "fiscal_year_end": fiscal_year_end.isoformat(),
+            },
+        )
+        return move_id
 
     @classmethod
     async def action_cancel(cls, env: Environment, ids: list[int]) -> bool:

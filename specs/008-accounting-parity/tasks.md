@@ -412,51 +412,51 @@ Balance Sheet, and a tagged-tax Tax Report.
 
 ### Tests for User Story 4
 
-- [ ] T082 [P] [US4] Unit test the opening-balance aggregate query (pre-`date_from` sum) for Trial
+- [X] T082 [P] [US4] Unit test the opening-balance aggregate query (pre-`date_from` sum) for Trial
   Balance and General Ledger (FR-034) in `tests/accounting/test_reports_opening_balance.py`
   (standalone — `[[accounting-test-isolation]]`)
-- [ ] T083 [P] [US4] Unit test the 5-bucket aged-report boundary (`current` for `days_overdue <= 0`)
+- [X] T083 [P] [US4] Unit test the 5-bucket aged-report boundary (`current` for `days_overdue <= 0`)
   (FR-036) in `tests/accounting/test_aged_report_buckets.py`
-- [ ] T084 [US4] Integration test `close_fiscal_year` + fiscal-year-scoped Balance Sheet
+- [X] T084 [US4] Integration test `close_fiscal_year` + fiscal-year-scoped Balance Sheet
   `current_year_earnings` (FR-037) added to `tests/accounting/test_reports_opening_balance.py`
   (standalone)
-- [ ] T085 [P] [US4] Integration test `account_id`/`move_id` drill-down fields present on all five
+- [X] T085 [P] [US4] Integration test `account_id`/`move_id` drill-down fields present on all five
   extended report payloads (FR-035) in `tests/accounting/test_reports_opening_balance.py`
   (standalone)
-- [ ] T086 [P] [US4] Integration test Tax Report aggregation by grid tag across posted invoices/
+- [X] T086 [P] [US4] Integration test Tax Report aggregation by grid tag across posted invoices/
   bills (FR-016) in `tests/accounting/test_tax_report.py` (standalone —
   `[[accounting-test-isolation]]`)
 
 ### Implementation for User Story 4
 
-- [ ] T087 [US4] Add a pre-`date_from` opening-balance aggregate query to
+- [X] T087 [US4] Add a pre-`date_from` opening-balance aggregate query to
   `AccountReportTrialBalance.get_report` and `AccountReportGeneralLedger.get_report` in
   `dodoo/addons/account/models/account_report.py`; merge it into each account's row and, for the
   General Ledger, use it as the running-balance window's starting value (FR-034, ADR-044)
-- [ ] T088 [US4] Add `account_id` (already selected internally) to all five existing report
+- [X] T088 [US4] Add `account_id` (already selected internally) to all five existing report
   classes' JSON payloads, and a representative `move_id` per line for the P&L/Balance Sheet/Aged
   reports (FR-035) (depends on T087)
-- [ ] T089 [P] [US4] Add a click-through handler to
+- [X] T089 [P] [US4] Add a click-through handler to
   `dodoo/addons/account/static/views/report-view.js`: navigate to
   `#/accounting/journal-entries?account_id=...` (or the specific move for Aged reports), reusing
   the existing journal-entries list view's `account_id` filter (FR-035) (depends on T088)
-- [ ] T090 [US4] Extend `_BUCKETS` from four to five values (`current`, `b_0_30`, `b_31_60`,
+- [X] T090 [US4] Extend `_BUCKETS` from four to five values (`current`, `b_0_30`, `b_31_60`,
   `b_61_90`, `b_90_plus`) and fix `_bucket_for` to route `days_overdue <= 0` to `current` instead of
   clamping into `b_0_30`, in `account_report.py`'s aged-report logic (FR-036, ADR-044)
-- [ ] T091 [US4] Change `AccountReportBalanceSheet.get_report`'s current-year-earnings calculation
+- [X] T091 [US4] Change `AccountReportBalanceSheet.get_report`'s current-year-earnings calculation
   from all-time `_pl_rows(env, _PL_TYPES, None, as_of, ...)` to
   `_pl_rows(env, _PL_TYPES, company_fiscal_year_start(as_of), as_of, ...)`, using a new
   `company_fiscal_year_start` helper reading `res_company.fiscalyear_last_month`/
   `fiscalyear_last_day` (FR-037, ADR-044) (depends on T016)
-- [ ] T092 [US4] Add `AccountMove.close_fiscal_year(env, company_id, fiscal_year_end, uid)`
+- [X] T092 [US4] Add `AccountMove.close_fiscal_year(env, company_id, fiscal_year_end, uid)`
   classmethod (posts one entry moving the closing year's `_pl_rows` net result into the seeded
   `equity_unaffected` "Retained Earnings" account) and `POST /account/fiscal-year/close` route
   (`FiscalYearClose` validator, requires `"Accounting Manager"`) (FR-037) (depends on T091)
-- [ ] T093 [US4] Add `AccountReportTax` class to `account_report.py` (aggregates posted
+- [X] T093 [US4] Add `AccountReportTax` class to `account_report.py` (aggregates posted
   invoice/bill tax and base amounts grouped by `account.account.tag` via `tag_ids` from US1/T025)
   and `GET /account/report/tax-report` route (FR-016, ADR-040/044) (depends on T025, T088)
-- [ ] T094 [US4] Add "Tax Report" entry to `dodoo/addons/account/static/account-menu.js`
-- [ ] T095 [US4] Update `dodoo/addons/account/data/i18n/{en,ar}.json` with new UI strings (opening
+- [X] T094 [US4] Add "Tax Report" entry to `dodoo/addons/account/static/account-menu.js`
+- [X] T095 [US4] Update `dodoo/addons/account/data/i18n/{en,ar}.json` with new UI strings (opening
   balance, current/not-due bucket, retained earnings, tax report)
 
 **Checkpoint**: all five existing reports plus the new Tax Report show correct, drill-down-capable

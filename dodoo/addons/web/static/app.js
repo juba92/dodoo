@@ -605,7 +605,7 @@ function _paramsFromHash(hash) {
   if ((m = base.match(/^#\/accounting\/move\/(\d+)$/)))                return { id: parseInt(m[1], 10) };
   if ((m = base.match(/^#\/accounting\/account\/new$/)))               return { id: 'new' };
   if ((m = base.match(/^#\/accounting\/account\/(\d+)$/)))             return { id: parseInt(m[1], 10) };
-  if ((m = base.match(/^#\/accounting\/reports\/([^/]+)$/)))           return { report: m[1] };
+  if ((m = base.match(/^#\/accounting\/reports\/([^/]+)$/)))           return { report: m[1], account_id: qs.get('account_id') ? parseInt(qs.get('account_id'), 10) : null };
   if ((m = base.match(/^#\/accounting\/model\/([^/]+)\/new$/)))        return { model: m[1], id: 'new' };
   if ((m = base.match(/^#\/accounting\/model\/([^/]+)\/(\d+)$/)))      return { model: m[1], id: parseInt(m[2], 10) };
   if ((m = base.match(/^#\/accounting\/model\/([^/]+)$/)))             return { model: m[1] };

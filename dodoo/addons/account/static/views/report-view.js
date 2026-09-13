@@ -6,7 +6,24 @@
  * total, and a balance check where one applies.
  */
 import * as api from '/web/static/api.js';
+import { App } from '/web/static/app.js';
 import { t, formatNumber, formatDate } from '/web/static/i18n.js';
+
+// FR-035: drill down from a reported figure to the underlying journal
+// entries — the General Ledger, pre-filtered to this account (it already
+// supports an `account_id` filter server-side) — or, for Aged reports, one
+// specific move.
+function _drillToAccount(accountId) {
+  if (!accountId) return;
+  App.breadcrumb = [];
+  App.navigate(`#/accounting/reports/general-ledger?account_id=${accountId}`);
+}
+
+function _drillToMove(moveId) {
+  if (!moveId) return;
+  App.breadcrumb = [];
+  App.navigate(`#/accounting/move/${moveId}`);
+}
 
 function _amount(v) {
   const n = parseFloat(v);
@@ -49,9 +66,20 @@ function _row(tbody, cells, opts = {}) {
   cells.forEach(c => {
     const td = document.createElement('td');
     const val = (c && typeof c === 'object') ? c.txt : c;
-    td.textContent = val == null ? '' : String(val);
+    if (c && typeof c === 'object' && c.onClick) {
+      // FR-035 drill-down, kept keyboard-operable (ACC-002) — a real
+      // <button>, not a div/span with a synthetic click handler.
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'link-button report-drill-link';
+      btn.textContent = val == null ? '' : String(val);
+      btn.onclick = c.onClick;
+      td.appendChild(btn);
+    } else {
+      td.textContent = val == null ? '' : String(val);
+    }
     if (c && typeof c === 'object') {
-      if (c.right) td.className = 'text-right';
+      if (c.right) td.className = (td.className ? td.className + ' ' : '') + 'text-right';
       if (c.strong) td.style.fontWeight = '700';
       if (c.neg) td.classList.add('report-neg');
       if (c.colspan) td.colSpan = c.colspan;
@@ -94,6 +122,10 @@ const REPORTS = {
     label: 'Aged Payable', filter: 'asof', endpoint: '/account/report/aged-payable',
     render: renderAged,
   },
+  'tax-report': {
+    label: 'Tax Report', filter: 'range', endpoint: '/account/report/tax-report',
+    render: renderTaxReport,
+  },
 };
 
 export async function render(container, params) {
@@ -107,7 +139,7 @@ export async function render(container, params) {
     date_from: _isoYearStart(),
     date_to: _isoToday(),
     date: _isoToday(),
-    account_id: '',
+    account_id: params.account_id ? String(params.account_id) : '',
   };
 
   // ── Control panel: date filter + optional account picker + Apply ──────────
@@ -143,6 +175,7 @@ export async function render(container, params) {
           { fields: ['id', 'code', 'name'], order: 'code asc', limit: 2000 });
         accts.forEach(a => sel.add(new Option(`${a.code} ${a.name}`, String(a.id))));
       } catch { /* leave with just "All Accounts" */ }
+      if (state.account_id) sel.value = state.account_id;
       sel.onchange = () => { state.account_id = sel.value; };
       wrap.appendChild(sel);
       cp.appendChild(wrap);
@@ -227,14 +260,20 @@ function renderTrialBalance(parent, data) {
 
   const { table, tbody } = _table([
     t('Code'), t('Account'),
+    { txt: t('Opening Balance'), right: true },
     { txt: t('Debit'), right: true }, { txt: t('Credit'), right: true }, { txt: t('Balance'), right: true },
   ]);
   lines.forEach(r => {
-    _row(tbody, [r.code, r.name, _money(r.debit), _money(r.credit), _money(r.balance)]);
+    _row(tbody, [
+      r.code,
+      { txt: r.name, onClick: () => _drillToAccount(r.account_id) },
+      _money(r.opening_balance),
+      _money(r.debit), _money(r.credit), _money(r.balance),
+    ]);
   });
   const tt = data.totals || {};
   _row(tbody, [
-    { txt: t('Total'), strong: true, colspan: 2 },
+    { txt: t('Total'), strong: true, colspan: 3 },
     _money(tt.debit, { strong: true }), _money(tt.credit, { strong: true }),
     _money(_d(tt.debit) - _d(tt.credit), { strong: true }),
   ], { cls: 'report-total-row' });
@@ -252,10 +291,20 @@ function renderGeneralLedger(parent, data) {
     { txt: t('Debit'), right: true }, { txt: t('Credit'), right: true }, { txt: t('Balance'), right: true },
   ]);
   accounts.forEach(acc => {
-    _row(tbody, [{ txt: `${acc.code} ${acc.name}`, strong: true, colspan: 7 }], { cls: 'report-group-row' });
+    _row(tbody, [{
+      txt: `${acc.code} ${acc.name}`, strong: true, colspan: 7,
+      onClick: () => _drillToAccount(acc.account_id),
+    }], { cls: 'report-group-row' });
+    if (acc.opening_balance !== undefined && _d(acc.opening_balance) !== 0) {
+      _row(tbody, [
+        { txt: t('Opening Balance'), colspan: 6 }, _money(acc.opening_balance),
+      ]);
+    }
     acc.lines.forEach(l => {
       _row(tbody, [
-        formatDate(l.date), l.move_name || '', l.partner_name || '', l.label || '',
+        formatDate(l.date),
+        { txt: l.move_name || '', onClick: l.move_id ? () => _drillToMove(l.move_id) : null },
+        l.partner_name || '', l.label || '',
         _money(l.debit), _money(l.credit), _money(l.running_balance),
       ]);
     });
@@ -282,7 +331,10 @@ function renderProfitLoss(parent, data) {
   const section = (labelKey, sec) => {
     _row(tbody, [{ txt: t(labelKey), strong: true }, { txt: '', right: true }], { cls: 'report-group-row' });
     (sec.lines || []).forEach(l =>
-      _row(tbody, [{ txt: `${l.code} ${l.name}`, indent: 1 }, _money(l.amount)]));
+      _row(tbody, [
+        { txt: `${l.code} ${l.name}`, indent: 1, onClick: () => _drillToAccount(l.account_id) },
+        _money(l.amount),
+      ]));
     _row(tbody, [{ txt: t(labelKey) + ' — ' + t('Total'), strong: true }, _money(sec.total, { strong: true })],
       { cls: 'report-subtotal-row' });
   };
@@ -306,7 +358,10 @@ function renderBalanceSheet(parent, data) {
   const group = (labelKey, grp) => {
     _row(tbody, [{ txt: t(labelKey), strong: true }, { txt: '', right: true }], { cls: 'report-group-row' });
     (grp.lines || []).forEach(l =>
-      _row(tbody, [{ txt: `${l.code} ${l.name}`, indent: 1 }, _money(l.amount)]));
+      _row(tbody, [
+        { txt: `${l.code} ${l.name}`, indent: 1, onClick: () => _drillToAccount(l.account_id) },
+        _money(l.amount),
+      ]));
     _row(tbody, [{ txt: t(labelKey) + ' — ' + t('Total'), strong: true }, _money(grp.total, { strong: true })],
       { cls: 'report-subtotal-row' });
   };
@@ -325,7 +380,10 @@ function renderBalanceSheet(parent, data) {
 
   _row(tbody, [{ txt: t('EQUITY'), strong: true }, { txt: '' }], { cls: 'report-section-row' });
   (g.equity && g.equity.lines || []).forEach(l =>
-    _row(tbody, [{ txt: `${l.code} ${l.name}`, indent: 1 }, _money(l.amount)]));
+    _row(tbody, [
+      { txt: `${l.code} ${l.name}`, indent: 1, onClick: () => _drillToAccount(l.account_id) },
+      _money(l.amount),
+    ]));
   _row(tbody, [{ txt: t('Current Year Earnings'), indent: 1 }, _money(data.current_year_earnings)]);
   _row(tbody, [{ txt: t('Total Equity'), strong: true }, _money(tt.equity, { strong: true })],
     { cls: 'report-subtotal-row' });
@@ -339,28 +397,53 @@ function renderBalanceSheet(parent, data) {
 }
 
 // ── Aged Receivable / Payable ────────────────────────────────────────────────
+const _AGED_BUCKETS = ['current', 'b_0_30', 'b_31_60', 'b_61_90', 'b_90_plus'];
+const _AGED_LABELS = { current: 'Current', b_0_30: '1-30', b_31_60: '31-60', b_61_90: '61-90', b_90_plus: '90+' };
+
 function renderAged(parent, data) {
   const partners = data.partners || [];
   if (partners.length === 0) { _empty(parent); return; }
   const { table, tbody } = _table([
     t('Partner'),
-    { txt: t('0-30'), right: true }, { txt: t('31-60'), right: true },
-    { txt: t('61-90'), right: true }, { txt: t('90+'), right: true },
+    ..._AGED_BUCKETS.map(b => ({ txt: t(_AGED_LABELS[b]), right: true })),
     { txt: t('Total'), right: true },
   ]);
   partners.forEach(p => {
+    const moveIds = p.bucket_move_ids || {};
     _row(tbody, [
-      p.partner_name,
-      _money(p.b_0_30), _money(p.b_31_60), _money(p.b_61_90), _money(p.b_90_plus),
+      { txt: p.partner_name, onClick: () => _drillToAccount(p.account_id) },
+      ..._AGED_BUCKETS.map(b => {
+        const cell = _money(p[b]);
+        if (moveIds[b] && _d(p[b]) !== 0) cell.onClick = () => _drillToMove(moveIds[b]);
+        return cell;
+      }),
       _money(p.total, { strong: true }),
     ]);
   });
   const tt = data.totals || {};
   _row(tbody, [
     { txt: t('Grand Total'), strong: true },
-    _money(tt.b_0_30, { strong: true }), _money(tt.b_31_60, { strong: true }),
-    _money(tt.b_61_90, { strong: true }), _money(tt.b_90_plus, { strong: true }),
+    ..._AGED_BUCKETS.map(b => _money(tt[b], { strong: true })),
     _money(tt.total, { strong: true }),
+  ], { cls: 'report-total-row' });
+  _mount(parent, table);
+}
+
+// ── Tax Report ───────────────────────────────────────────────────────────────
+function renderTaxReport(parent, data) {
+  const lines = data.lines || [];
+  if (lines.length === 0) { _empty(parent); return; }
+  const { table, tbody } = _table([
+    t('Tax Grid'),
+    { txt: t('Base Amount'), right: true }, { txt: t('Tax Amount'), right: true },
+  ]);
+  lines.forEach(r => {
+    _row(tbody, [r.tag_name, _money(r.base_amount), _money(r.tax_amount)]);
+  });
+  const tt = data.totals || {};
+  _row(tbody, [
+    { txt: t('Total'), strong: true },
+    _money(tt.base_amount, { strong: true }), _money(tt.tax_amount, { strong: true }),
   ], { cls: 'report-total-row' });
   _mount(parent, table);
 }

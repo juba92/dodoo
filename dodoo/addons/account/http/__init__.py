@@ -362,6 +362,45 @@ async def report_aged_payable(request: Request) -> JSONResponse:
         return JSONResponse({"error": str(e)}, status_code=400)
 
 
+@route("/account/report/tax-report", methods=["GET"], auth="session")
+async def report_tax(request: Request) -> JSONResponse:
+    from dodoo.addons.account.models.account_report import AccountReportTax
+
+    try:
+        return JSONResponse(
+            await AccountReportTax.get_report(
+                request.app.state.env,
+                date_from=_q(request, "date_from"),
+                date_to=_q(request, "date_to"),
+            )
+        )
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@route("/account/fiscal-year/close", methods=["POST"], auth="session")
+async def fiscal_year_close(request: Request) -> JSONResponse:
+    """FR-037. Requires "Accounting Manager"."""
+    env = request.app.state.env
+    from dodoo.addons.account.models.account_move import AccountMove
+    from dodoo.addons.account.security import GROUP_MANAGER
+    from dodoo.addons.account.validators import FiscalYearClose, require_groups, validate
+
+    body = await request.json()
+    try:
+        payload = validate(FiscalYearClose, body)
+        from dodoo.core.context import get_uid
+
+        uid = get_uid()
+        await require_groups(env, uid, GROUP_MANAGER)
+        move_id = await AccountMove.close_fiscal_year(
+            env, payload.company_id, payload.fiscal_year_end, uid
+        )
+        return JSONResponse({"result": move_id})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
 # ---- Bank statements (FR-027/028/029) ----
 
 

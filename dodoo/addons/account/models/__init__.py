@@ -32,6 +32,7 @@ from dodoo.addons.account.models.account_report import (
     AccountReportBalanceSheet,
     AccountReportGeneralLedger,
     AccountReportProfitLoss,
+    AccountReportTax,
     AccountReportTrialBalance,
 )
 from dodoo.addons.account.models.account_tax import (
@@ -68,4 +69,5 @@ __all__ = [
     "AccountReportBalanceSheet",
     "AccountReportAgedReceivable",
     "AccountReportAgedPayable",
+    "AccountReportTax",
 ]

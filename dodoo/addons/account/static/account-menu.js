@@ -44,6 +44,7 @@ export const ACCOUNTING_MENU = [
       { label: 'Balance Sheet',   hash: '#/accounting/reports/balance-sheet' },
       { label: 'Aged Receivable', hash: '#/accounting/reports/aged-receivable' },
       { label: 'Aged Payable',    hash: '#/accounting/reports/aged-payable' },
+      { label: 'Tax Report',      hash: '#/accounting/reports/tax-report' },
     ],
   },
 ];

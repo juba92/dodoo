@@ -918,6 +918,13 @@ fieldset.form-group legend {
 }
 .report-neg { color: var(--danger); }
 
+.report-drill-link {
+  background: none; border: none; padding: 0; margin: 0; cursor: pointer;
+  font: inherit; color: var(--brand); text-decoration: underline;
+}
+.report-drill-link:hover { text-decoration-thickness: 2px; }
+.report-drill-link:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
 .report-balance-badge { margin-top: 14px; }
 
 /* ── Human Resources / Fleet — Kanban, Calendar, Org chart (feature 006) ──────── */
