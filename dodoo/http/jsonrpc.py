@@ -100,7 +100,12 @@ async def jsonrpc_handler(request: Request) -> JSONResponse:
     except AuthenticationError as exc:
         return JSONResponse(_err(req_id, -32000, str(exc), "AuthenticationError"))
     except AccessError as exc:
-        return JSONResponse(_err(req_id, -32000, str(exc), "AccessError"))
+        # Distinct from -32000: a live, valid session was denied a specific
+        # operation by an ir.rule — not the same thing as "please log in
+        # again". The client must not treat this as a session expiry (it
+        # used to, which silently kicked the user back to the login page —
+        # and from there straight back to Home, looking like a dead click).
+        return JSONResponse(_err(req_id, -32001, str(exc), "AccessError"))
     except DomainError as exc:
         return JSONResponse(_err(req_id, -32602, str(exc), "DomainError"))
     except DodooError as exc:

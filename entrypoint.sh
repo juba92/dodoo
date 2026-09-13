@@ -8,6 +8,9 @@ python -m dodoo module install web
 python -m dodoo module install localization
 python -m dodoo module install hr
 python -m dodoo module install fleet
+python -m dodoo module install product
+python -m dodoo module install stock
+python -m dodoo module install stock_account
 echo "[dodoo] Modules ready."
 
 echo "[dodoo] Starting server on 0.0.0.0:8080..."

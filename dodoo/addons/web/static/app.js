@@ -5,7 +5,7 @@ import { loadCatalog, applyDirection, t, currentLang } from '/web/static/i18n.js
 // lazily-imported view module so a new build is a new module URL — otherwise the
 // browser keeps the first-imported version of a view for the whole tab session
 // (hash navigation never reloads the document) and serves stale screens.
-const CLIENT_BUILD = '2026-09-13.1';
+const CLIENT_BUILD = '2026-09-13.3';
 
 /** Lazy-import a view module, cache-busted by the current build. */
 const _view = path => import(path + '?v=' + CLIENT_BUILD);
@@ -618,7 +618,19 @@ function _paramsFromHash(hash) {
   return {};
 }
 
+// Bumped on every _route() call. A render belonging to a superseded navigation
+// checks its captured token against this before touching the DOM, so a slow
+// dynamic import or API call (e.g. home.js's getInfo()) can never finish after
+// a newer navigation has already rebuilt the shell and repaint stale content
+// (or worse, attach fresh handlers to elements that then get discarded while
+// the stale render's earlier-appended elements stay put looking live but dead).
+// This is what let module tiles render but not respond to clicks right after
+// login, when the login→home navigation could race the immediately-following
+// home→module→app-screen redirect chain.
+let _navToken = 0;
+
 async function _route() {
+  const myToken = ++_navToken;
   const hash = window.location.hash || '#/login';
   const isLogin = /^#\/login/.test(hash);
 
@@ -626,6 +638,7 @@ async function _route() {
   if (!App.state.token && !isLogin) {
     _buildLoginShell();
     const { render } = await _view('/web/static/views/login.js');
+    if (myToken !== _navToken) return;
     render(document.getElementById('main'), {});
     return;
   }
@@ -639,6 +652,7 @@ async function _route() {
   if (isLogin) {
     _buildLoginShell();
     const { render } = await parsed.loader();
+    if (myToken !== _navToken) return;
     render(document.getElementById('main'), _paramsFromHash(hash));
     return;
   }
@@ -648,6 +662,7 @@ async function _route() {
   _renderSidebar(hash);
 
   const { render } = await parsed.loader();
+  if (myToken !== _navToken) return;
   render(document.getElementById('main'), _paramsFromHash(hash));
 }
 
@@ -688,6 +703,17 @@ document.addEventListener('DOMContentLoaded', async () => {
       App.breadcrumb.push({ label: _labelFromHash(hash), hash });
     }
   }
+
+  // api.js can't import App (app.js imports api.js) so it signals a dead
+  // session via this event instead of touching the hash directly — clear the
+  // in-memory auth state here before navigating, or login.js's own "already
+  // authenticated" check would see the stale token and bounce right back.
+  window.addEventListener('dodoo:session-expired', () => {
+    App.state.token = null;
+    App.state.uid = null;
+    App.breadcrumb = [];
+    window.location.hash = '#/login?reason=expired';
+  });
 
   window.addEventListener('hashchange', _route);
   await _route();

@@ -95,6 +95,12 @@ export async function render(container, params) {
     App.state.modules = info.modules ?? [];
     App.state.models = info.models ?? [];
 
+    // Bail out if a newer navigation replaced this container while getInfo()
+    // was in flight — otherwise the tiles below would be appended to a
+    // detached (or already-superseded) node: painted nowhere, but still
+    // holding onclick handlers that look like they should work.
+    if (!document.body.contains(container)) return;
+
     // Refresh sidebar — ONLY if we are still on the home screen. getInfo() is
     // async; by the time it resolves the user may have navigated to an app
     // screen (#/hr, #/fleet, #/accounting, …) whose own sidebar renderer has
@@ -105,6 +111,7 @@ export async function render(container, params) {
       _refreshSidebar(sidebar, info.models ?? []);
     }
   } catch (err) {
+    if (!document.body.contains(container)) return;
     container.innerHTML = '';
     const alert = document.createElement('div');
     alert.className = 'alert-error';

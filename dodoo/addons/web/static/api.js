@@ -25,7 +25,13 @@ async function _json(res) {
 
 function _expireSession() {
   sessionStorage.clear();
-  window.location.hash = '#/login?reason=expired';
+  // app.js owns in-memory auth state (App.state.token) and can't be imported
+  // here without a circular dependency, so tell it via an event instead of
+  // touching window.location.hash directly. Setting the hash straight to
+  // '#/login' while App.state.token was still (stale-)truthy used to make
+  // login.js's own "already authenticated" check bounce right back to Home —
+  // a silent redirect loop with no visible error.
+  window.dispatchEvent(new CustomEvent('dodoo:session-expired'));
 }
 
 export async function authenticate(login, password) {

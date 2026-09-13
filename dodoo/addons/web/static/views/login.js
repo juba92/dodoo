@@ -132,8 +132,8 @@ export function render(container, _params) {
     }
   }
 
+  // `card` is a <form> with a type=submit button, so Enter in either field
+  // already triggers the native 'submit' event below — no separate keydown
+  // handler needed (one used to exist here and could double-fire onSubmit).
   card.addEventListener('submit', onSubmit);
-  card.addEventListener('keydown', e => {
-    if (e.key === 'Enter') onSubmit(e);
-  });
 }
