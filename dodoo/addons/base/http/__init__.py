@@ -66,6 +66,7 @@ async def core_info(request: Request) -> JSONResponse:
         is_admin = False
         hr_groups: list[str] = []
         fleet_manager = False
+        stock_groups: list[str] = []
         try:
             drow = await conn.execute(
                 text("SELECT direction FROM res_lang WHERE code = :c"), {"c": lang}
@@ -87,6 +88,7 @@ async def core_info(request: Request) -> JSONResponse:
             is_admin = "Administrator" in held
             hr_groups = sorted(n for n in held if n.startswith("HR "))
             fleet_manager = "Fleet Manager" in held
+            stock_groups = sorted(n for n in held if n.startswith("Inventory "))
 
     models = sorted(env.registry._models.keys())
     return JSONResponse(
@@ -102,5 +104,6 @@ async def core_info(request: Request) -> JSONResponse:
             "is_admin": is_admin,
             "hr_groups": hr_groups,
             "fleet_manager": fleet_manager,
+            "stock_groups": stock_groups,
         }
     )

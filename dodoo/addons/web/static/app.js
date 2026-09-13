@@ -46,6 +46,7 @@ export const App = {
       App.state.isAdmin = !!info.is_admin;
       App.state.hrGroups = info.hr_groups || [];
       App.state.fleetManager = !!info.fleet_manager;
+      App.state.stockGroups = info.stock_groups || [];
       await loadCatalog(App.state.lang);
       applyDirection(info.direction);
     } catch { /* keep current catalog */ }
@@ -310,6 +311,7 @@ function _renderSidebar(hash) {
     appNameEl.textContent = hash.startsWith('#/accounting') ? t('Accounting')
       : hash.startsWith('#/hr') ? t('Human Resources')
       : hash.startsWith('#/fleet') ? t('Fleet')
+      : hash.startsWith('#/inventory') ? t('Inventory')
       : hash === '#/settings' ? t('Settings')
       : t('Dodoo ERP');
   }
@@ -338,6 +340,12 @@ function _renderSidebar(hash) {
   if (hash.startsWith('#/fleet')) {
     sidebar.innerHTML = '';
     _renderFleetMenu(sidebar, hash).catch(err => console.error('[dodoo] Fleet menu render failed', err));
+    return;
+  }
+
+  if (hash.startsWith('#/inventory')) {
+    sidebar.innerHTML = '';
+    _renderStockMenu(sidebar, hash).catch(err => console.error('[dodoo] Inventory menu render failed', err));
     return;
   }
 
@@ -435,6 +443,40 @@ async function _renderHrMenu(sidebar, currentHash) {
   });
 }
 
+function _stockHas(requires) {
+  if (!requires) return true;
+  const g = App.state.stockGroups || [];
+  if (requires === 'manager') return g.includes('Inventory Manager');
+  return true;
+}
+
+async function _renderStockMenu(sidebar, currentHash) {
+  const { STOCK_MENU } = await _view('/stock/static/stock-menu.js');
+  if (!document.body.contains(sidebar)) return;
+  sidebar.innerHTML = '';
+  STOCK_MENU.forEach(({ section, requires, items }) => {
+    if (!_stockHas(requires)) return;
+    const visible = items.filter(it => _stockHas(it.requires));
+    if (!visible.length) return;
+    const title = document.createElement('div');
+    title.className = 'sidebar-section-title';
+    title.textContent = t(section);
+    sidebar.appendChild(title);
+    const ul = document.createElement('ul');
+    ul.className = 'sidebar-list';
+    visible.forEach(({ label, hash }) => {
+      const li = document.createElement('li');
+      const btn = document.createElement('button');
+      btn.textContent = t(label);
+      if (currentHash === hash || currentHash.startsWith(hash + '/')) btn.className = 'active';
+      btn.onclick = () => { App.breadcrumb = []; App.navigate(hash); };
+      li.appendChild(btn);
+      ul.appendChild(li);
+    });
+    sidebar.appendChild(ul);
+  });
+}
+
 async function _renderFleetMenu(sidebar, currentHash) {
   const { FLEET_MENU } = await _view('/fleet/static/fleet-menu.js');
   if (!document.body.contains(sidebar)) return;
@@ -501,6 +543,10 @@ const _ROUTES = [
   [/^#\/hr\/model\/([^/]+)\/new$/, () => _view('/web/static/views/form.js')],
   [/^#\/hr\/model\/([^/]+)\/(\d+)$/, () => _view('/web/static/views/form.js')],
   [/^#\/hr\/model\/([^/]+)$/, () => _view('/web/static/views/list.js')],
+  // Inventory routes
+  [/^#\/inventory\/model\/([^/]+)\/new$/, () => _view('/web/static/views/form.js')],
+  [/^#\/inventory\/model\/([^/]+)\/(\d+)$/, () => _view('/web/static/views/form.js')],
+  [/^#\/inventory\/model\/([^/]+)$/, () => _view('/web/static/views/list.js')],
   // Fleet routes
   [/^#\/fleet\/vehicles$/, () => _view('/fleet/static/views/vehicle-kanban.js')],
   [/^#\/fleet\/vehicle\/(\d+)$/, () => _view('/fleet/static/views/vehicle-form.js')],
@@ -612,6 +658,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     App.state.models = info.models ?? [];
     App.state.hrGroups = info.hr_groups ?? [];
     App.state.fleetManager = !!info.fleet_manager;
+    App.state.stockGroups = info.stock_groups ?? [];
     await loadCatalog(App.state.lang);
     applyDirection(info.direction);
   } catch {

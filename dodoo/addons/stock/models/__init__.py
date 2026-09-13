@@ -1,0 +1,17 @@
+from dodoo.addons.stock.models import (  # noqa: F401
+    stock_inventory_adjustment,
+    stock_location,
+    stock_lot,
+    stock_move,
+    stock_move_line,
+    stock_orderpoint,
+    stock_package,
+    stock_picking,
+    stock_picking_type,
+    stock_putaway_rule,
+    stock_quant,
+    stock_route,
+    stock_scrap,
+    stock_storage_category,
+    stock_warehouse,
+)
