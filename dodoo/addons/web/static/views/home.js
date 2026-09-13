@@ -34,6 +34,7 @@ const _MODULE_HOME_ROUTE = {
   account: '#/accounting/invoices',
   hr:      '#/hr/employees',
   fleet:   '#/fleet/vehicles',
+  stock:   '#/inventory/model/product.template',
 };
 
 // Odoo-style per-module colors (mirrors Odoo's app tile palette)
@@ -189,18 +190,31 @@ async function _renderModuleDetail(container, moduleName) {
   header.appendChild(h2);
   container.appendChild(header);
 
-  // Show models that belong to this module (best-effort prefix match)
-  const models = App.state.models.filter(m => {
-    // Models like res.users, ir.model often belong to 'base'
-    // We do a simple prefix heuristic: all models for any module shown
-    return true;
-  });
+  // Show models that belong to this module: a model's own dotted first segment must equal
+  // the module's technical name (e.g. `stock.warehouse` belongs to `stock`). This is a
+  // fallback screen for a module with no `_MODULE_HOME_ROUTE` entry — reaching it at all
+  // for an `application: true` module usually means that entry (and the matching
+  // `_MODULE_ICONS`/`_MODULE_DISPLAY_NAMES`/`_MODULE_COLORS` ones) was forgotten; see
+  // docs/adr/035-new-application-module-checklist.md.
+  const prefix = moduleName + '.';
+  const models = App.state.models.filter(m => m === moduleName || m.startsWith(prefix));
 
   const subtitle = document.createElement('p');
   subtitle.style.color = 'var(--text-muted)';
   subtitle.style.marginBottom = '1rem';
   subtitle.textContent = t('Browse models in the {module} module.', { module: moduleName });
   container.appendChild(subtitle);
+
+  if (models.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.textContent = t(
+      'No models are registered directly under "{module}" — this app may be missing its dedicated home screen wiring.',
+      { module: moduleName }
+    );
+    container.appendChild(empty);
+    return;
+  }
 
   const grid = document.createElement('div');
   grid.style.display = 'grid';

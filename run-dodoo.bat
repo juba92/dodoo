@@ -80,6 +80,10 @@ echo ^(localization: base, account, web + Arabic/Egypt seed^)
 echo ^(fleet: pulls in hr — Employees, Contracts, Skills, Time Off, Recruitment,^)
 echo ^( Appraisals, Referrals + Fleet; seeds sample HR + fleet data^)
 %PY% -m dodoo module install fleet || (echo [ERROR] fleet install failed. & pause & exit /b 1)
+echo ^(stock_account: pulls in product + stock — Products, Warehouses, Transfers,^)
+echo ^( Physical Inventory, Lots/Packages, Routes/Reordering, Scrap + Valuation;^)
+echo ^( seeds sample catalog + a default warehouse^)
+%PY% -m dodoo module install stock_account || (echo [ERROR] stock_account install failed. & pause & exit /b 1)
 
 echo.
 echo === [6/6] Start the web app ===

@@ -5,7 +5,7 @@ import { loadCatalog, applyDirection, t, currentLang } from '/web/static/i18n.js
 // lazily-imported view module so a new build is a new module URL — otherwise the
 // browser keeps the first-imported version of a view for the whole tab session
 // (hash navigation never reloads the document) and serves stale screens.
-const CLIENT_BUILD = '2026-09-06.17';
+const CLIENT_BUILD = '2026-09-13.1';
 
 /** Lazy-import a view module, cache-busted by the current build. */
 const _view = path => import(path + '?v=' + CLIENT_BUILD);
@@ -19,7 +19,7 @@ const _view = path => import(path + '?v=' + CLIENT_BUILD);
  * source of truth.
  */
 export function modelRouteBase() {
-  const m = (window.location.hash || '').match(/^#\/(accounting|hr|fleet)(?:\/|$)/);
+  const m = (window.location.hash || '').match(/^#\/(accounting|hr|fleet|inventory)(?:\/|$)/);
   return m ? `#/${m[1]}/model` : '#/model';
 }
 
@@ -117,11 +117,19 @@ const _MODEL_LABELS = {
   'hr.leave.allocation': 'Allocations', 'hr.leave.type': 'Leave Types',
   'hr.public.holiday': 'Public Holidays', 'hr.appraisal': 'Appraisals',
   'hr.appraisal.template': 'Templates',
+  'product.template': 'Products', 'product.product': 'Product Variants',
+  'product.category': 'Product Categories', 'uom.uom': 'Units of Measure',
+  'stock.picking': 'Transfers', 'stock.picking.type': 'Operation Types',
+  'stock.quant': 'On-Hand Quantities', 'stock.quant.package': 'Packages',
+  'stock.lot': 'Lots & Serial Numbers', 'stock.warehouse.orderpoint': 'Reordering Rules',
+  'stock.inventory.adjustment.log': 'Adjustment History',
+  'stock.valuation.layer': 'Valuation Layers',
 };
+const _SECTION_MODEL_PREFIXES = new Set(['hr', 'fleet', 'stock', 'product', 'uom']);
 function _modelLabel(name) {
   if (_MODEL_LABELS[name]) return t(_MODEL_LABELS[name]);
   const parts = name.split('.');
-  const words = (parts[0] === 'hr' || parts[0] === 'fleet' ? parts.slice(1) : parts).join(' ');
+  const words = (_SECTION_MODEL_PREFIXES.has(parts[0]) ? parts.slice(1) : parts).join(' ');
   const humanized = words.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   return t(humanized);
 }
@@ -167,6 +175,9 @@ function _labelFromHash(hash) {
   if ((m = hash.match(/^#\/hr\/model\/([^/]+)\/new$/)))         return t('New {name}', { name: _modelLabel(m[1]) });
   if ((m = hash.match(/^#\/hr\/model\/([^/]+)\/(\d+)$/)))       return `${_modelLabel(m[1])} #${m[2]}`;
   if ((m = hash.match(/^#\/hr\/model\/([^/]+)$/)))              return _modelLabel(m[1]);
+  if ((m = hash.match(/^#\/inventory\/model\/([^/]+)\/new$/)))  return t('New {name}', { name: _modelLabel(m[1]) });
+  if ((m = hash.match(/^#\/inventory\/model\/([^/]+)\/(\d+)$/))) return `${_modelLabel(m[1])} #${m[2]}`;
+  if ((m = hash.match(/^#\/inventory\/model\/([^/]+)$/)))       return _modelLabel(m[1]);
   if ((m = hash.match(/^#\/model\/([^/]+)\/new$/)))             return t('New {name}', { name: _modelLabel(m[1]) });
   if ((m = hash.match(/^#\/model\/([^/]+)\/(\d+)$/)))           return `${_modelLabel(m[1])} #${m[2]}`;
   if ((m = hash.match(/^#\/model\/([^/]+)$/)))                  return _modelLabel(m[1]);
@@ -598,6 +609,9 @@ function _paramsFromHash(hash) {
   if ((m = base.match(/^#\/hr\/model\/([^/]+)\/new$/)))               return { model: m[1], id: 'new' };
   if ((m = base.match(/^#\/hr\/model\/([^/]+)\/(\d+)$/)))             return { model: m[1], id: parseInt(m[2], 10) };
   if ((m = base.match(/^#\/hr\/model\/([^/]+)$/)))                    return { model: m[1] };
+  if ((m = base.match(/^#\/inventory\/model\/([^/]+)\/new$/)))         return { model: m[1], id: 'new' };
+  if ((m = base.match(/^#\/inventory\/model\/([^/]+)\/(\d+)$/)))       return { model: m[1], id: parseInt(m[2], 10) };
+  if ((m = base.match(/^#\/inventory\/model\/([^/]+)$/)))              return { model: m[1] };
   if ((m = base.match(/^#\/model\/([^/]+)\/new$/)))                    return { model: m[1], id: 'new' };
   if ((m = base.match(/^#\/model\/([^/]+)\/(\d+)$/)))                  return { model: m[1], id: parseInt(m[2], 10) };
   if ((m = base.match(/^#\/model\/([^/]+)$/)))                         return { model: m[1] };
