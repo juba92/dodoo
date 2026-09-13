@@ -24,7 +24,12 @@ A file-by-file comparison of `dodoo/addons/account` (plus `dodoo/addons/stock_ac
 - **Financial reports**: no tax report exists; Trial Balance and General Ledger both drop prior-period activity instead of showing an opening balance when a date filter is applied; no report supports drill-down into source entries; Aged Receivable/Payable has no separate "not yet due" bucket; the Balance Sheet conflates current-year earnings with prior-year retained earnings because there is no fiscal-year-closing mechanism.
 - **Analytic accounting**: this is a genuine Odoo 19 Community feature (not Enterprise-only), and dodoo has only an inert, unbacked JSON field for it — no analytic accounts, plans, or roll-up reporting exist.
 
-## User Scenarios & Testing *(mandatory)*
+## Clarifications
+
+### Session 2026-09-13
+
+- Q: Should the new dated exchange-rate table (FR-023) be populated only by manual entry, or must dodoo also integrate with an external rate-provider service (e.g., a central-bank feed) to auto-fetch rates, as Odoo Community optionally supports? → A: Manual entry only for this feature; automatic external-provider fetching is out of scope. Rationale: the accountant's complaint was that currency conversion produces wrong/missing results, not that rate entry is inconvenient — a dated rate table with manual entry fully resolves the correctness gap (FR-023–FR-026) without adding a new external network dependency and its attendant security/reliability surface (Principle III). Automatic fetching can be layered on later without changing the data model.
+- Q: Should bank statement entry (FR-027) require parsing specific external file formats (CSV/OFX/CAMT.053), or is manual/API-driven creation of statement lines sufficient? → A: Manual/API-driven entry only; specific file-format import is out of scope. Rationale: the audited gap is the complete absence of a bank-statement concept to reconcile against, not the absence of a particular import format — a statement entity with structured line creation (FR-027–FR-029) resolves the correctness/completeness gap. File-format parsers are additive integrations that don't change how balances, continuity checks, or reconciliation behave, so they are deferred to keep this feature's scope to what the audit actually found broken or missing.
 
 ### User Story 1 - Correct invoice, tax, and payment-term figures (Priority: P1)
 
@@ -190,14 +195,14 @@ An accountant tags journal items with analytic accounts (e.g., by department, pr
 
 ### Functional Requirements — Multi-Currency
 
-- **FR-023**: System MUST maintain a dated exchange-rate table per currency, so foreign-currency documents are converted using the rate applicable to their date.
+- **FR-023**: System MUST maintain a dated exchange-rate table per currency, populated by manual entry, so foreign-currency documents are converted using the rate applicable to their date. Automatic fetching of rates from an external provider is out of scope for this feature.
 - **FR-024**: System MUST convert a foreign-currency document's transaction-currency amount into company-currency debit/credit using the applicable exchange rate at posting time.
 - **FR-025**: System MUST post a realized exchange gain/loss entry when a foreign-currency invoice is reconciled against a payment booked at a different exchange rate.
 - **FR-026**: System MUST provide a period-end unrealized currency gain/loss revaluation for open foreign-currency balances that does not affect realized results and is reversible in the following period.
 
 ### Functional Requirements — Bank and Cash
 
-- **FR-027**: System MUST provide a bank statement entity, per bank account, with a starting balance, an ending balance, and a set of dated transaction lines.
+- **FR-027**: System MUST provide a bank statement entity, per bank account, with a starting balance, an ending balance, and a set of dated transaction lines, created via manual entry or structured (API-driven) bulk creation. Parsing of specific external bank file formats (e.g., CSV, OFX, CAMT.053) is out of scope for this feature.
 - **FR-028**: System MUST validate statement continuity: a statement's starting balance must equal the prior statement's real ending balance, and the system must flag a statement as incomplete when its computed running balance does not match its declared ending balance.
 - **FR-029**: System MUST let a user reconcile a bank statement line against one or more journal entries or payments.
 - **FR-030**: System MUST support a configurable cash-rounding profile (rounding increment, rounding method, and a strategy for applying the rounding difference) for cash-paid invoices.
@@ -223,8 +228,8 @@ An accountant tags journal items with analytic accounts (e.g., by department, pr
 ### Key Entities *(include if feature involves data)*
 
 - **Account Group**: A code-prefix range used to auto-classify chart-of-accounts entries for report roll-up; relates one-to-many to Account.
-- **Currency Rate**: A currency's exchange rate as of a specific date, used to convert foreign-currency documents into company-currency amounts.
-- **Bank Statement / Bank Statement Line**: A dated record of a bank account's starting balance, ending balance, and individual transaction lines; each line can be reconciled against payments or journal entries.
+- **Currency Rate**: A currency's exchange rate as of a specific date, manually entered, used to convert foreign-currency documents into company-currency amounts.
+- **Bank Statement / Bank Statement Line**: A dated record of a bank account's starting balance, ending balance, and individual transaction lines (entered manually or created via a structured API), each of which can be reconciled against payments or journal entries.
 - **Cash Rounding Profile**: A configurable rounding increment, method, and application strategy used on cash-settled invoices.
 - **Lock Date / Lock Exception**: Company-level dates (fiscal-year, tax, sales, purchases) before which postings are restricted, and scoped, time-boxed exceptions that authorized users may grant against them.
 - **Tax Grid (Report Line Tag)**: A tag attached to a tax's repartition lines that determines which line of the Tax Report an amount contributes to.
@@ -265,3 +270,4 @@ An accountant tags journal items with analytic accounts (e.g., by department, pr
 - Where a gap requires a genuinely new data concept (e.g., bank statements, currency rates, lock exceptions, analytic accounts), the new entity's shape follows the reference implementation's model closely enough to reproduce its behavior, without requiring pixel-identical UI.
 - Existing dodoo integration points (`stock_account` for inventory valuation, `product` for pricing/UoM) are treated as inputs to the accounting entries they feed; this feature corrects how `account` consumes and posts those inputs, not the valuation/pricing logic itself, unless a specific finding above says otherwise.
 - "Debit note" and "down payment" are treated as core accounting capabilities to complete per the audit findings, even though in Odoo they are delivered via a small companion addon (`account_debit_note`) and sale-flow integration respectively; the requirement here is the accounting-side capability (create a linked, amount-increasing document; track a distinct advance-payment line), not any dependency on the `sale` app.
+- Per the Clarifications above, currency-rate acquisition is manual-entry-only (no external rate-provider integration) and bank statement creation is manual/API-only (no specific file-format import parser); both remain natural, additive extensions of the data model introduced here and can be layered on in a future feature without rework.
