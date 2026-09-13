@@ -14,8 +14,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
     mod = sub.add_parser("module", help="Module management")
     mod_sub = mod.add_subparsers(dest="module_command")
-    inst = mod_sub.add_parser("install", help="Install a module")
-    inst.add_argument("name")
+    inst = mod_sub.add_parser("install", help="Install one or more modules")
+    inst.add_argument("name", nargs="+", help="Module name(s) to install, in any order")
 
     return parser
 
@@ -44,10 +44,16 @@ async def _run_module_install(args: argparse.Namespace) -> None:
     from dodoo import Environment
     from dodoo.core.exceptions import CycleError, ModuleLoadError
 
+    # One Environment (and one DDL bootstrap / SEC-005 check) for the whole batch,
+    # not one per module — a deploy that installs N modules used to spawn N fresh
+    # processes, each reconnecting to Postgres and re-running the schema bootstrap
+    # from scratch, which dominated deploy time far more than the actual per-module
+    # migration/seed work.
     env = await Environment.create()
     try:
-        await env.modules.install(args.name)
-        print(f"Module '{args.name}' installed successfully.")
+        for name in args.name:
+            await env.modules.install(name)
+            print(f"Module '{name}' installed successfully.")
     except (ModuleLoadError, CycleError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
