@@ -549,12 +549,12 @@ now independently functional.
 
 - [ ] T112 [P] Documentation: verify all nine ADR files from T005 accurately reflect the final
   implementation (Principle V)
-- [ ] T113 [P] Create `dodoo/addons/account/data/indexes.py` (account's first — mirrors
+- [X] T113 [P] Create `dodoo/addons/account/data/indexes.py` (account's first — mirrors
   `hr`/`stock`'s `ensure_indexes(env, ddl)` convention): `(account_id, date)` composite for the
   opening-balance queries (PERF-001), `(partner_id, reconciled)` partial index (`WHERE reconciled =
   FALSE`) for reconciliation suggestions (PERF-002), `(currency_id, rate_date DESC)` on
   `res_currency_rate` (PERF-004); wire from `account_data.py`'s seed orchestrator
-- [ ] T114 Create `tests/benchmarks/test_accounting_perf.py`: PERF-001 (opening-balance overhead <
+- [X] T114 Create `tests/benchmarks/test_accounting_perf.py`: PERF-001 (opening-balance overhead <
   150 ms @ 100k posted lines / 5-year history), PERF-002 (reconciliation suggestion < 300 ms @ 500
   open items), PERF-004 (currency-rate lookup < 50 ms); re-run 001–007's existing report/posting
   benchmarks alongside to confirm no regression (SC-007/PERF-003) (depends on T087, T044, T014,

@@ -128,6 +128,10 @@ async def seed_account_data(env: Environment) -> None:
 
         await conn.commit()
 
+    from dodoo.addons.account.data.indexes import PERF_INDEXES, ensure_indexes
+
+    await ensure_indexes(env, PERF_INDEXES)
+
     _log.info(
         "Created account_sequence table, res_partner/res_company FK columns, "
         "pg_trgm extension, and indexes"
