@@ -474,30 +474,30 @@ down-payment invoice netted against a final invoice.
 
 ### Tests for User Story 5
 
-- [ ] T096 [P] [US5] Integration test debit-note creation (same `move_type`, verbatim lines,
+- [X] T096 [P] [US5] Integration test debit-note creation (same `move_type`, verbatim lines,
   `debit_origin_id` set, increases amount owed) (FR-011) in
   `tests/accounting/test_debit_note_downpayment.py`
-- [ ] T097 [P] [US5] Integration test down-payment netting against a final invoice at posting
+- [X] T097 [P] [US5] Integration test down-payment netting against a final invoice at posting
   (FR-012) added to `tests/accounting/test_debit_note_downpayment.py`
 
 ### Implementation for User Story 5
 
-- [ ] T098 [US5] Add `debit_origin_id` (`Many2one("account.move")`, nullable, mirrors
+- [X] T098 [US5] Add `debit_origin_id` (`Many2one("account.move")`, nullable, mirrors
   `reversed_entry_id`) to `AccountMove`; add `action_create_debit_note(env, move_id, uid)`
   classmethod (copies lines verbatim, no sign flip, same `move_type`) and
   `POST /account/move/{id}/debit-note` route (FR-011, ADR-040)
-- [ ] T099 [US5] Add `"down_payment"` to `AccountMoveLine`'s existing `DISPLAY_TYPE_CHOICES`; add
+- [X] T099 [US5] Add `"down_payment"` to `AccountMoveLine`'s existing `DISPLAY_TYPE_CHOICES`; add
   `down_payment_origin_id` (`Many2one("account.move")`, nullable) to `AccountMove` (FR-012, ADR-040)
   (depends on T098)
-- [ ] T100 [US5] Add `AccountMove.apply_down_payments(env, invoice_id)` classmethod, called from
+- [X] T100 [US5] Add `AccountMove.apply_down_payments(env, invoice_id)` classmethod, called from
   `action_post` for invoice-type moves: finds posted down-payment moves referencing `invoice_id`
   and inserts one negative `payment_term`-adjacent line reducing the AR balance, reusing
   `_compute_payment_term_lines`'s existing imbalance-driven insertion (FR-012) (depends on T099)
-- [ ] T101 [P] [US5] Update `dodoo/addons/account/static/views/invoice-form.js`: debit-note action
+- [X] T101 [P] [US5] Update `dodoo/addons/account/static/views/invoice-form.js`: debit-note action
   button on posted bills/invoices; down-payment line indicator
-- [ ] T102 [US5] Update `dodoo/addons/account/data/i18n/{en,ar}.json` with new UI strings (debit
+- [X] T102 [US5] Update `dodoo/addons/account/data/i18n/{en,ar}.json` with new UI strings (debit
   note, down payment)
-- [ ] T103 [US5] Extend `tests/accounting/test_migrations.py`: assert `account_move.debit_origin_id`
+- [X] T103 [US5] Extend `tests/accounting/test_migrations.py`: assert `account_move.debit_origin_id`
   and `down_payment_origin_id` exist (depends on T098, T099)
 
 **Checkpoint**: debit notes and down payments are usable end to end.

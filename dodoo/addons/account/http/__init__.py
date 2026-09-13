@@ -60,6 +60,21 @@ async def action_cancel_move(request: Request, move_id: int) -> JSONResponse:
         return JSONResponse({"error": str(e)}, status_code=400)
 
 
+@route("/account/move/{move_id}/debit-note", methods=["POST"], auth="session")
+async def action_create_debit_note(request: Request, move_id: int) -> JSONResponse:
+    """FR-011. Empty body, per `DebitNoteCreate`."""
+    env = request.app.state.env
+    from dodoo.addons.account.models.account_move import AccountMove
+
+    try:
+        from dodoo.core.context import get_uid
+
+        debit_note_id = await AccountMove.action_create_debit_note(env, move_id, get_uid())
+        return JSONResponse({"result": debit_note_id})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
 @route("/account/move/{move_id}/reverse", methods=["POST"], auth="session")
 async def action_reverse_move(request: Request, move_id: int) -> JSONResponse:
     env = request.app.state.env

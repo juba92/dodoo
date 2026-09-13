@@ -957,6 +957,201 @@ class AccountMove(BaseModel):
 
         return {"valid": True, "first_break_move_id": None}
 
+    # ---- Debit notes and down payments (FR-011/012, ADR-040) ----
+
+    @classmethod
+    async def action_create_debit_note(
+        cls, env: Environment, move_id: int, uid: int | None = None
+    ) -> int:
+        """FR-011: a debit note on a posted invoice/bill copies its product
+        lines verbatim (same signs — it *adds* to the amount owed, unlike a
+        reversal which flips signs) into a new draft move of the **same**
+        ``move_type``, linked via ``debit_origin_id``. Tax/payment-term lines
+        are left for the normal `action_post` computation to (re)generate."""
+        records = await super().read(
+            env,
+            [move_id],
+            [
+                "state",
+                "move_type",
+                "journal_id",
+                "company_id",
+                "currency_id",
+                "partner_id",
+                "invoice_payment_term_id",
+            ],
+        )
+        if not records:
+            raise DodooError(f"account.move {move_id} not found")
+        rec = records[0]
+        if rec["state"] != "posted":
+            raise DodooError(f"Move {move_id} must be posted to create a debit note")
+        if rec["move_type"] not in _INVOICE_TYPES:
+            raise DodooError(
+                f"Move {move_id} is not an invoice/bill (move_type={rec['move_type']})"
+            )
+
+        async with env.dml_conn() as conn:
+            rows = await conn.execute(
+                text(
+                    "SELECT id, account_id, partner_id, name, date, price_unit, "
+                    "quantity, discount FROM account_move_line "
+                    "WHERE move_id=:mid AND display_type='product' ORDER BY sequence, id"
+                ),
+                {"mid": move_id},
+            )
+            lines = [dict(r._mapping) for r in rows]
+            tax_ids_by_line: dict[int, list[int]] = {}
+            for line in lines:
+                trows = await conn.execute(
+                    text(
+                        "SELECT tax_id FROM account_move_line_tax_rel WHERE move_line_id=:lid"
+                    ),
+                    {"lid": line["id"]},
+                )
+                tax_ids_by_line[line["id"]] = [r[0] for r in trows]
+
+        today = datetime.date.today()
+        debit_note_id = await cls.create(
+            env,
+            {
+                "move_type": rec["move_type"],
+                "journal_id": rec["journal_id"],
+                "company_id": rec["company_id"],
+                "currency_id": rec["currency_id"],
+                "partner_id": rec.get("partner_id"),
+                "invoice_payment_term_id": rec.get("invoice_payment_term_id"),
+                "date": today,
+                "invoice_date": today,
+                "debit_origin_id": move_id,
+                "state": "draft",
+            },
+        )
+
+        from dodoo.addons.account.models.account_move_line import AccountMoveLine
+
+        for line in lines:
+            await AccountMoveLine.create(
+                env,
+                {
+                    "move_id": debit_note_id,
+                    "account_id": line["account_id"],
+                    "partner_id": line.get("partner_id"),
+                    "name": line.get("name"),
+                    "date": today,
+                    "display_type": "product",
+                    "price_unit": line["price_unit"],
+                    "quantity": line["quantity"],
+                    "discount": line.get("discount") or 0,
+                    "tax_ids": tax_ids_by_line.get(line["id"], []),
+                },
+            )
+
+        _log.info(
+            "account.move debit note created",
+            extra={
+                "model": "account.move",
+                "record_id": move_id,
+                "debit_note_id": debit_note_id,
+                "event": "action_create_debit_note",
+            },
+        )
+        return debit_note_id
+
+    @classmethod
+    async def apply_down_payments(cls, env: Environment, invoice_id: int) -> None:
+        """FR-012: any posted down-payment moves targeting `invoice_id`
+        (referencing it via their own `down_payment_origin_id`) reduce the
+        invoice's amount owed by their total — inserted as one
+        `down_payment`-type line on the invoice's own AR/AP account, which
+        `_compute_payment_term_lines`'s existing imbalance computation then
+        folds into a correspondingly smaller auto-generated receivable line
+        (no separate balancing mechanism)."""
+        async with env.dml_conn() as conn:
+            dp_row = await conn.execute(
+                text(
+                    "SELECT COALESCE(SUM(amount_total), 0) FROM account_move "
+                    "WHERE down_payment_origin_id = :iid AND state = 'posted'"
+                ),
+                {"iid": invoice_id},
+            )
+            total_dp = Decimal(str(dp_row.scalar_one() or "0"))
+            if total_dp == 0:
+                return
+
+            await conn.execute(
+                text(
+                    "DELETE FROM account_move_line WHERE move_id=:mid "
+                    "AND display_type='down_payment'"
+                ),
+                {"mid": invoice_id},
+            )
+
+            move_row = await conn.execute(
+                text("SELECT move_type, partner_id, company_id FROM account_move WHERE id=:id"),
+                {"id": invoice_id},
+            )
+            move_type, partner_id, company_id = move_row.fetchone()
+
+            is_receivable = move_type in _SALE_TYPES
+            acct_type = "asset_receivable" if is_receivable else "liability_payable"
+            ar_ap_account_id = None
+            if partner_id:
+                col = (
+                    "property_account_receivable_id"
+                    if is_receivable
+                    else "property_account_payable_id"
+                )
+                prow = await conn.execute(
+                    text(f"SELECT {col} FROM res_partner WHERE id=:pid"),  # noqa: S608
+                    {"pid": partner_id},
+                )
+                pdata = prow.fetchone()
+                ar_ap_account_id = pdata[0] if pdata else None
+            if not ar_ap_account_id:
+                arow = await conn.execute(
+                    text(
+                        "SELECT id FROM account_account "
+                        "WHERE account_type=:atype AND company_id=:cid LIMIT 1"
+                    ),
+                    {"atype": acct_type, "cid": company_id},
+                )
+                arow_data = arow.fetchone()
+                ar_ap_account_id = arow_data[0] if arow_data else None
+            if not ar_ap_account_id:
+                return
+
+            date_row = await conn.execute(
+                text(
+                    "SELECT date FROM account_move_line WHERE move_id=:mid "
+                    "AND display_type='product' LIMIT 1"
+                ),
+                {"mid": invoice_id},
+            )
+            acct_date = date_row.scalar_one_or_none() or datetime.date.today()
+
+            debit = total_dp if is_receivable else Decimal("0")
+            credit = Decimal("0") if is_receivable else total_dp
+            await conn.execute(
+                text(
+                    "INSERT INTO account_move_line "
+                    "(move_id, sequence, account_id, partner_id, date, display_type, "
+                    "debit, credit, balance, create_date, write_date) "
+                    "VALUES (:mid, 9997, :acct, :pid, :dt, 'down_payment', "
+                    ":debit, :credit, :bal, now(), now())"
+                ),
+                {
+                    "mid": invoice_id,
+                    "acct": ar_ap_account_id,
+                    "pid": partner_id,
+                    "dt": acct_date,
+                    "debit": str(debit),
+                    "credit": str(credit),
+                    "bal": str(debit - credit),
+                },
+            )
+            await conn.commit()
+
     @classmethod
     async def _compute_payment_term_lines(
         cls, conn, move_id: int, move_type: str, partner_id: int | None, company_id: int
@@ -1224,6 +1419,11 @@ class AccountMove(BaseModel):
                     await cls._apply_cash_rounding(
                         conn, move_id, rec["invoice_cash_rounding_id"]
                     )
+                # FR-012: net any posted down payments against this invoice
+                # before the payment-term line is computed, so the existing
+                # imbalance-driven insertion below picks up the reduced total.
+                if move_type in _INVOICE_TYPES:
+                    await cls.apply_down_payments(env, move_id)
                 # Auto-generate payment_term (AR/AP) line for invoice types
                 await cls._compute_payment_term_lines(
                     conn, move_id, move_type, rec.get("partner_id"), rec["company_id"]

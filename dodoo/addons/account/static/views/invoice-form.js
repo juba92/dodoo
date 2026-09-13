@@ -167,6 +167,28 @@ function _buildCP(cp, move, id) {
     cp.appendChild(btn);
   }
 
+  if (state === 'posted' && move_type !== 'entry') {
+    // FR-011: a debit note adds to the amount owed (same move_type, positive
+    // copy), distinct from the reversal/credit-note button above.
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-secondary';
+    btn.textContent = t('Create Debit Note');
+    btn.onclick = async () => {
+      if (!confirm(t('Create a debit note from this entry?'))) return;
+      btn.disabled = true;
+      try {
+        const data = await _post(`/account/move/${id}/debit-note`);
+        if (data.result) App.navigate(`#/accounting/move/${data.result}`);
+        else alert(data.error ?? t('Failed to create debit note'));
+      } catch (err) {
+        alert(t('Error') + ': ' + err.message);
+      } finally {
+        btn.disabled = false;
+      }
+    };
+    cp.appendChild(btn);
+  }
+
   if (state === 'posted' && payment_state === 'not_paid') {
     const spacer = document.createElement('div');
     spacer.className = 'o-cp-spacer';
@@ -348,10 +370,19 @@ function _totalsCard(move) {
   const rows = [
     { label: t('Untaxed Amount'), value: _fmt(move.amount_untaxed) },
     { label: t('Taxes'),          value: _fmt(move.amount_tax) },
+  ];
+  // FR-012: amount_total already nets out any applied down payment(s) — show
+  // the gap as its own line so it isn't mistaken for a rounding error.
+  const downPaymentApplied = (parseFloat(move.amount_untaxed) || 0)
+    + (parseFloat(move.amount_tax) || 0) - (parseFloat(move.amount_total) || 0);
+  if (downPaymentApplied > 0.005) {
+    rows.push({ label: t('Down Payment Applied'), value: '-' + _fmt(downPaymentApplied) });
+  }
+  rows.push(
     { label: t('Total'),          value: _fmt(move.amount_total), bold: true },
     { label: t('Amount Due'),     value: _fmt(move.amount_residual), bold: true,
       highlight: parseFloat(move.amount_residual || 0) > 0 },
-  ];
+  );
 
   rows.forEach(({ label, value, bold, highlight }) => {
     const row = document.createElement('div');

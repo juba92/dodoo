@@ -27,6 +27,7 @@ DISPLAY_TYPE_CHOICES = [
     ("payment_term", "Payment Term"),
     ("line_section", "Section"),
     ("line_note", "Note"),
+    ("down_payment", "Down Payment"),
 ]
 
 _SYSTEM_DISPLAY_TYPES = frozenset({"tax", "payment_term"})
