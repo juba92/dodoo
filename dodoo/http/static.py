@@ -16,6 +16,17 @@ from starlette.types import Scope
 
 
 class NoCacheStaticFiles(StaticFiles):
+    def __init__(self, *, directory: str, **kwargs: Any) -> None:
+        # Git doesn't track empty directories, so an addon whose static/ tree has
+        # no files yet (e.g. backend-only so far, no SPA views) simply isn't
+        # present after a fresh clone/deploy — Starlette's StaticFiles refuses to
+        # mount a missing directory, which crashed the whole module install
+        # (product/http/__init__.py mounts /product/static before it has any
+        # content). Creating it is harmless and keeps addon http/__init__.py
+        # modules from each needing their own mkdir boilerplate.
+        os.makedirs(directory, exist_ok=True)
+        super().__init__(directory=directory, **kwargs)
+
     def file_response(
         self,
         full_path: Any,
