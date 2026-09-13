@@ -26,8 +26,12 @@ async def action_post_move(request: Request, move_id: int) -> JSONResponse:
     from dodoo.addons.account.models.account_move import AccountMove
 
     try:
-        await AccountMove.action_post(env, [move_id])
-        return JSONResponse({"result": True})
+        warnings: list[str] = []
+        await AccountMove.action_post(env, [move_id], _warnings=warnings)
+        response: dict = {"result": True}
+        if warnings:
+            response["warning"] = warnings[0]
+        return JSONResponse(response)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
@@ -39,6 +43,18 @@ async def action_reset_move(request: Request, move_id: int) -> JSONResponse:
 
     try:
         await AccountMove.action_reset_to_draft(env, [move_id])
+        return JSONResponse({"result": True})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@route("/account/move/{move_id}/cancel", methods=["POST"], auth="session")
+async def action_cancel_move(request: Request, move_id: int) -> JSONResponse:
+    env = request.app.state.env
+    from dodoo.addons.account.models.account_move import AccountMove
+
+    try:
+        await AccountMove.action_cancel(env, [move_id])
         return JSONResponse({"result": True})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -60,6 +76,91 @@ async def action_reverse_move(request: Request, move_id: int) -> JSONResponse:
         )
         state = "posted" if auto_post else "draft"
         return JSONResponse({"result": reversal_ids, "state": state})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@route("/account/journal/{journal_id}/hash-chain", methods=["POST"], auth="session")
+async def toggle_hash_chain(request: Request, journal_id: int) -> JSONResponse:
+    """FR-007, ADR-039: only an Accounting Manager may enable/disable a
+    journal's hash chain."""
+    env = request.app.state.env
+    from dodoo.addons.account.models.account_journal import AccountJournal
+    from dodoo.addons.account.security import GROUP_MANAGER
+    from dodoo.addons.account.validators import HashChainToggle, require_groups, validate
+
+    body = await request.json()
+    try:
+        payload = validate(HashChainToggle, body)
+        from dodoo.core.context import get_uid
+
+        await require_groups(env, get_uid(), GROUP_MANAGER)
+        await AccountJournal.write(
+            env, [journal_id], {"restrict_mode_hash_table": payload.enabled}
+        )
+        return JSONResponse({"result": True})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@route("/account/journal/{journal_id}/verify-hash-chain", methods=["GET"], auth="session")
+async def verify_hash_chain(request: Request, journal_id: int) -> JSONResponse:
+    env = request.app.state.env
+    from dodoo.addons.account.models.account_move import AccountMove
+
+    try:
+        return JSONResponse(await AccountMove.verify_hash_chain(env, journal_id))
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@route("/account/lock-exception", methods=["POST"], auth="session")
+async def grant_lock_exception(request: Request) -> JSONResponse:
+    """FR-033, SEC-003: an Accounting Manager grants a time-boxed, scoped
+    exception to a lock date; ``granted_by_id`` is set automatically."""
+    env = request.app.state.env
+    from dodoo.addons.account.models.account_lock_exception import AccountLockException
+    from dodoo.addons.account.security import GROUP_MANAGER
+    from dodoo.addons.account.validators import LockExceptionGrant, require_groups, validate
+
+    body = await request.json()
+    try:
+        payload = validate(LockExceptionGrant, body)
+        from dodoo.core.context import get_uid
+
+        uid = get_uid()
+        await require_groups(env, uid, GROUP_MANAGER)
+        exception_id = await AccountLockException.create(
+            env,
+            {
+                "company_id": payload.company_id,
+                "lock_date_field": payload.lock_date_field,
+                "lock_date": payload.lock_date,
+                "user_id": payload.user_id,
+                "journal_id": payload.journal_id,
+                "end_date": payload.end_date,
+                "granted_by_id": uid,
+            },
+        )
+        return JSONResponse({"result": exception_id})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@route("/account/lock-exception/{exception_id}", methods=["DELETE"], auth="session")
+async def revoke_lock_exception(request: Request, exception_id: int) -> JSONResponse:
+    """FR-033: soft-revoke via ``active=False`` rather than deleting the audit row."""
+    env = request.app.state.env
+    from dodoo.addons.account.models.account_lock_exception import AccountLockException
+    from dodoo.addons.account.security import GROUP_MANAGER
+    from dodoo.addons.account.validators import require_groups
+
+    try:
+        from dodoo.core.context import get_uid
+
+        await require_groups(env, get_uid(), GROUP_MANAGER)
+        await AccountLockException.write(env, [exception_id], {"active": False})
+        return JSONResponse({"result": True})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 

@@ -28,6 +28,11 @@ export const ACCOUNTING_MENU = [
     section: 'Configuration',
     items: [
       { label: 'Cash Rounding', hash: '#/accounting/model/account.cash.rounding' },
+      {
+        label: 'Lock Exceptions',
+        hash: '#/accounting/model/account.lock.exception',
+        requires: 'manager',
+      },
     ],
   },
   {

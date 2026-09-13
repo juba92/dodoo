@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import hashlib
 import logging
 from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP, Decimal
 from typing import TYPE_CHECKING, Any
@@ -73,6 +74,10 @@ _JOURNAL_PREFIX: dict[str, str] = {
     "in_receipt": "PAY",
     "entry": "MISC",
 }
+
+_LOCK_DATE_COLUMNS = frozenset(
+    {"fiscalyear_lock_date", "tax_lock_date", "sale_lock_date", "purchase_lock_date"}
+)
 
 _REVERSE_TYPE: dict[str, str] = {
     "out_invoice": "out_refund",
@@ -745,6 +750,201 @@ class AccountMove(BaseModel):
             },
         )
 
+    # ---- Fiscal lock dates (FR-031/032/033, ADR-039) ----
+
+    @classmethod
+    def _relevant_lock_fields(cls, move_type: str) -> list[str]:
+        fields = ["fiscalyear_lock_date"]
+        if move_type in _SALE_TYPES:
+            fields.append("sale_lock_date")
+        elif move_type in _PURCHASE_TYPES:
+            fields.append("purchase_lock_date")
+        if move_type in _INVOICE_TYPES:
+            fields.append("tax_lock_date")
+        return fields
+
+    @classmethod
+    async def _get_effective_lock_date(
+        cls,
+        env: Environment,
+        company_id: int,
+        field: str,
+        user_id: int | None,
+        journal_id: int | None,
+        today: datetime.date,
+    ) -> datetime.date | None:
+        """FR-033: an active, matching lock exception replaces the company's
+        lock date for ``field`` with the exception's own (still-enforced, just
+        different) ``lock_date``; absent one, the company's own lock date for
+        ``field`` applies (``None`` if the company has no lock set there)."""
+        if field not in _LOCK_DATE_COLUMNS:
+            raise DodooError(f"Unknown lock_date_field: {field}")
+
+        async with env.dml_conn() as conn:
+            exc_row = await conn.execute(
+                text(
+                    "SELECT lock_date FROM account_lock_exception "
+                    "WHERE company_id = :cid AND lock_date_field = :field AND active = TRUE "
+                    "AND end_date >= :today "
+                    "AND (user_id IS NULL OR user_id = :uid) "
+                    "AND (journal_id IS NULL OR journal_id = :jid) "
+                    "ORDER BY lock_date DESC LIMIT 1"
+                ),
+                {
+                    "cid": company_id,
+                    "field": field,
+                    "today": today,
+                    "uid": user_id,
+                    "jid": journal_id,
+                },
+            )
+            exc = exc_row.fetchone()
+            if exc:
+                return exc[0]
+
+            company_row = await conn.execute(
+                text(f"SELECT {field} FROM res_company WHERE id = :cid"),  # noqa: S608
+                {"cid": company_id},
+            )
+            company = company_row.fetchone()
+            return company[0] if company else None
+
+    @classmethod
+    async def _apply_lock_date_guard(
+        cls,
+        env: Environment,
+        conn,
+        move_id: int,
+        move_type: str,
+        company_id: int,
+        journal_id: int | None,
+        date_val: datetime.date,
+    ) -> tuple[datetime.date, str | None]:
+        """FR-032: if ``date_val`` falls at/before the strictest applicable
+        effective lock date, advance it to that lock date + 1 day and return a
+        non-fatal warning instead of hard-failing."""
+        from dodoo.core.context import get_uid
+
+        user_id = get_uid()
+        today = datetime.date.today()
+        strictest: datetime.date | None = None
+        for field in cls._relevant_lock_fields(move_type):
+            effective = await cls._get_effective_lock_date(
+                env, company_id, field, user_id, journal_id, today
+            )
+            if effective is not None and (strictest is None or effective > strictest):
+                strictest = effective
+
+        if strictest is not None and date_val <= strictest:
+            new_date = strictest + datetime.timedelta(days=1)
+            await conn.execute(
+                text("UPDATE account_move SET date=:dt WHERE id=:id"),
+                {"dt": new_date, "id": move_id},
+            )
+            warning = (
+                f"Move {move_id}'s date {date_val} is on/before the effective lock date "
+                f"{strictest}; advanced to {new_date}"
+            )
+            return new_date, warning
+        return date_val, None
+
+    # ---- Tamper-evident hash chain (FR-007/008, ADR-039) ----
+
+    @classmethod
+    async def _compute_hash_chain(
+        cls, env: Environment, conn, move_id: int, journal_id: int, journal_code: str
+    ) -> tuple[str, int]:
+        """Compute this move's inalterable hash, chained to the journal's most
+        recently secured move, and its next `secure_sequence_number` (a
+        per-journal counter reusing `account_sequence` with prefix
+        `HASH/<journal.code>`)."""
+        from dodoo.addons.account.models.account_sequence import get_next_sequence
+
+        prev_row = await conn.execute(
+            text(
+                "SELECT inalterable_hash FROM account_move "
+                "WHERE journal_id = :jid AND inalterable_hash IS NOT NULL AND id <> :id "
+                "ORDER BY secure_sequence_number DESC LIMIT 1"
+            ),
+            {"jid": journal_id, "id": move_id},
+        )
+        prev = prev_row.fetchone()
+        previous_hash = prev[0] if prev else ""
+
+        move_row = await conn.execute(
+            text("SELECT name, date, amount_total FROM account_move WHERE id = :id"),
+            {"id": move_id},
+        )
+        name, move_date, amount_total = move_row.fetchone()
+
+        lines_row = await conn.execute(
+            text(
+                "SELECT account_id, debit, credit FROM account_move_line "
+                "WHERE move_id = :id ORDER BY account_id, id"
+            ),
+            {"id": move_id},
+        )
+        sorted_line_tuples = sorted(
+            (r[0], str(r[1]), str(r[2])) for r in lines_row
+        )
+
+        digest_input = "|".join(
+            [previous_hash, name or "", str(move_date), str(amount_total), str(sorted_line_tuples)]
+        )
+        digest = hashlib.sha256(digest_input.encode("utf-8")).hexdigest()
+
+        year = move_date.year if hasattr(move_date, "year") else datetime.date.today().year
+        secure_seq = await get_next_sequence(conn, f"HASH/{journal_code}", year)
+        return digest, secure_seq
+
+    @classmethod
+    async def verify_hash_chain(cls, env: Environment, journal_id: int) -> dict[str, Any]:
+        """Recompute every secured move's hash, in `secure_sequence_number`
+        order, and return the first mismatch (if any)."""
+        async with env.dml_conn() as conn:
+            journal_row = await conn.execute(
+                text("SELECT code FROM account_journal WHERE id = :jid"), {"jid": journal_id}
+            )
+            journal = journal_row.fetchone()
+            if not journal:
+                raise DodooError(f"account.journal {journal_id} not found")
+
+            moves_row = await conn.execute(
+                text(
+                    "SELECT id, inalterable_hash FROM account_move "
+                    "WHERE journal_id = :jid AND inalterable_hash IS NOT NULL "
+                    "ORDER BY secure_sequence_number ASC"
+                ),
+                {"jid": journal_id},
+            )
+            secured_moves = [dict(r._mapping) for r in moves_row]
+
+        previous_hash = ""
+        for move in secured_moves:
+            async with env.dml_conn() as conn:
+                name_row = await conn.execute(
+                    text("SELECT name, date, amount_total FROM account_move WHERE id = :id"),
+                    {"id": move["id"]},
+                )
+                name, move_date, amount_total = name_row.fetchone()
+                lines_row = await conn.execute(
+                    text(
+                        "SELECT account_id, debit, credit FROM account_move_line "
+                        "WHERE move_id = :id ORDER BY account_id, id"
+                    ),
+                    {"id": move["id"]},
+                )
+                sorted_line_tuples = sorted((r[0], str(r[1]), str(r[2])) for r in lines_row)
+            digest_input = "|".join(
+                [previous_hash, name or "", str(move_date), str(amount_total), str(sorted_line_tuples)]
+            )
+            expected = hashlib.sha256(digest_input.encode("utf-8")).hexdigest()
+            if expected != move["inalterable_hash"]:
+                return {"valid": False, "first_break_move_id": move["id"]}
+            previous_hash = move["inalterable_hash"]
+
+        return {"valid": True, "first_break_move_id": None}
+
     @classmethod
     async def _compute_payment_term_lines(
         cls, conn, move_id: int, move_type: str, partner_id: int | None, company_id: int
@@ -961,8 +1161,16 @@ class AccountMove(BaseModel):
     # ---- Posting ----
 
     @classmethod
-    async def action_post(cls, env: Environment, ids: list[int]) -> bool:
-        """Validate balance, assign sequence, transition to posted."""
+    async def action_post(
+        cls, env: Environment, ids: list[int], _warnings: list[str] | None = None
+    ) -> bool:
+        """Validate balance, assign sequence, transition to posted.
+
+        ``_warnings``, when passed a list, collects any non-fatal FR-032
+        lock-date-advance messages for the caller (the HTTP layer) to surface
+        alongside ``result: true`` — kept out of the return value itself so
+        every existing caller asserting ``result is True`` is unaffected.
+        """
         from dodoo.addons.account.models.account_sequence import get_next_sequence
 
         for move_id in ids:
@@ -978,6 +1186,8 @@ class AccountMove(BaseModel):
                     "currency_id",
                     "partner_id",
                     "invoice_cash_rounding_id",
+                    "name",
+                    "posted_before",
                 ],
             )
             if not records:
@@ -1030,14 +1240,60 @@ class AccountMove(BaseModel):
                         f"(imbalance={total_debit - total_credit})"
                     )
 
-                # Assign sequence name
-                prefix = _JOURNAL_PREFIX.get(move_type, "MISC")
+                # Assign sequence name. FR-003, ADR-038: the prefix is the posting
+                # journal's own `code` column (scoping `account_sequence`'s
+                # existing `PRIMARY KEY (prefix, year)` per journal) instead of a
+                # static move_type-keyed constant — falls back to the old
+                # move-type prefix only if the journal has no code.
+                journal_code_row = await conn.execute(
+                    text("SELECT code FROM account_journal WHERE id=:jid"),
+                    {"jid": rec["journal_id"]},
+                )
+                journal_code = journal_code_row.scalar_one_or_none()
+                prefix = journal_code or _JOURNAL_PREFIX.get(move_type, "MISC")
                 date_val = rec.get("date")
                 if isinstance(date_val, str):
                     date_val = datetime.date.fromisoformat(date_val)
-                year = date_val.year if date_val else datetime.date.today().year
-                seq_no = await get_next_sequence(conn, prefix, year)
-                name = f"{prefix}/{year}/{seq_no:04d}"
+                if date_val is None:
+                    date_val = datetime.date.today()
+
+                # FR-031/032, ADR-039: push the move's date past any violated
+                # lock date (fiscal-year, plus sale/purchase/tax as applicable)
+                # instead of hard-failing; a non-fatal warning is returned.
+                date_val, lock_warning = await cls._apply_lock_date_guard(
+                    env, conn, move_id, move_type, rec["company_id"], rec["journal_id"], date_val
+                )
+                if lock_warning and _warnings is not None:
+                    _warnings.append(lock_warning)
+                year = date_val.year
+
+                # FR-005, ADR-038: re-posting a `posted_before=True` move (after a
+                # reset-to-draft, with no reordering relative to other moves in
+                # the same journal) reuses its existing `name` instead of
+                # allocating a new sequence number.
+                existing_name = rec.get("name")
+                if rec.get("posted_before") and existing_name:
+                    later_row = await conn.execute(
+                        text(
+                            "SELECT COUNT(*) FROM account_move "
+                            "WHERE journal_id=:jid AND id<>:id AND name IS NOT NULL "
+                            "AND name < :name AND date > :date"
+                        ),
+                        {
+                            "jid": rec["journal_id"],
+                            "id": move_id,
+                            "name": existing_name,
+                            "date": date_val,
+                        },
+                    )
+                    if later_row.scalar_one() == 0:
+                        name = existing_name
+                    else:
+                        seq_no = await get_next_sequence(conn, prefix, year)
+                        name = f"{prefix}/{year}/{seq_no:04d}"
+                else:
+                    seq_no = await get_next_sequence(conn, prefix, year)
+                    name = f"{prefix}/{year}/{seq_no:04d}"
 
                 # Compute header amounts
                 amounts_row = await conn.execute(
@@ -1055,7 +1311,7 @@ class AccountMove(BaseModel):
                 await conn.execute(
                     text(
                         "UPDATE account_move SET "
-                        "  state='posted', name=:name, posted_before=TRUE, "
+                        "  state='posted', name=:name, date=:date, posted_before=TRUE, "
                         "  amount_untaxed=:untaxed, amount_tax=:tax_total, "
                         "  amount_total=:total, amount_residual=:total, "
                         "  payment_state=:pstate, write_date=now() "
@@ -1063,6 +1319,7 @@ class AccountMove(BaseModel):
                     ),
                     {
                         "name": name,
+                        "date": date_val,
                         "id": move_id,
                         "untaxed": str(untaxed),
                         "tax_total": str(tax_total),
@@ -1070,6 +1327,28 @@ class AccountMove(BaseModel):
                         "pstate": payment_state,
                     },
                 )
+
+                # FR-007, ADR-039: chain this move's hash to the journal's
+                # previous secured move, when the journal has hash mode on.
+                journal_hash_row = await conn.execute(
+                    text(
+                        "SELECT restrict_mode_hash_table FROM account_journal WHERE id=:jid"
+                    ),
+                    {"jid": rec["journal_id"]},
+                )
+                hash_mode_on = bool(journal_hash_row.scalar_one_or_none())
+                if hash_mode_on:
+                    digest, secure_seq = await cls._compute_hash_chain(
+                        env, conn, move_id, rec["journal_id"], journal_code or prefix
+                    )
+                    await conn.execute(
+                        text(
+                            "UPDATE account_move SET inalterable_hash=:h, "
+                            "secure_sequence_number=:s WHERE id=:id"
+                        ),
+                        {"h": digest, "s": secure_seq, "id": move_id},
+                    )
+
                 await conn.commit()
 
             _log.info(
@@ -1087,9 +1366,16 @@ class AccountMove(BaseModel):
 
     @classmethod
     async def action_reset_to_draft(cls, env: Environment, ids: list[int]) -> bool:
-        """Reset posted moves to draft; refuse if any payment_term line is reconciled."""
+        """Reset posted moves to draft; refuse if any payment_term line is
+        reconciled, the move is hash-secured (FR-009), or its date is at/before
+        the applicable effective lock date (FR-009/032)."""
         for move_id in ids:
-            records = await super().read(env, [move_id], ["state", "posted_before"])
+            records = await super().read(
+                env,
+                [move_id],
+                ["state", "posted_before", "inalterable_hash", "move_type", "company_id",
+                 "journal_id", "date"],
+            )
             if not records:
                 raise DodooError(f"account.move {move_id} not found")
             rec = records[0]
@@ -1097,6 +1383,31 @@ class AccountMove(BaseModel):
                 raise DodooError(f"Move {move_id} is cancelled; create a reversal")
             if rec["state"] == "draft":
                 continue
+
+            # FR-009: a hash-secured move can never leave `posted` — that's
+            # the whole point of the chain.
+            if rec.get("inalterable_hash") is not None:
+                raise DodooError(
+                    f"Move {move_id} is hash-secured; cannot reset to draft"
+                )
+
+            # FR-009/032: the move's own date is still at/before its
+            # applicable effective lock date — resetting it to draft would let
+            # a locked period's entry be silently altered.
+            move_date = rec.get("date")
+            if isinstance(move_date, str):
+                move_date = datetime.date.fromisoformat(move_date)
+            if move_date is not None:
+                today = datetime.date.today()
+                for field in cls._relevant_lock_fields(rec.get("move_type", "entry")):
+                    effective = await cls._get_effective_lock_date(
+                        env, rec["company_id"], field, None, rec.get("journal_id"), today
+                    )
+                    if effective is not None and move_date <= effective:
+                        raise DodooError(
+                            f"Move {move_id}'s date {move_date} is at/before the "
+                            f"effective {field} ({effective}); cannot reset to draft"
+                        )
 
             async with env.dml_conn() as conn:
                 # Block reset if payment_term lines are reconciled
@@ -1127,6 +1438,31 @@ class AccountMove(BaseModel):
                     "model": "account.move",
                     "record_id": move_id,
                     "event": "action_reset_to_draft",
+                },
+            )
+        return True
+
+    @classmethod
+    async def action_cancel(cls, env: Environment, ids: list[int]) -> bool:
+        """FR-004, ADR-038: `draft -> cancel` only — a posted move must be
+        reversed, never cancelled directly."""
+        for move_id in ids:
+            records = await super().read(env, [move_id], ["state"])
+            if not records:
+                raise DodooError(f"account.move {move_id} not found")
+            if records[0]["state"] != "draft":
+                raise DodooError(
+                    f"Move {move_id} must be draft to cancel (was "
+                    f"{records[0]['state']}); a posted move must be reversed"
+                )
+            await super().write(env, [move_id], {"state": "cancel"})
+
+            _log.info(
+                "account.move cancelled",
+                extra={
+                    "model": "account.move",
+                    "record_id": move_id,
+                    "event": "action_cancel",
                 },
             )
         return True

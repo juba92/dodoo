@@ -23,3 +23,6 @@ class AccountJournal(BaseModel):
     currency_id = Many2one("res.currency")
     company_id = Many2one("res.company", required=True)
     active = Boolean(default=True)
+    # FR-007, ADR-039: per-journal opt-in to the tamper-evident hash chain —
+    # takes effect only for moves posted after the flip, never retroactive.
+    restrict_mode_hash_table = Boolean(default=False)

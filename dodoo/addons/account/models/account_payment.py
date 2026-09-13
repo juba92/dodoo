@@ -89,7 +89,7 @@ class AccountPayment(BaseModel):
             async with env.dml_conn() as conn:
                 jrow = await conn.execute(
                     text(
-                        "SELECT type, default_account_id FROM account_journal WHERE id=:jid"
+                        "SELECT type, default_account_id, code FROM account_journal WHERE id=:jid"
                     ),
                     {"jid": rec["journal_id"]},
                 )
@@ -99,6 +99,9 @@ class AccountPayment(BaseModel):
                         f"Payment journal must be cash or bank, got: {journal[0] if journal else None}"
                     )
                 bank_account_id = journal[1]
+                # FR-003, ADR-038: the payment's own display-name prefix is also
+                # the posting journal's own code, not a static "PAY" constant.
+                journal_code = journal[2] or "PAY"
 
             if not bank_account_id:
                 raise DodooError(
@@ -213,10 +216,10 @@ class AccountPayment(BaseModel):
 
             await AccountMove.action_post(env, [move_id])
 
-            # Assign PAY sequence name
+            # Assign sequence name (journal-scoped, FR-003)
             async with env.dml_conn() as conn:
-                seq_no = await get_next_sequence(conn, "PAY", pay_date.year)
-                pay_name = f"PAY/{pay_date.year}/{seq_no:04d}"
+                seq_no = await get_next_sequence(conn, journal_code, pay_date.year)
+                pay_name = f"{journal_code}/{pay_date.year}/{seq_no:04d}"
                 await conn.execute(
                     text(
                         "UPDATE account_payment SET "

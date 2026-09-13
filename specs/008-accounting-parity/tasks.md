@@ -308,88 +308,89 @@ hash-chain-verified journal, and a lock-date rejection with an exception grant.
 
 ### Tests for User Story 3
 
-- [ ] T057 [P] [US3] Unit test `group_id` auto-resolution from code-prefix range, and the
+- [X] T057 [P] [US3] Unit test `group_id` auto-resolution from code-prefix range, and the
   off-balance/cash-type reconcile constraint (FR-001/002) in `tests/accounting/test_coa_groups.py`
-- [ ] T058 [P] [US3] Integration test per-journal sequence scoping across two same-type journals,
+- [X] T058 [P] [US3] Integration test per-journal sequence scoping across two same-type journals,
   concurrent posting in the same journal (fire two `action_post` calls concurrently; assert no
   duplicate/skipped sequence number, exercising `account_sequence`'s existing atomic
   `INSERT ... ON CONFLICT DO UPDATE ... RETURNING`), and `action_cancel`'s draft-only transition
   (FR-003/004) in `tests/accounting/test_journal_sequencing.py`
-- [ ] T059 [P] [US3] Integration test reused-number-on-repost and `action_reverse(auto_post=False)`
+- [X] T059 [P] [US3] Integration test reused-number-on-repost and `action_reverse(auto_post=False)`
   draft option (FR-005/006) added to `tests/accounting/test_journal_sequencing.py`
-- [ ] T060 [P] [US3] Integration test hash-chain compute/verify and posted-line write rejection
+- [X] T060 [P] [US3] Integration test hash-chain compute/verify and posted-line write rejection
   (FR-007/008) in `tests/accounting/test_hash_chain_audit_trail.py`
-- [ ] T061 [P] [US3] Integration test `action_reset_to_draft` rejection for hash-secured and
+- [X] T061 [P] [US3] Integration test `action_reset_to_draft` rejection for hash-secured and
   lock-dated moves (FR-009) added to `tests/accounting/test_hash_chain_audit_trail.py`
-- [ ] T062 [P] [US3] Integration test lock-date auto-advance-with-warning (including the exact
+- [X] T062 [P] [US3] Integration test lock-date auto-advance-with-warning (including the exact
   boundary case — a move dated *on* the lock date itself, not just before it, is also blocked) and
   lock-exception grant/revoke/expiry scoping (FR-031/032/033) in
   `tests/accounting/test_lock_dates_exceptions.py`
 
 ### Implementation for User Story 3
 
-- [ ] T063 [US3] Add `account_account_group` seed rows for the existing default chart of accounts,
+- [X] T063 [US3] Add `account_account_group` seed rows for the existing default chart of accounts,
   and a `group_id` resolution step in `AccountAccount.create`/`write` in
   `dodoo/addons/account/models/account_account.py` (numeric-string range match against
   `code_prefix_start`/`code_prefix_end`) (FR-001, ADR-037)
-- [ ] T064 [US3] Add a reconcile constraint to `AccountAccount.create`/`write`: reject
+- [X] T064 [US3] Add a reconcile constraint to `AccountAccount.create`/`write`: reject
   `reconcile=True` when `account_type == "off_balance"`; force `reconcile=False` for
   `{"off_balance", "asset_cash", "liability_credit_card"}` (FR-002, ADR-037) (depends on T063)
-- [ ] T065 [US3] Change `AccountMove.action_post` / `AccountPayment.action_post` in
+- [X] T065 [US3] Change `AccountMove.action_post` / `AccountPayment.action_post` in
   `dodoo/addons/account/models/account_move.py` / `account_payment.py`: derive the sequence
   `prefix` from the posting journal's own `code` column instead of `_JOURNAL_PREFIX[move_type]`
   (FR-003, ADR-038, research.md D1)
-- [ ] T066 [US3] Add `AccountMove.action_cancel(env, ids)` classmethod (`draft → cancel` only,
+- [X] T066 [US3] Add `AccountMove.action_cancel(env, ids)` classmethod (`draft → cancel` only,
   reusing `STATE_CHOICES`'s existing `"cancel"` value) and `POST /account/move/{id}/cancel` route
   (FR-004, ADR-038, research.md D2)
-- [ ] T067 [US3] Make `action_post` idempotent on `posted_before=True` moves: reuse the existing
+- [X] T067 [US3] Make `action_post` idempotent on `posted_before=True` moves: reuse the existing
   `name` instead of allocating a new one when no later move in the journal has a lower sequence
   number (FR-005, ADR-038) (depends on T065)
-- [ ] T068 [US3] Add `auto_post: bool = True` parameter to `action_reverse`; when `False`, skip the
+- [X] T068 [US3] Add `auto_post: bool = True` parameter to `action_reverse`; when `False`, skip the
   `action_post` call on the reversal so it stays in `draft`; update `POST /account/move/{id}/reverse`
   to accept the new `auto_post` body field (FR-006, ADR-038)
-- [ ] T069 [US3] Add `restrict_mode_hash_table` (`Boolean`, default `False`) to `AccountJournal` in
+- [X] T069 [US3] Add `restrict_mode_hash_table` (`Boolean`, default `False`) to `AccountJournal` in
   `dodoo/addons/account/models/account_journal.py`; add `POST /account/journal/{id}/hash-chain`
   route (`HashChainToggle` validator, requires `"Accounting Manager"`) (ADR-039) (depends on T006,
   T007)
-- [ ] T070 [US3] Add `inalterable_hash` (`Char(64)`, nullable) and `secure_sequence_number`
+- [X] T070 [US3] Add `inalterable_hash` (`Char(64)`, nullable) and `secure_sequence_number`
   (`Integer`, nullable) to `AccountMove`; in `action_post`, when the journal's
   `restrict_mode_hash_table` is `True`, compute
   `sha256(previous_hash + "|" + name + "|" + date + "|" + amount_total + "|" + sorted_line_tuples)`
   and the next `secure_sequence_number` (via `account_sequence` with prefix `f"HASH/{journal.code}"`)
   (FR-007, ADR-039) (depends on T069)
-- [ ] T071 [US3] Add `AccountMove.verify_hash_chain(env, journal_id)` classmethod (recomputes every
+- [X] T071 [US3] Add `AccountMove.verify_hash_chain(env, journal_id)` classmethod (recomputes every
   secured move's hash in order, returns the first mismatch) and
   `GET /account/journal/{id}/verify-hash-chain` route (FR-007) (depends on T070)
-- [ ] T072 [US3] Add a `write()` override to `AccountMoveLine` in
+- [X] T072 [US3] Add a `write()` override to `AccountMoveLine` in
   `dodoo/addons/account/models/account_move_line.py`: before `super().write()`, read the parent
   move's `state`/`inalterable_hash` and reject the write with the same `DodooError` shape
   `AccountMove.write` uses when the move is `posted` or `cancel` (FR-008) (depends on T070)
-- [ ] T073 [US3] Add two more rejection conditions to `AccountMove.action_reset_to_draft`:
+- [X] T073 [US3] Add two more rejection conditions to `AccountMove.action_reset_to_draft`:
   `inalterable_hash is not None`, and the move's `date` on/before the applicable effective lock date
   (FR-009) (depends on T070, T076)
-- [ ] T074 [US3] Create `dodoo/addons/account/models/account_lock_exception.py`:
+- [X] T074 [US3] Create `dodoo/addons/account/models/account_lock_exception.py`:
   `AccountLockException` (`company_id`, `lock_date_field` [Selection of the four lock-date field
   names], `lock_date`, `user_id` [nullable], `journal_id` [nullable], `end_date`, `granted_by_id`,
   `active`) (FR-033, ADR-039) (depends on T016)
-- [ ] T075 [US3] Add `_get_effective_lock_date(env, company_id, field, user_id, journal_id, today)`
+- [X] T075 [US3] Add `_get_effective_lock_date(env, company_id, field, user_id, journal_id, today)`
   helper: returns the company's lock date for `field` unless an active, matching, unexpired
   exception exists, in which case `None` (FR-033) (depends on T074)
-- [ ] T076 [US3] Call `_get_effective_lock_date` from `AccountMove.action_post`/`write` before
+- [X] T076 [US3] Call `_get_effective_lock_date` from `AccountMove.action_post`/`write` before
   touching a move dated at/before the relevant lock date; on a hit, advance the move's `date` to
   `lock_date + 1 day` and return a non-fatal `warning` in the response payload instead of
   hard-failing (FR-031/032) (depends on T075)
-- [ ] T077 [US3] Add `POST /account/lock-exception` (`LockExceptionGrant` validator, requires
+- [X] T077 [US3] Add `POST /account/lock-exception` (`LockExceptionGrant` validator, requires
   `"Accounting Manager"`, sets `granted_by_id` automatically — SEC-003) and
   `DELETE /account/lock-exception/{id}` (soft-revoke via `active=False`) routes (FR-033) (depends
   on T074)
-- [ ] T078 [P] [US3] Create `dodoo/addons/account/static/views/lock-exception-list.js` (reuse
-  existing list/form types)
-- [ ] T079 [US3] Add "Lock Exceptions" entry to `dodoo/addons/account/static/account-menu.js`;
+- [X] T078 [P] [US3] ~~Create `lock-exception-list.js`~~ — superseded by registering
+  `account.lock.exception` in `dodoo/addons/web/static/app.js`'s generic model-view registry
+  (same rationale as T053)
+- [X] T079 [US3] Add "Lock Exceptions" entry to `dodoo/addons/account/static/account-menu.js`;
   gate its visibility on `"Accounting Manager"`
-- [ ] T080 [US3] Update `dodoo/addons/account/data/i18n/{en,ar}.json` with new UI strings (cancel,
+- [X] T080 [US3] Update `dodoo/addons/account/data/i18n/{en,ar}.json` with new UI strings (cancel,
   hash chain, lock date, lock exception)
-- [ ] T081 [US3] Extend `tests/accounting/test_migrations.py`: assert `account_account.group_id`,
+- [X] T081 [US3] Extend `tests/accounting/test_migrations.py`: assert `account_account.group_id`,
   `account_journal.restrict_mode_hash_table`, `account_move.inalterable_hash`/
   `secure_sequence_number`, `account_lock_exception`, and the eight `res_company` columns (T016)
   all exist (depends on T063, T069, T070, T074)

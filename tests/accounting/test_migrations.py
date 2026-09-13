@@ -27,6 +27,8 @@ EXPECTED_COLUMNS: list[tuple[str, str]] = [
     ("account_move", "secure_sequence_number"),
     ("account_move", "debit_origin_id"),
     ("account_move", "down_payment_origin_id"),
+    ("account_account", "group_id"),
+    ("account_journal", "restrict_mode_hash_table"),
 ]
 
 EXPECTED_TABLES: list[str] = [
@@ -37,6 +39,7 @@ EXPECTED_TABLES: list[str] = [
     "account_bank_statement",
     "account_bank_statement_line",
     "account_cash_rounding",
+    "account_lock_exception",
 ]
 
 

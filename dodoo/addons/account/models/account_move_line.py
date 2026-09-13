@@ -79,6 +79,27 @@ class AccountMoveLine(BaseModel):
 
     @classmethod
     async def write(cls, env: Environment, ids: list[int], vals: dict[str, Any]) -> bool:
+        # FR-008, ADR-039: a posted (or cancelled) move's lines are immutable —
+        # the same rejection shape AccountMove.write already raises for its
+        # own header fields.
+        if ids:
+            from sqlalchemy import text
+
+            async with env.dml_conn() as conn:
+                rows = await conn.execute(
+                    text(
+                        "SELECT ml.id, m.state FROM account_move_line ml "
+                        "JOIN account_move m ON m.id = ml.move_id "
+                        "WHERE ml.id = ANY(:ids) AND m.state IN ('posted', 'cancel')"
+                    ),
+                    {"ids": ids},
+                )
+                locked = [r[0] for r in rows]
+            if locked:
+                raise DodooError(
+                    f"Line(s) {locked} belong to a posted/cancelled move; cannot change. "
+                    "Reset to draft first."
+                )
         cls._apply_price_defaults(vals)
         return await super().write(env, ids, vals)
 

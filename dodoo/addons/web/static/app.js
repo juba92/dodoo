@@ -47,6 +47,7 @@ export const App = {
       App.state.hrGroups = info.hr_groups || [];
       App.state.fleetManager = !!info.fleet_manager;
       App.state.stockGroups = info.stock_groups || [];
+      App.state.accountGroups = info.account_groups || [];
       await loadCatalog(App.state.lang);
       applyDirection(info.direction);
     } catch { /* keep current catalog */ }
@@ -400,13 +401,15 @@ async function _renderAccountingMenu(sidebar, currentHash) {
   else if (/^#\/accounting\/account\/(new|\d+)$/.test(currentHash)) _activeMenuHash = '#/accounting/chart-of-accounts';
 
   ACCOUNTING_MENU.forEach(({ section, items }) => {
+    const visible = items.filter(it => _accountingHas(it.requires));
+    if (!visible.length) return;
     const title = document.createElement('div');
     title.className = 'sidebar-section-title';
     title.textContent = t(section);
     sidebar.appendChild(title);
     const ul = document.createElement('ul');
     ul.className = 'sidebar-list';
-    items.forEach(({ label, hash }) => {
+    visible.forEach(({ label, hash }) => {
       const li = document.createElement('li');
       const btn = document.createElement('button');
       btn.textContent = t(label);
@@ -422,6 +425,13 @@ async function _renderAccountingMenu(sidebar, currentHash) {
     });
     sidebar.appendChild(ul);
   });
+}
+
+function _accountingHas(requires) {
+  if (!requires) return true;
+  const g = App.state.accountGroups || [];
+  if (requires === 'manager') return g.includes('Accounting Manager');
+  return true;
 }
 
 function _hrHas(requires) {
@@ -694,6 +704,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     App.state.hrGroups = info.hr_groups ?? [];
     App.state.fleetManager = !!info.fleet_manager;
     App.state.stockGroups = info.stock_groups ?? [];
+    App.state.accountGroups = info.account_groups ?? [];
     await loadCatalog(App.state.lang);
     applyDirection(info.direction);
   } catch {

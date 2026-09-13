@@ -14,6 +14,7 @@ from dodoo.addons.account.models.account_fiscal_position import (
     AccountFiscalPositionTax,
 )
 from dodoo.addons.account.models.account_journal import AccountJournal
+from dodoo.addons.account.models.account_lock_exception import AccountLockException
 from dodoo.addons.account.models.account_move import AccountMove
 from dodoo.addons.account.models.account_move_line import AccountMoveLine
 from dodoo.addons.account.models.account_payment import AccountPayment
@@ -47,6 +48,7 @@ __all__ = [
     "AccountBankStatementLine",
     "AccountCashRounding",
     "AccountJournal",
+    "AccountLockException",
     "AccountMove",
     "AccountMoveLine",
     "AccountPayment",

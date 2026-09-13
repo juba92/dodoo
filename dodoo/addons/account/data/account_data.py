@@ -76,6 +76,17 @@ _DEFAULT_COA = [
     ("9000", "Off-Balance Sheet", "off_balance", False),
 ]
 
+# FR-001, ADR-037: group ranges for the default COA's own code prefixes (1000s
+# assets ... 9000s off-balance).
+_DEFAULT_ACCOUNT_GROUPS = [
+    ("Assets", "1000", "1999"),
+    ("Liabilities", "2000", "2999"),
+    ("Equity", "3000", "3999"),
+    ("Income", "4000", "4999"),
+    ("Expenses", "5000", "5999"),
+    ("Off-Balance Sheet", "9000", "9999"),
+]
+
 _DEFAULT_JOURNALS = [
     ("Customer Invoices", "INV", "sale"),
     ("Vendor Bills", "BILL", "purchase"),
@@ -143,6 +154,8 @@ async def seed_account_data(env: Environment) -> None:
             _log.info("Chart of accounts already seeded; skipping")
             return
 
+    await _seed_account_groups(env, company_id)
+
     for code, name, account_type, reconcile in _DEFAULT_COA:
         await AccountAccount.create(
             env,
@@ -161,6 +174,32 @@ async def seed_account_data(env: Environment) -> None:
     await _seed_journals(env, company_id)
     await _seed_taxes(env, company_id)
     await _seed_partners(env, company_id)
+
+
+async def _seed_account_groups(env: Environment, company_id: int) -> None:
+    from dodoo.addons.account.models.account_account import AccountAccountGroup
+
+    async with env.dml_conn() as conn:
+        result = await conn.execute(
+            text("SELECT COUNT(*) FROM account_account_group WHERE company_id = :cid"),
+            {"cid": company_id},
+        )
+        if result.scalar_one() > 0:
+            _log.info("Account groups already seeded; skipping")
+            return
+
+    for name, prefix_start, prefix_end in _DEFAULT_ACCOUNT_GROUPS:
+        await AccountAccountGroup.create(
+            env,
+            {
+                "name": name,
+                "code_prefix_start": prefix_start,
+                "code_prefix_end": prefix_end,
+                "company_id": company_id,
+            },
+        )
+
+    _log.info("Seeded default account groups (%d groups)", len(_DEFAULT_ACCOUNT_GROUPS))
 
 
 async def _seed_journals(env: Environment, company_id: int) -> None:
