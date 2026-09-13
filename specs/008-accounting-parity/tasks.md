@@ -89,9 +89,10 @@ first security/validators framework here, and both new stand-alone models (`anal
   `AnalyticAccountCreate` (contracts/reports-analytic.md)
 - [ ] T013 [P] Create `dodoo/addons/analytic/http/__init__.py` skeleton (static mount + `json_ok`/
   `json_err` helpers; CRUD stays generic JSON-RPC dispatch — no dedicated REST routes needed)
-- [ ] T014 Add `ResCurrencyRate` model (`currency_id`, `rate_date`, `rate`) and
-  `get_rate(env, currency_id, company_currency_id, date)` (latest `rate_date <= date`) to
-  `dodoo/addons/base/models/res_currency.py`, alongside the existing `ResCurrency` (research.md D4)
+- [ ] T014 Add `ResCurrencyRate` model (`currency_id`, `rate_date`, `rate`, manual entry only per
+  spec Clarifications) and `get_rate(env, currency_id, company_currency_id, date)` (latest
+  `rate_date <= date`) to `dodoo/addons/base/models/res_currency.py`, alongside the existing
+  `ResCurrency` (FR-023, research.md D4)
 - [ ] T015 Create `dodoo/addons/account/models/account_account_tag.py`: `AccountAccountTag`
   (`name`, `applicability` [Selection, default `"taxes"`], `country_id`) — foundational for both
   US1's tax-grid tagging and US4's Tax Report (data-model.md)
@@ -203,7 +204,7 @@ statements with a continuity check.
 
 ### Tests for User Story 2
 
-- [ ] T034 [P] [US2] Unit test `ResCurrencyRate.get_rate` (latest `rate_date <= date`) in
+- [ ] T034 [P] [US2] Unit test `ResCurrencyRate.get_rate` (latest `rate_date <= date`) (FR-023) in
   `tests/accounting/test_multi_currency.py`
 - [ ] T035 [P] [US2] Unit test FX conversion at posting (`amount_currency × rate → debit/credit`)
   added to `tests/accounting/test_multi_currency.py`
@@ -249,10 +250,11 @@ statements with a continuity check.
   `dodoo/addons/account/validators.py` (depends on T041, T044)
 - [ ] T046 [US2] Add `AccountMove.revalue_currency_balances(env, company_id, as_of, uid)`
   classmethod: for every open foreign-currency AR/AP line, post one adjustment move to the exchange
-  accounts dated `as_of` plus its draft next-day reversal (via `action_reverse(..., auto_post=False)`
-  from US3/T057 once available — until then, create the reversal move directly in draft) (FR-026,
-  ADR-042); add `POST /account/currency/revalue` route (`RunRevaluation` validator, requires
-  `"Accounting Manager"`) (depends on T040)
+  accounts dated `as_of`, then create its next-day reversal directly in `draft` (a plain
+  `AccountMove.create` with reversed debit/credit, no `action_post` call — the general `auto_post`
+  parameter on `action_reverse` lands later in US3/T068 and can replace this inline construction
+  then) (FR-026, ADR-042); add `POST /account/currency/revalue` route (`RunRevaluation` validator,
+  requires `"Accounting Manager"`) (depends on T040)
 - [ ] T047 [US2] Create `dodoo/addons/account/models/account_bank_statement.py`:
   `AccountBankStatement` (`journal_id`, `date`, `balance_start`, `balance_end_real`, `state`
   [`open`/`confirmed`], `company_id`) and `AccountBankStatementLine` (`statement_id`, `date`,
@@ -537,12 +539,12 @@ now independently functional.
   implementation (Principle V)
 - [ ] T113 [P] Create `dodoo/addons/account/data/indexes.py` (account's first — mirrors
   `hr`/`stock`'s `ensure_indexes(env, ddl)` convention): `(account_id, date)` composite for the
-  opening-balance queries (PERF-004), `(partner_id, reconciled)` partial index (`WHERE reconciled =
-  FALSE`) for reconciliation suggestions (PERF-005), `(currency_id, rate_date DESC)` on
-  `res_currency_rate` (PERF-006); wire from `account_data.py`'s seed orchestrator
-- [ ] T114 Create `tests/benchmarks/test_accounting_perf.py`: PERF-004 (opening-balance overhead <
-  150 ms @ 100k posted lines / 5-year history), PERF-005 (reconciliation suggestion < 300 ms @ 500
-  open items), PERF-006 (currency-rate lookup < 50 ms); re-run 001–007's existing report/posting
+  opening-balance queries (PERF-001), `(partner_id, reconciled)` partial index (`WHERE reconciled =
+  FALSE`) for reconciliation suggestions (PERF-002), `(currency_id, rate_date DESC)` on
+  `res_currency_rate` (PERF-004); wire from `account_data.py`'s seed orchestrator
+- [ ] T114 Create `tests/benchmarks/test_accounting_perf.py`: PERF-001 (opening-balance overhead <
+  150 ms @ 100k posted lines / 5-year history), PERF-002 (reconciliation suggestion < 300 ms @ 500
+  open items), PERF-004 (currency-rate lookup < 50 ms); re-run 001–007's existing report/posting
   benchmarks alongside to confirm no regression (SC-007/PERF-003) (depends on T087, T044, T014,
   T113)
 - [ ] T115 [P] Extend `tests/e2e/test_web_ui_a11y.py` for the four new screens (bank statements,
@@ -561,6 +563,13 @@ now independently functional.
 - [ ] T119 Run the full pre-existing `tests/accounting/` suite (the 6 files predating this
   feature) unchanged and confirm 100% pass, verifying SC-007 (no regression to already-correct
   behavior)
+- [ ] T120 Observability review (Principle IX): confirm every new state-changing action added by
+  this feature (`action_cancel`, `verify_hash_chain`, hash-chain toggle, lock-exception grant/
+  revoke, `revalue_currency_balances`, bank-statement `action_confirm`/`reconcile_against`,
+  `action_create_debit_note`, `apply_down_payments`, `close_fiscal_year`) emits a `_log.info(...)`
+  structured entry (`extra={"model": ..., "record_id": ..., "event": ...}`) following the exact
+  convention already used by `AccountMove.action_post`/`action_reverse`/
+  `AccountPartialReconcile.reconcile_lines`; add any missing call sites
 
 ---
 
@@ -577,9 +586,9 @@ now independently functional.
   - US3 (P2) edits the same `AccountMove.action_post`/`write`/`action_reset_to_draft` methods US1
     and US2 also touch — implement US3 after US1/US2 land (or expect merge conflicts if truly
     parallel; the tasks above are written assuming US1 → US2 → US3 sequencing on `account_move.py`).
-  - US4 (P2) depends on US1/T025 (`tag_ids`) for its Tax Report and on US3/T016's fiscal-year
-    columns for its Balance Sheet fix, but its opening-balance/drill-down/aged-bucket work is
-    independent of both.
+  - US4 (P2) depends on US1/T025 (`tag_ids`) for its Tax Report and on Foundational/T016's
+    fiscal-year columns for its Balance Sheet fix, but its opening-balance/drill-down/aged-bucket
+    work is independent of both.
   - US5 (P3) depends only on Foundational (`AccountMove`'s existing fields) — genuinely
     independent of US1–US4.
   - US6 (P3) depends on Foundational's `analytic.account` model (T010) — independent of US1–US5.

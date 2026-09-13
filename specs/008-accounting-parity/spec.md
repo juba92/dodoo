@@ -249,6 +249,7 @@ An accountant tags journal items with analytic accounts (e.g., by department, pr
 - **PERF-001**: Adding opening-balance computation to Trial Balance and General Ledger MUST NOT regress report generation time beyond current levels for equivalent data volumes; opening balances MUST be computed via aggregate queries, not by iterating all historical entries row-by-row per report run.
 - **PERF-002**: Reconciliation match-suggestion MUST return candidates for a typical partner's open items without noticeable delay in interactive use.
 - **PERF-003**: No known regressions permitted in existing accounting test suites or report response times; equivalent benchmarks MUST be re-run for any touched report or posting path.
+- **PERF-004**: Looking up the exchange rate applicable to a given currency and date MUST return without noticeable delay in interactive use (invoice/payment posting is on this path for every foreign-currency document).
 
 ## Success Criteria *(mandatory)*
 

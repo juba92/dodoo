@@ -64,7 +64,7 @@ there, only a code fix.
 
 **Testing**: `tests/accounting/` (existing 6 files + ~14 new files below), new `tests/analytic/`
 (installs the new `analytic` addon standalone, plus `account`-side distribution-validation tests stay
-in `tests/accounting/`), plus `tests/benchmarks/test_accounting_perf.py` (PERF-004/005/006) and an
+in `tests/accounting/`), plus `tests/benchmarks/test_accounting_perf.py` (PERF-001/002/004) and an
 extension of `tests/e2e/test_web_ui_a11y.py` for the new screens (bank statements, lock exceptions,
 analytic accounts, tax report). Per `[[accounting-test-isolation]]`, any new test file that reads
 `AccountReportTrialBalance`/`AccountReportGeneralLedger`/ledger-balance totals across a shared DB
@@ -77,15 +77,15 @@ existing `test_reports.py`/`test_account_balance.py`.
 `dodoo/addons/account/static/`, reusing the list/form/kanban view types 002/006 already shipped — no
 new view type).
 
-**Performance Goals**: PERF-004 Trial Balance / General Ledger opening-balance computation
+**Performance Goals**: PERF-001 Trial Balance / General Ledger opening-balance computation
 (≤100,000 posted lines, 5-year history) adds < 150 ms over today's filtered-only query, via a
 `(account_id, date)` composite covering the two date-range queries (today's filtered query plus the
-new pre-`date_from` aggregate) rather than a per-account loop. PERF-005 reconciliation match-suggestion
+new pre-`date_from` aggregate) rather than a per-account loop. PERF-002 reconciliation match-suggestion
 (≤500 open items for one partner) returns in < 300 ms via a `(partner_id, reconciled)` partial index on
 `account_move_line` (`WHERE reconciled = FALSE`) so the suggestion query never scans settled lines.
-PERF-006 currency-rate lookup ("rate as of date") < 50 ms via a `(currency_id, rate_date DESC)` index
-on `res_currency_rate`, queried with `rate_date <= :date ORDER BY rate_date DESC LIMIT 1`. No
-regression permitted on the five report endpoints' existing response times for equivalent data
+PERF-004 currency-rate lookup ("rate as of date") < 50 ms via a `(currency_id, rate_date DESC)` index
+on `res_currency_rate`, queried with `rate_date <= :date ORDER BY rate_date DESC LIMIT 1`. PERF-003:
+no regression permitted on the five report endpoints' existing response times for equivalent data
 volumes (re-run `tests/benchmarks/` alongside the new suite).
 
 **Constraints**: No new runtime dependencies. Migrations stay additive-only
@@ -138,7 +138,8 @@ models, 8 new `res_company` columns, 39 functional requirements (FR-001…FR-039
   (data-integrity: the hash chain must make a tampered posted line's break detectable — closed by
   ADR-039's chain-verification function). Reconciliation write-offs and bank-statement lines reuse
   `AccountMove.action_post`'s existing balance-invariant path rather than writing ledger rows directly.
-- [X] **IV. Performance**: PERF-004…006 targets and index strategy stated above;
+- [X] **IV. Performance**: PERF-001/002/004 targets and index strategy stated above (PERF-003's
+  no-regression requirement enforced by re-running existing benchmarks alongside the new suite);
   `tests/benchmarks/test_accounting_perf.py` runs them in CI alongside 001–007's existing benchmarks
   (no regression on the five pre-existing report endpoints).
 - [X] **V. Documentation**: ADR-037…045 filed below for every non-trivial design decision. Inline
@@ -599,6 +600,8 @@ dodoo/addons/account/
 │   │                                  #   (ADR-042); + account_account_group seed rows for the
 │   │                                  #   existing default COA (ADR-037)
 │   ├── groups.py                     # NEW: seed_groups() for Accounting User/Manager
+│   ├── indexes.py                    # NEW: account's first — ensure_indexes(env, ddl) per the
+│   │                                  #   hr/stock convention; PERF-001/002/004 index DDL
 │   └── i18n/{en,ar}.json              # EDIT: new UI strings (per [[i18n-per-addon-catalogs]])
 └── static/
     ├── account-menu.js               # EDIT: + Bank Statements, Lock Exceptions, Analytic
@@ -629,9 +632,13 @@ dodoo/addons/analytic/
 │   └── analytic_account.py           # analytic.account
 ├── http/
 │   └── __init__.py                   # CRUD is generic (jsonrpc dispatch); no dedicated routes needed
-└── data/
-    ├── __init__.py
-    └── ir_model_sync.py
+├── data/
+│   ├── __init__.py
+│   ├── ir_model_sync.py
+│   └── i18n/{en,ar}.json              # NEW: UI strings (per [[i18n-per-addon-catalogs]])
+└── static/
+    └── views/
+        └── analytic-account-list.js  # NEW (+ analytic-plan-list.js; reuse existing list/form types)
 
 dodoo/addons/base/models/
 └── res_currency.py                   # EDIT: + ResCurrencyRate model (currency_id, rate_date, rate)
@@ -667,7 +674,7 @@ tests/analytic/
                                        #   test_analytic_accounting.py above; these cover the addon's
                                        #   own model-level behaviour
 
-tests/benchmarks/test_accounting_perf.py   # NEW: PERF-004/005/006
+tests/benchmarks/test_accounting_perf.py   # NEW: PERF-001/002/004 (+ re-run existing suite, PERF-003)
 tests/e2e/test_web_ui_a11y.py              # EDIT: + the four new screens' WCAG checks
 ```
 
