@@ -1,6 +1,6 @@
 {
     "name": "Accounting",
     "version": "1.0.0",
-    "depends": ["base"],
+    "depends": ["base", "analytic"],
     "application": True,
 }

@@ -37,19 +37,19 @@ own acceptance-scenario citations.
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 Create `dodoo/addons/analytic/` skeleton: `__init__.py` (imports `http`, `models`),
+- [X] T001 Create `dodoo/addons/analytic/` skeleton: `__init__.py` (imports `http`, `models`),
   `__manifest__.py` (`{"name": "Analytic Accounting", "version": "1.0.0", "depends": ["base", "web"],
   "application": False}`), empty `models/__init__.py`, `http/__init__.py`, `data/__init__.py`
   (ADR-045)
-- [ ] T002 Add `"analytic"` to `dodoo/addons/account/__manifest__.py`'s `depends` list (ADR-045,
+- [X] T002 Add `"analytic"` to `dodoo/addons/account/__manifest__.py`'s `depends` list (ADR-045,
   confirmed against `../odoo-19.0/addons/account/__manifest__.py`'s own `depends`)
-- [ ] T003 [P] Create `tests/analytic/__init__.py` and `tests/analytic/conftest.py` mirroring
+- [X] T003 [P] Create `tests/analytic/__init__.py` and `tests/analytic/conftest.py` mirroring
   `tests/accounting/conftest.py`'s fixtures (`pg_container`, `db_url`, `modules_installed` installing
   `"analytic"`, `env`, `company_id`)
-- [ ] T004 [P] Confirm `pyproject.toml`'s ruff/pytest globs already cover
+- [X] T004 [P] Confirm `pyproject.toml`'s ruff/pytest globs already cover
   `dodoo/addons/analytic` and `tests/analytic` (no change expected); run `ruff check` on the new
   addon skeleton
-- [ ] T005 [P] File ADR docs from `plan.md`'s embedded ADR text: `docs/adr/037-coa-group-classification-and-reconcile-constraints.md`,
+- [X] T005 [P] File ADR docs from `plan.md`'s embedded ADR text: `docs/adr/037-coa-group-classification-and-reconcile-constraints.md`,
   `038-per-journal-sequencing-cancel-state-reversal-review.md`,
   `039-hash-chain-line-immutability-lock-dates.md`,
   `040-discount-price-included-tax-rounding-debit-note-downpayment.md`,
@@ -68,35 +68,35 @@ own acceptance-scenario citations.
 first security/validators framework here, and both new stand-alone models (`analytic.account`,
 `res.currency.rate`) that later stories reference are created here.
 
-- [ ] T006 Create `dodoo/addons/account/security.py`: `GROUP_USER = "Accounting User"`,
+- [X] T006 Create `dodoo/addons/account/security.py`: `GROUP_USER = "Accounting User"`,
   `GROUP_MANAGER = "Accounting Manager"`, `seed_groups(env)`, `assign_accounting_group(env, uid,
   level)` — `account`'s first group concept (research.md D8; mirrors `hr/security.py`'s two-level
   nesting pattern)
-- [ ] T007 Create `dodoo/addons/account/validators.py`: `Payload` base (Pydantic v2,
+- [X] T007 Create `dodoo/addons/account/validators.py`: `Payload` base (Pydantic v2,
   `extra="forbid"`), `validate(model_cls, payload)`, `group_names(env, uid)`, `is_member(env, uid,
   name)`, `require_groups(env, uid, *names)` — `account`'s first validators file (canonical copy per
   `hr/validators.py`)
-- [ ] T008 Create `dodoo/addons/account/data/groups.py` (`seed_groups()` calling
+- [X] T008 Create `dodoo/addons/account/data/groups.py` (`seed_groups()` calling
   `security.seed_groups`); wire it into `dodoo/addons/account/data/account_data.py::seed_account_data`'s
   orchestrator (depends on T006)
-- [ ] T009 [P] Create `dodoo/addons/analytic/models/analytic_plan.py`: `AnalyticPlan` (`name`,
+- [X] T009 [P] Create `dodoo/addons/analytic/models/analytic_plan.py`: `AnalyticPlan` (`name`,
   `parent_id` [Many2one self], `company_id`) (data-model.md)
-- [ ] T010 [P] Create `dodoo/addons/analytic/models/analytic_account.py`: `AnalyticAccount` (`name`,
+- [X] T010 [P] Create `dodoo/addons/analytic/models/analytic_account.py`: `AnalyticAccount` (`name`,
   `code`, `plan_id`, `company_id`, `active`) (data-model.md)
-- [ ] T011 Create `dodoo/addons/analytic/data/ir_model_sync.py` (`sync_ir_model`, own copy per
+- [X] T011 Create `dodoo/addons/analytic/data/ir_model_sync.py` (`sync_ir_model`, own copy per
   addon convention); wire from `analytic/__init__.py::post_install` (depends on T009, T010)
-- [ ] T012 [P] Create `dodoo/addons/analytic/validators.py`: `AnalyticPlanCreate`,
+- [X] T012 [P] Create `dodoo/addons/analytic/validators.py`: `AnalyticPlanCreate`,
   `AnalyticAccountCreate` (contracts/reports-analytic.md)
-- [ ] T013 [P] Create `dodoo/addons/analytic/http/__init__.py` skeleton (static mount + `json_ok`/
+- [X] T013 [P] Create `dodoo/addons/analytic/http/__init__.py` skeleton (static mount + `json_ok`/
   `json_err` helpers; CRUD stays generic JSON-RPC dispatch — no dedicated REST routes needed)
-- [ ] T014 Add `ResCurrencyRate` model (`currency_id`, `rate_date`, `rate`, manual entry only per
+- [X] T014 Add `ResCurrencyRate` model (`currency_id`, `rate_date`, `rate`, manual entry only per
   spec Clarifications) and `get_rate(env, currency_id, company_currency_id, date)` (latest
   `rate_date <= date`) to `dodoo/addons/base/models/res_currency.py`, alongside the existing
   `ResCurrency` (FR-023, research.md D4)
-- [ ] T015 Create `dodoo/addons/account/models/account_account_tag.py`: `AccountAccountTag`
+- [X] T015 Create `dodoo/addons/account/models/account_account_tag.py`: `AccountAccountTag`
   (`name`, `applicability` [Selection, default `"taxes"`], `country_id`) — foundational for both
   US1's tax-grid tagging and US4's Tax Report (data-model.md)
-- [ ] T016 Add `_COMPANY_LOCK_COLUMNS` (`fiscalyear_lock_date`, `tax_lock_date`, `sale_lock_date`,
+- [X] T016 Add `_COMPANY_LOCK_COLUMNS` (`fiscalyear_lock_date`, `tax_lock_date`, `sale_lock_date`,
   `purchase_lock_date`, all `DATE`), `_COMPANY_EXCHANGE_COLUMNS`
   (`income_currency_exchange_account_id`, `expense_currency_exchange_account_id`, both `INTEGER`
   referencing `account_account`), and `_COMPANY_FISCAL_YEAR_COLUMNS` (`fiscalyear_last_month`
@@ -104,10 +104,10 @@ first security/validators framework here, and both new stand-alone models (`anal
   EXISTS ...` lists to `dodoo/addons/account/data/account_data.py`, run inside
   `seed_account_data` alongside the existing `_PARTNER_FK_COLUMNS` (research.md D5) — needed by
   US2 (exchange columns), US3 (lock dates), US4 (fiscal-year columns)
-- [ ] T017 Add a `CREATE EXTENSION IF NOT EXISTS pg_trgm` statement to
+- [X] T017 Add a `CREATE EXTENSION IF NOT EXISTS pg_trgm` statement to
   `dodoo/addons/account/data/account_data.py`'s `seed_account_data` (needed by US2's
   `suggest_matches` trigram similarity ranking, ADR-042)
-- [ ] T018 [P] Test `tests/accounting/test_migrations.py` (NEW) asserting every new table/column
+- [X] T018 [P] Test `tests/accounting/test_migrations.py` (NEW) asserting every new table/column
   introduced by this feature (per `data-model.md`) exists after `env.modules.install("analytic")`
   and an `account` upgrade — extended incrementally as each story below adds its own
   tables/columns

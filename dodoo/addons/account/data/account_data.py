@@ -27,6 +27,32 @@ _PARTNER_FK_COLUMNS = [
     "ALTER TABLE res_partner ADD COLUMN IF NOT EXISTS property_supplier_payment_term_id INTEGER",
 ]
 
+# Fiscal lock dates (FR-031, ADR-039) and realized/unrealized FX gain-loss accounts (FR-025,
+# ADR-042) — added to `res_company` (owned by `base`) the same way `_PARTNER_FK_COLUMNS` above
+# extends `res_partner`, so `base` keeps no dependency on `account` (research.md D5).
+_COMPANY_LOCK_COLUMNS = [
+    "ALTER TABLE res_company ADD COLUMN IF NOT EXISTS fiscalyear_lock_date DATE",
+    "ALTER TABLE res_company ADD COLUMN IF NOT EXISTS tax_lock_date DATE",
+    "ALTER TABLE res_company ADD COLUMN IF NOT EXISTS sale_lock_date DATE",
+    "ALTER TABLE res_company ADD COLUMN IF NOT EXISTS purchase_lock_date DATE",
+]
+
+_COMPANY_EXCHANGE_COLUMNS = [
+    "ALTER TABLE res_company ADD COLUMN IF NOT EXISTS income_currency_exchange_account_id INTEGER",
+    "ALTER TABLE res_company ADD COLUMN IF NOT EXISTS expense_currency_exchange_account_id INTEGER",
+]
+
+# Fiscal-year-end (FR-037, ADR-044) — defaults to the calendar year, matching Odoo's own default.
+_COMPANY_FISCAL_YEAR_COLUMNS = [
+    "ALTER TABLE res_company ADD COLUMN IF NOT EXISTS fiscalyear_last_month INTEGER DEFAULT 12",
+    "ALTER TABLE res_company ADD COLUMN IF NOT EXISTS fiscalyear_last_day INTEGER DEFAULT 31",
+]
+
+# Trigram similarity for reconciliation match-suggestion ranking (FR-021, ADR-042).
+_EXTENSIONS = [
+    "CREATE EXTENSION IF NOT EXISTS pg_trgm",
+]
+
 _DEFAULT_COA = [
     ("1000", "Accounts Receivable", "asset_receivable", True),
     ("1010", "Cash", "asset_cash", False),
@@ -65,12 +91,23 @@ async def seed_account_data(env: Environment) -> None:
     async with env.dml_conn() as conn:
         await conn.execute(text(ACCOUNT_SEQUENCE_DDL))
 
-        # Add accounting FK columns to res_partner
-        for ddl in _PARTNER_FK_COLUMNS:
+        # Add accounting FK columns to res_partner / res_company
+        for ddl in (
+            _PARTNER_FK_COLUMNS
+            + _COMPANY_LOCK_COLUMNS
+            + _COMPANY_EXCHANGE_COLUMNS
+            + _COMPANY_FISCAL_YEAR_COLUMNS
+        ):
             try:
                 await conn.execute(text(ddl))
             except Exception:
                 pass
+
+        for ext_sql in _EXTENSIONS:
+            try:
+                await conn.execute(text(ext_sql))
+            except Exception:
+                _log.warning("Could not create extension: %s", ext_sql)
 
         for idx_sql in _INDEXES:
             try:
@@ -80,7 +117,15 @@ async def seed_account_data(env: Environment) -> None:
 
         await conn.commit()
 
-    _log.info("Created account_sequence table, res_partner FK columns, and indexes")
+    _log.info(
+        "Created account_sequence table, res_partner/res_company FK columns, "
+        "pg_trgm extension, and indexes"
+    )
+
+    from dodoo.addons.account.data.groups import seed_groups
+
+    await seed_groups(env)
+    _log.info("Seeded Accounting User/Manager groups")
 
     async with env.dml_conn() as conn:
         result = await conn.execute(text("SELECT id FROM res_company LIMIT 1"))
