@@ -1,0 +1,21 @@
+{
+  "Products": "Products",
+  "Product Variants": "Product Variants",
+  "Product Categories": "Product Categories",
+  "Units of Measure": "Units of Measure",
+  "Barcode": "Barcode",
+  "Category": "Category",
+  "Product Type": "Product Type",
+  "Is Storable": "Is Storable",
+  "Uom": "Unit of Measure",
+  "Purchase Uom": "Purchase Unit of Measure",
+  "List Price": "Sales Price",
+  "Standard Price": "Cost",
+  "Attribute": "Attribute",
+  "Attribute Value": "Attribute Value",
+  "Template": "Template",
+  "Price Extra": "Extra Price",
+  "Ratio": "Ratio",
+  "Rounding": "Rounding",
+  "Uom Type": "Unit Type"
+}

@@ -120,6 +120,7 @@
   "Yes": "نعم",
   "No": "لا",
   "Browse models in the {module} module.": "تصفّح النماذج في وحدة {module}.",
+  "No models are registered directly under \"{module}\" — this app may be missing its dedicated home screen wiring.": "لا توجد نماذج مسجَّلة مباشرةً ضمن \"{module}\" — قد يكون هذا التطبيق يفتقد ربط شاشته الرئيسية المخصّصة.",
   "Number": "الرقم",
   "Name": "الاسم",
   "Code": "الرمز",

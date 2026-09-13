@@ -120,6 +120,7 @@
   "Yes": "Yes",
   "No": "No",
   "Browse models in the {module} module.": "Browse models in the {module} module.",
+  "No models are registered directly under \"{module}\" — this app may be missing its dedicated home screen wiring.": "No models are registered directly under \"{module}\" — this app may be missing its dedicated home screen wiring.",
   "Number": "Number",
   "Name": "Name",
   "Code": "Code",

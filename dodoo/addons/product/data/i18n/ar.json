@@ -1,0 +1,21 @@
+{
+  "Products": "المنتجات",
+  "Product Variants": "متغيرات المنتج",
+  "Product Categories": "فئات المنتج",
+  "Units of Measure": "وحدات القياس",
+  "Barcode": "الباركود",
+  "Category": "الفئة",
+  "Product Type": "نوع المنتج",
+  "Is Storable": "قابل للتخزين",
+  "Uom": "وحدة القياس",
+  "Purchase Uom": "وحدة قياس الشراء",
+  "List Price": "سعر البيع",
+  "Standard Price": "التكلفة",
+  "Attribute": "الخاصية",
+  "Attribute Value": "قيمة الخاصية",
+  "Template": "القالب",
+  "Price Extra": "سعر إضافي",
+  "Ratio": "النسبة",
+  "Rounding": "التقريب",
+  "Uom Type": "نوع الوحدة"
+}
