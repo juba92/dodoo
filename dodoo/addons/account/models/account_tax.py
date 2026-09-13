@@ -100,3 +100,9 @@ class AccountTaxRepartitionLine(BaseModel):
     factor_percent = Monetary()
     account_id = Many2one("account.account")
     sequence = Integer(default=10)
+    tag_ids = Many2many(
+        "account.account.tag",
+        relation_table="account_tax_repartition_line_tag_rel",
+        column1="repartition_line_id",
+        column2="tag_id",
+    )

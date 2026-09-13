@@ -129,59 +129,59 @@ term with an "end of month on the 15th, next month" due-date rule.
 
 ### Tests for User Story 1
 
-- [ ] T019 [P] [US1] Unit test discount-net `price_subtotal` derivation (FR-010/013) in
+- [X] T019 [P] [US1] Unit test discount-net `price_subtotal` derivation (FR-010/013) in
   `tests/accounting/test_invoice_discount_tax.py`
-- [ ] T020 [P] [US1] Unit test price-included tax extraction formula (FR-014) added to
+- [X] T020 [P] [US1] Unit test price-included tax extraction formula (FR-014) added to
   `tests/accounting/test_invoice_discount_tax.py`
-- [ ] T021 [P] [US1] Unit test `round_per_line` vs `round_globally` company rounding methods
+- [X] T021 [P] [US1] Unit test `round_per_line` vs `round_globally` company rounding methods
   (FR-015) added to `tests/accounting/test_invoice_discount_tax.py`
-- [ ] T022 [P] [US1] Unit test payment-term 100%-sum constraint, `days_end_of_month_on_the` +
+- [X] T022 [P] [US1] Unit test payment-term 100%-sum constraint, `days_end_of_month_on_the` +
   `next_month` due-date fix, and early-discount `discount_date`/`discount_amount` computed keys
   (FR-017/018/019) in `tests/accounting/test_payment_terms.py`
 
 ### Implementation for User Story 1
 
-- [ ] T023 [US1] Add `discount` (`Monetary`, 0–100) field to `AccountMoveLine`; extend
+- [X] T023 [US1] Add `discount` (`Monetary`, 0–100) field to `AccountMoveLine`; extend
   `_apply_price_defaults` in `dodoo/addons/account/models/account_move_line.py` to derive
   `price_subtotal = quantity × price_unit × (1 - discount/100)` (FR-010, ADR-040)
-- [ ] T024 [US1] Rewrite `AccountMove._compute_tax_lines` in
+- [X] T024 [US1] Rewrite `AccountMove._compute_tax_lines` in
   `dodoo/addons/account/models/account_move.py`: use the discount-net `price_subtotal` as `base`;
   branch on each applicable tax's `price_include` (reverse-charge extraction when `True`); branch
   on `res_company.tax_rounding_method` for `round_per_line` (round each line's tax before summing)
   vs. the existing `round_globally` default (FR-013/014/015, ADR-040) (depends on T023)
-- [ ] T025 [US1] Add `tag_ids` `Many2many("account.account.tag",
+- [X] T025 [US1] Add `tag_ids` `Many2many("account.account.tag",
   relation_table="account_tax_repartition_line_tag_rel", column1="repartition_line_id",
   column2="tag_id")` to `AccountTaxRepartitionLine` in
   `dodoo/addons/account/models/account_tax.py` (FR-016 groundwork — the Tax Report itself is built
   in US4) (depends on T015)
-- [ ] T026 [US1] Add `create`/`write` override on `AccountPaymentTermLine` in
+- [X] T026 [US1] Add `create`/`write` override on `AccountPaymentTermLine` in
   `dodoo/addons/account/models/account_payment_term.py`: for `value == "percent"` lines, re-sum the
   parent term's percent-type lines (including the one being written) and raise `DodooError` if the
   total ≠ 100 (FR-017, ADR-041)
-- [ ] T027 [US1] Add `next_month` (`Boolean`, default `False`) field to `AccountPaymentTermLine`;
+- [X] T027 [US1] Add `next_month` (`Boolean`, default `False`) field to `AccountPaymentTermLine`;
   fix `_compute_due_date`'s `days_end_of_month_on_the` branch to resolve the target month (current,
   or next when `next_month=True`) before clamping the configured day within that month's length
   (FR-019, ADR-041) (depends on T026)
-- [ ] T028 [US1] Add `early_payment_discount_account_id` (`Many2one("account.account")`, nullable)
+- [X] T028 [US1] Add `early_payment_discount_account_id` (`Many2one("account.account")`, nullable)
   to `AccountPaymentTerm`; extend `compute_installments` to also return `discount_date`
   (`invoice_date + discount_days`) and `discount_amount` (installment amount less
   `discount_percentage`) per installment when `early_discount` is `True` (FR-018, ADR-041) (depends
   on T027)
-- [ ] T029 [US1] Extend `POST /account/payment/{id}/register` in
+- [X] T029 [US1] Extend `POST /account/payment/{id}/register` in
   `dodoo/addons/account/http/__init__.py`: when the payment's date is on or before an
   installment's `discount_date`, reduce the reconciled amount by `discount_amount` and post the
   difference to `early_payment_discount_account_id` (FR-018) (depends on T028)
-- [ ] T030 [US1] Add `AccountTagCreate` (`name`, `applicability: Literal["taxes"] = "taxes"`,
+- [X] T030 [US1] Add `AccountTagCreate` (`name`, `applicability: Literal["taxes"] = "taxes"`,
   `country_id: int | None`) to `dodoo/addons/account/validators.py`; confirm `account.account.tag`
   and `account.tax.repartition.line.tag_ids` are reachable via the existing generic JSON-RPC
   `create`/`write` dispatch (FR-016 groundwork, no new REST route) (depends on T025, T007)
-- [ ] T031 [P] [US1] Update `dodoo/addons/account/static/views/invoice-form.js`: per-line discount
+- [X] T031 [P] [US1] Update `dodoo/addons/account/static/views/invoice-form.js`: per-line discount
   input, a price-included indicator on the tax selector, and `discount_date`/`discount_amount`
   surfaced on the payment-term schedule display
-- [ ] T032 [US1] Update `dodoo/addons/account/data/i18n/{en,ar}.json` with new UI strings
+- [X] T032 [US1] Update `dodoo/addons/account/data/i18n/{en,ar}.json` with new UI strings
   (discount, price-included, rounding method, early-payment discount) per
   `[[i18n-per-addon-catalogs]]`
-- [ ] T033 [US1] Extend `tests/accounting/test_migrations.py`: assert `account_move_line.discount`,
+- [X] T033 [US1] Extend `tests/accounting/test_migrations.py`: assert `account_move_line.discount`,
   the `account_tax_repartition_line_tag_rel` junction table, `account_payment_term_line.next_month`,
   and `account_payment_term.early_payment_discount_account_id` all exist (depends on T023, T025,
   T027, T028)

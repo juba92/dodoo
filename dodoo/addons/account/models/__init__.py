@@ -2,6 +2,7 @@ from dodoo.addons.account.models.account_account import (
     AccountAccount,
     AccountAccountGroup,
 )
+from dodoo.addons.account.models.account_account_tag import AccountAccountTag
 from dodoo.addons.account.models.account_fiscal_position import (
     AccountFiscalPosition,
     AccountFiscalPositionAccount,
@@ -36,6 +37,7 @@ from dodoo.addons.account.models.account_tax import (
 __all__ = [
     "AccountAccount",
     "AccountAccountGroup",
+    "AccountAccountTag",
     "AccountJournal",
     "AccountMove",
     "AccountMoveLine",

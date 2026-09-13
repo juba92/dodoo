@@ -132,13 +132,20 @@ class AccountMove(BaseModel):
 
     @classmethod
     async def _compute_tax_lines(cls, conn, move_id: int, move_type: str) -> None:
-        """Round-globally tax computation (ADR-003).
+        """Discount-net, price-include-aware, rounding-method-aware tax computation
+        (FR-013/014/015, ADR-040).
 
-        1. Fetch product lines + their tax_ids.
+        1. Fetch product lines (using ``price_subtotal`` — already net of any
+           per-line ``discount``, FR-010/013 — as the tax base, not the raw
+           ``debit - credit`` ledger value).
         2. Validate tax type_tax_use vs move_type.
-        3. Accumulate raw amounts by tax_id (round_globally).
-        4. Delete existing auto-generated lines.
-        5. Insert new tax lines.
+        3. For each line, extract price-included taxes from the gross first
+           (FR-014), then add on-top taxes on the resulting net base; rewrite the
+           line's own ``price_subtotal``/``debit``/``credit`` to the true net
+           amount so the ledger and the tax base never disagree.
+        4. Accumulate raw amounts by tax_id, rounding either globally (default)
+           or per-line, per ``res_company.tax_rounding_method`` (FR-015).
+        5. Delete existing auto-generated lines; insert new tax lines.
         """
         # Manual entries — no auto tax/payment_term generation
         if move_type == "entry":
@@ -147,7 +154,8 @@ class AccountMove(BaseModel):
         # Fetch product lines
         prod_rows = await conn.execute(
             text(
-                "SELECT ml.id, ml.debit, ml.credit, ml.account_id, ml.date, ml.currency_id "
+                "SELECT ml.id, ml.debit, ml.credit, ml.account_id, ml.date, ml.currency_id, "
+                "       ml.price_subtotal "
                 "FROM account_move_line ml "
                 "WHERE ml.move_id = :mid AND ml.display_type = 'product'"
             ),
@@ -166,51 +174,16 @@ class AccountMove(BaseModel):
             )
             return
 
-        # Collect all tax_ids for each product line
-        # raw_tax_amounts: tax_id → accumulated raw Decimal
-        raw_tax_amounts: dict[int, Decimal] = {}
-        tax_meta: dict[int, dict] = (
-            {}
-        )  # tax_id → {amount_type, amount, account_id, type_tax_use}
-
-        for pl in product_lines:
-            line_id = pl["id"]
-            tax_rows = await conn.execute(
-                text(
-                    "SELECT t.id, t.type_tax_use, t.amount_type, t.amount, t.price_include, "
-                    "       r.account_id AS rep_account_id "
-                    "FROM account_move_line_tax_rel rel "
-                    "JOIN account_tax t ON t.id = rel.tax_id "
-                    "LEFT JOIN account_tax_repartition_line r ON r.tax_id = t.id "
-                    "   AND r.document_type = 'invoice' AND r.repartition_type = 'tax' "
-                    "WHERE rel.move_line_id = :lid"
-                ),
-                {"lid": line_id},
-            )
-            taxes = [dict(row._mapping) for row in tax_rows]
-
-            base = Decimal(str(pl["debit"])) - Decimal(str(pl["credit"]))
-
-            for tax in taxes:
-                tid = tax["id"]
-                tuse = tax["type_tax_use"]
-
-                # Validate type_tax_use compatibility (T018 requirement)
-                if move_type in _SALE_TYPES and tuse == "purchase":
-                    raise DodooError(
-                        f"Purchase tax (id={tid}) cannot be applied to a sale move (move_type={move_type})"
-                    )
-                if move_type in _PURCHASE_TYPES and tuse == "sale":
-                    raise DodooError(
-                        f"Sale tax (id={tid}) cannot be applied to a purchase move (move_type={move_type})"
-                    )
-
-                from dodoo.addons.account.models.account_tax import AccountTax
-
-                raw = AccountTax._compute_amount(tax, base)
-                raw_tax_amounts[tid] = raw_tax_amounts.get(tid, Decimal("0")) + raw
-                if tid not in tax_meta:
-                    tax_meta[tid] = tax
+        # Company's tax rounding method (FR-015) — defaults to round_globally when unset.
+        method_row = await conn.execute(
+            text(
+                "SELECT co.tax_rounding_method FROM account_move m "
+                "JOIN res_company co ON co.id = m.company_id WHERE m.id = :mid"
+            ),
+            {"mid": move_id},
+        )
+        mrow = method_row.fetchone()
+        round_per_line = bool(mrow and mrow[0] == "round_per_line")
 
         # Fetch currency rounding for this move
         rounding_row = await conn.execute(
@@ -224,10 +197,131 @@ class AccountMove(BaseModel):
         rr = rounding_row.fetchone()
         rounding = int(rr[0]) if rr else 2
 
-        # Round globally: one rounding per tax
-        rounded: dict[int, Decimal] = {
-            tid: _round(raw, rounding) for tid, raw in raw_tax_amounts.items()
-        }
+        from dodoo.addons.account.models.account_tax import AccountTax
+
+        # raw_tax_amounts: tax_id → accumulated raw (or per-line-rounded) signed Decimal
+        raw_tax_amounts: dict[int, Decimal] = {}
+        tax_meta: dict[int, dict] = {}
+
+        for pl in product_lines:
+            line_id = pl["id"]
+            tax_rows = await conn.execute(
+                text(
+                    "SELECT t.id, t.type_tax_use, t.amount_type, t.amount, t.price_include, "
+                    "       r.account_id AS rep_account_id, t.sequence "
+                    "FROM account_move_line_tax_rel rel "
+                    "JOIN account_tax t ON t.id = rel.tax_id "
+                    "LEFT JOIN account_tax_repartition_line r ON r.tax_id = t.id "
+                    "   AND r.document_type = 'invoice' AND r.repartition_type = 'tax' "
+                    "WHERE rel.move_line_id = :lid "
+                    "ORDER BY t.sequence, t.id"
+                ),
+                {"lid": line_id},
+            )
+            taxes = [dict(row._mapping) for row in tax_rows]
+
+            for tax in taxes:
+                tuse = tax["type_tax_use"]
+                # Validate type_tax_use compatibility
+                if move_type in _SALE_TYPES and tuse == "purchase":
+                    raise DodooError(
+                        f"Purchase tax (id={tax['id']}) cannot be applied to a sale move "
+                        f"(move_type={move_type})"
+                    )
+                if move_type in _PURCHASE_TYPES and tuse == "sale":
+                    raise DodooError(
+                        f"Sale tax (id={tax['id']}) cannot be applied to a purchase move "
+                        f"(move_type={move_type})"
+                    )
+                if tax["id"] not in tax_meta:
+                    tax_meta[tax["id"]] = tax
+
+            # Sign convention: whichever side (debit/purchase or credit/sale) is
+            # already nonzero on this line determines the tax line's own side.
+            sign = Decimal("1") if Decimal(str(pl["debit"])) >= Decimal(str(pl["credit"])) else Decimal("-1")
+
+            # price_subtotal is the discount-net magnitude (FR-010/013); for a
+            # price-included tax it is still gross-of-that-tax at this point.
+            subtotal = pl.get("price_subtotal")
+            gross_magnitude = (
+                Decimal(str(subtotal))
+                if subtotal not in (None, "")
+                else abs(Decimal(str(pl["debit"])) - Decimal(str(pl["credit"])))
+            )
+
+            # 1) Extract price-included taxes from the gross first (FR-014),
+            #    sequentially, so a line with more than one price-included tax
+            #    still nets down correctly.
+            net_magnitude = gross_magnitude
+            for tax in taxes:
+                if not tax["price_include"]:
+                    continue
+                if tax["amount_type"] == "percent":
+                    rate = Decimal(str(tax["amount"] or 0))
+                    extracted = net_magnitude - net_magnitude / (Decimal("1") + rate / Decimal("100"))
+                else:
+                    # division/fixed/group price-included taxes are computed on
+                    # the running net base like their on-top counterparts —
+                    # extraction only has a well-defined closed form for percent.
+                    extracted = AccountTax._compute_amount(tax, net_magnitude)
+                contribution = sign * extracted
+                if round_per_line:
+                    contribution = _round(contribution, rounding)
+                raw_tax_amounts[tax["id"]] = raw_tax_amounts.get(tax["id"], Decimal("0")) + contribution
+                net_magnitude -= extracted
+
+            # 2) Add on-top (not price-included) taxes on the resulting net base.
+            for tax in taxes:
+                if tax["price_include"]:
+                    continue
+                amt = AccountTax._compute_amount(tax, net_magnitude)
+                contribution = sign * amt
+                if round_per_line:
+                    contribution = _round(contribution, rounding)
+                raw_tax_amounts[tax["id"]] = raw_tax_amounts.get(tax["id"], Decimal("0")) + contribution
+
+            # Rewrite the line's own subtotal/ledger amount to the true net
+            # value once any price-included tax has been extracted, so the
+            # stored ledger and the tax base this method just used never
+            # disagree (defense in depth against a caller sending a stale
+            # debit/credit alongside price_unit/discount).
+            net_magnitude = _round(net_magnitude, rounding)
+            if net_magnitude != gross_magnitude:
+                new_debit = net_magnitude if sign > 0 else Decimal("0")
+                new_credit = Decimal("0") if sign > 0 else net_magnitude
+                await conn.execute(
+                    text(
+                        "UPDATE account_move_line SET "
+                        "price_subtotal=:ps, debit=:d, credit=:c, balance=:bal, "
+                        "write_date=now() WHERE id=:lid"
+                    ),
+                    {
+                        "ps": str(net_magnitude),
+                        "d": str(new_debit),
+                        "c": str(new_credit),
+                        "bal": str(new_debit - new_credit),
+                        "lid": line_id,
+                    },
+                )
+            elif subtotal in (None, ""):
+                # No price-included extraction happened but price_subtotal was
+                # never stored (manual/API line) — persist it now so downstream
+                # readers (reports, recompute_totals) see a consistent value.
+                await conn.execute(
+                    text(
+                        "UPDATE account_move_line SET price_subtotal=:ps, write_date=now() "
+                        "WHERE id=:lid"
+                    ),
+                    {"ps": str(net_magnitude), "lid": line_id},
+                )
+
+        # FR-015: when round_per_line, each line's contribution was already
+        # rounded before being summed above — summing already-rounded amounts
+        # here would double-round, so only round_globally rounds at this step.
+        if round_per_line:
+            rounded: dict[int, Decimal] = dict(raw_tax_amounts)
+        else:
+            rounded = {tid: _round(raw, rounding) for tid, raw in raw_tax_amounts.items()}
 
         # Delete existing auto lines
         await conn.execute(

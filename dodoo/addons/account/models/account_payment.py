@@ -241,6 +241,170 @@ class AccountPayment(BaseModel):
         return True
 
     @classmethod
+    async def _apply_early_discount(
+        cls,
+        env: Environment,
+        inv_id: int,
+        inv_line_id: int,
+        inv_residual: Decimal,
+        payment_date,
+        company_id: int,
+    ) -> Decimal:
+        """FR-018: if the invoice's payment term has an active early-payment
+        discount and ``payment_date`` falls on/before the discount window, post
+        the discount taken to ``early_payment_discount_account_id`` and
+        immediately reconcile it against the invoice's AR/AP line, then return
+        the *reduced* residual the actual cash payment still needs to cover.
+
+        Returns ``inv_residual`` unchanged when no discount applies.
+        """
+        from dodoo.addons.account.models.account_move import AccountMove
+        from dodoo.addons.account.models.account_reconcile import (
+            AccountPartialReconcile,
+        )
+
+        inv_records = await AccountMove.read(
+            env, [inv_id], ["invoice_payment_term_id", "invoice_date", "date", "currency_id"]
+        )
+        if not inv_records or not inv_records[0].get("invoice_payment_term_id"):
+            return inv_residual
+        inv_rec = inv_records[0]
+
+        async with env.dml_conn() as conn:
+            term_row = await conn.execute(
+                text(
+                    "SELECT early_discount, discount_percentage, discount_days, "
+                    "       early_payment_discount_account_id "
+                    "FROM account_payment_term WHERE id=:tid"
+                ),
+                {"tid": inv_rec["invoice_payment_term_id"]},
+            )
+            term = term_row.fetchone()
+
+        if not term or not term[0]:
+            return inv_residual
+
+        discount_pct = Decimal(str(term[1] or "0"))
+        discount_days = int(term[2] or 0)
+        discount_account_id = term[3]
+        if not discount_account_id or discount_pct <= 0:
+            return inv_residual
+
+        base_date = inv_rec.get("invoice_date") or inv_rec.get("date")
+        if isinstance(base_date, str):
+            base_date = datetime.date.fromisoformat(base_date)
+        if isinstance(payment_date, str):
+            payment_date = datetime.date.fromisoformat(payment_date)
+        discount_date = base_date + datetime.timedelta(days=discount_days)
+        if payment_date > discount_date:
+            return inv_residual  # outside the discount window
+
+        discount_amount = (inv_residual * discount_pct / Decimal("100")).quantize(Decimal("0.01"))
+        if discount_amount <= 0:
+            return inv_residual
+
+        # Determine the invoice line's account and sign to balance the discount
+        # move against (mirrors the invoice's own AR/AP account).
+        async with env.dml_conn() as conn:
+            iarow = await conn.execute(
+                text("SELECT account_id, debit, credit FROM account_move_line WHERE id=:lid"),
+                {"lid": inv_line_id},
+            )
+            iaccount = iarow.fetchone()
+        if not iaccount:
+            return inv_residual
+        ar_ap_account_id, i_debit, i_credit = iaccount
+        # invoice AR line is a debit (asset_receivable); AP line is a credit —
+        # the discount move must move the *opposite* side to close the residual.
+        is_ar = Decimal(str(i_debit)) >= Decimal(str(i_credit))
+
+        discount_move_id = await AccountMove.create(
+            env,
+            {
+                "move_type": "entry",
+                "journal_id": (await cls._misc_journal_id(env, company_id)),
+                "company_id": company_id,
+                "currency_id": inv_rec.get("currency_id") or None,
+                "date": payment_date,
+                "ref": f"Early payment discount for invoice {inv_id}",
+                "state": "draft",
+            },
+        )
+        async with env.dml_conn() as conn:
+            # Line 1: closes the invoice's AR/AP residual (opposite side of the invoice line)
+            d1, c1 = (Decimal("0"), discount_amount) if is_ar else (discount_amount, Decimal("0"))
+            await conn.execute(
+                text(
+                    "INSERT INTO account_move_line "
+                    "(move_id, account_id, date, display_type, debit, credit, balance, "
+                    "amount_residual, create_date, write_date) "
+                    "VALUES (:mid, :acct, :dt, 'payment_term', :d, :c, :bal, :bal, now(), now())"
+                ),
+                {
+                    "mid": discount_move_id,
+                    "acct": ar_ap_account_id,
+                    "dt": payment_date,
+                    "d": str(d1),
+                    "c": str(c1),
+                    "bal": str(d1 - c1),
+                },
+            )
+            # Line 2: the discount expense/income (opposite side of line 1)
+            d2, c2 = (discount_amount, Decimal("0")) if is_ar else (Decimal("0"), discount_amount)
+            await conn.execute(
+                text(
+                    "INSERT INTO account_move_line "
+                    "(move_id, account_id, date, display_type, debit, credit, balance, "
+                    "create_date, write_date) "
+                    "VALUES (:mid, :acct, :dt, 'product', :d, :c, :bal, now(), now())"
+                ),
+                {
+                    "mid": discount_move_id,
+                    "acct": discount_account_id,
+                    "dt": payment_date,
+                    "d": str(d2),
+                    "c": str(c2),
+                    "bal": str(d2 - c2),
+                },
+            )
+            await conn.commit()
+
+        await AccountMove.action_post(env, [discount_move_id])
+
+        async with env.dml_conn() as conn:
+            drow = await conn.execute(
+                text(
+                    "SELECT id FROM account_move_line WHERE move_id=:mid "
+                    "AND display_type='payment_term' LIMIT 1"
+                ),
+                {"mid": discount_move_id},
+            )
+            discount_line_id = drow.scalar_one()
+
+        if is_ar:
+            await AccountPartialReconcile.reconcile_lines(
+                env, inv_line_id, discount_line_id, discount_amount
+            )
+        else:
+            await AccountPartialReconcile.reconcile_lines(
+                env, discount_line_id, inv_line_id, discount_amount
+            )
+
+        return inv_residual - discount_amount
+
+    @classmethod
+    async def _misc_journal_id(cls, env: Environment, company_id: int) -> int:
+        async with env.dml_conn() as conn:
+            row = await conn.execute(
+                text(
+                    "SELECT id FROM account_journal WHERE type='general' "
+                    "AND company_id=:cid LIMIT 1"
+                ),
+                {"cid": company_id},
+            )
+            return row.scalar_one()
+
+    @classmethod
     async def register_against_invoices(
         cls,
         env: Environment,
@@ -254,7 +418,7 @@ class AccountPayment(BaseModel):
         )
 
         records = await super().read(
-            env, [payment_id], ["state", "move_id", "payment_type"]
+            env, [payment_id], ["state", "move_id", "payment_type", "date", "company_id"]
         )
         if not records or records[0]["state"] != "posted":
             raise DodooError(f"Payment {payment_id} must be posted before reconciling")
@@ -306,6 +470,11 @@ class AccountPayment(BaseModel):
             inv_line_id = iline[0]
             pay_residual = abs(Decimal(str(pline[1] or "0")))
             inv_residual = abs(Decimal(str(iline[1] or "0")))
+
+            inv_residual = await cls._apply_early_discount(
+                env, inv_id, inv_line_id, inv_residual, rec["date"], rec["company_id"]
+            )
+
             rec_amount = min(pay_residual, inv_residual)
 
             if rec_amount <= 0:

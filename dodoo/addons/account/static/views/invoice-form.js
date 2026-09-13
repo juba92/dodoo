@@ -77,7 +77,7 @@ export async function render(container, params) {
     lines = await api.rpc('account.move.line', 'search_read',
       [[['move_id', '=', id], ['display_type', 'in', ['product', 'line_section', 'line_note']]]],
       { fields: ['id', 'name', 'account_id', 'debit', 'credit', 'quantity', 'price_unit',
-        'tax_ids', 'display_type', 'sequence'], order: 'sequence asc' }
+        'discount', 'tax_ids', 'display_type', 'sequence'], order: 'sequence asc' }
     );
   } catch { /* show empty lines */ }
 
@@ -522,11 +522,14 @@ function _taxUse(moveType) {
   return '';
 }
 
-/** Untaxed subtotal of a draft invoice line = unit price × quantity. */
+/** Untaxed subtotal of a draft invoice line = unit price × quantity, net of any
+ * per-line discount percentage (FR-010/013). */
 function _lineSubtotal(line) {
   const q = parseFloat(line.quantity || 0);
   const u = parseFloat(line.priceUnit || 0);
-  return (q > 0 && u !== 0) ? q * u : 0;
+  const d = parseFloat(line.discount || 0);
+  const gross = (q > 0 && u !== 0) ? q * u : 0;
+  return gross * (1 - (d || 0) / 100);
 }
 
 /** Raw (unrounded) amount of one tax on a base — mirrors AccountTax._compute_amount. */
@@ -645,7 +648,7 @@ async function _renderNewInvoice(container, cp, moveType, editId = null) {
       taxUse
         ? api.rpc('account.tax', 'search_read',
             [[['active', '=', true], ['type_tax_use', '=', taxUse]]],
-            { fields: ['id', 'name', 'amount', 'amount_type'], order: 'amount desc' })
+            { fields: ['id', 'name', 'amount', 'amount_type', 'price_include'], order: 'amount desc' })
         : Promise.resolve([]),
     ]);
     // Fall back to all accounts if type-filtered list is empty
@@ -675,7 +678,7 @@ async function _renderNewInvoice(container, cp, moveType, editId = null) {
         api.rpc('account.move.line', 'search_read',
           [[['move_id', '=', editId], ['display_type', 'in', ['product', 'line_section', 'line_note']]]],
           { fields: ['id', 'name', 'account_id', 'debit', 'credit', 'quantity', 'price_unit',
-            'tax_ids', 'display_type', 'sequence'], order: 'sequence asc' }
+            'discount', 'tax_ids', 'display_type', 'sequence'], order: 'sequence asc' }
         ),
       ]);
     } catch { /* fall back to empty */ }
@@ -736,7 +739,8 @@ async function _renderNewInvoice(container, cp, moveType, editId = null) {
   const colDefs = isEntry
     ? [[t('Description'), ''], [t('Account'), ''], [t('Debit'), 'text-right'], [t('Credit'), 'text-right'], ['', '']]
     : [[t('Description'), ''], [t('Account'), ''], [t('Unit Price'), 'text-right'],
-       [t('Quantity'), 'text-right'], [t('Taxes'), ''], [t('Subtotal'), 'text-right'], ['', '']];
+       [t('Quantity'), 'text-right'], [t('Discount %'), 'text-right'], [t('Taxes'), ''],
+       [t('Subtotal'), 'text-right'], ['', '']];
   colDefs.forEach(([txt, cls]) => {
     const th = document.createElement('th');
     th.textContent = txt;
@@ -791,12 +795,21 @@ async function _renderNewInvoice(container, cp, moveType, editId = null) {
     let untaxed = 0;
     const rawByTax = new Map();
     for (const l of lines) {
-      const base = _lineSubtotal(l);
-      untaxed += base;
-      for (const tid of l.taxIds || []) {
-        const tax = taxById.get(tid);
-        if (!tax) continue;
-        rawByTax.set(tid, (rawByTax.get(tid) || 0) + _taxAmount(tax, base, parseFloat(l.quantity || 0)));
+      let net = _lineSubtotal(l); // discount-net, still gross-of-price-included-tax
+      const qty = parseFloat(l.quantity || 0);
+      const lineTaxes = (l.taxIds || []).map(tid => taxById.get(tid)).filter(Boolean);
+      // Price-included taxes first (FR-014): extract from the gross.
+      for (const tax of lineTaxes.filter(tx => tx.price_include)) {
+        const extracted = tax.amount_type === 'percent'
+          ? net - net / (1 + parseFloat(tax.amount || 0) / 100)
+          : _taxAmount(tax, net, qty);
+        rawByTax.set(tax.id, (rawByTax.get(tax.id) || 0) + extracted);
+        net -= extracted;
+      }
+      untaxed += net;
+      // On-top taxes on the resulting net base.
+      for (const tax of lineTaxes.filter(tx => !tx.price_include)) {
+        rawByTax.set(tax.id, (rawByTax.get(tax.id) || 0) + _taxAmount(tax, net, qty));
       }
     }
     // Round-globally: one rounding per tax, then sum (ADR-003).
@@ -809,7 +822,7 @@ async function _renderNewInvoice(container, cp, moveType, editId = null) {
   }
 
   function addLine() {
-    const line = { name: '', accountId: '', priceUnit: '', quantity: '1', taxIds: [], debit: '', credit: '' };
+    const line = { name: '', accountId: '', priceUnit: '', quantity: '1', discount: '', taxIds: [], debit: '', credit: '' };
     lines.push(line);
     tbody.appendChild(_buildNewLineRow(line, accounts, taxes, lines, isEntry, updateTotals));
     updateTotals();
@@ -829,6 +842,7 @@ async function _renderNewInvoice(container, cp, moveType, editId = null) {
         accountId: String(accId || ''),
         priceUnit: isEntry ? '' : (unit ? String(unit) : ''),
         quantity: isEntry ? '1' : String(qty),
+        discount: isEntry ? '' : (el.discount ? String(el.discount) : ''),
         taxIds: Array.isArray(el.tax_ids) ? el.tax_ids.slice() : [],
         debit:  isEntry && debit  ? String(debit)  : '',
         credit: isEntry && credit ? String(credit) : '',
@@ -947,6 +961,20 @@ function _buildNewLineRow(line, accounts, taxes, lines, isEntry, onUpdate) {
     qtyTd.appendChild(qtyInput);
     tr.appendChild(qtyTd);
 
+    // Discount % (FR-010)
+    const discTd = document.createElement('td');
+    discTd.className = 'text-right';
+    const discInput = document.createElement('input');
+    discInput.type = 'number';
+    discInput.placeholder = '0';
+    discInput.step = '0.01';
+    discInput.min = '0';
+    discInput.max = '100';
+    discInput.style.cssText = `width:70px;text-align:right;${tdStyle}`;
+    discInput.value = line.discount ?? '';
+    discTd.appendChild(discInput);
+    tr.appendChild(discTd);
+
     // Taxes (all taxes available for the company's country / tax type)
     const taxTd = document.createElement('td');
     const taxSel = document.createElement('select');
@@ -962,7 +990,7 @@ function _buildNewLineRow(line, accounts, taxes, lines, isEntry, onUpdate) {
     taxes.forEach(tx => {
       const opt = document.createElement('option');
       opt.value = tx.id;
-      opt.textContent = tx.name;
+      opt.textContent = tx.price_include ? `${tx.name} (${t('incl.')})` : tx.name;
       opt.selected = (line.taxIds || []).includes(tx.id);
       taxSel.appendChild(opt);
     });
@@ -978,12 +1006,14 @@ function _buildNewLineRow(line, accounts, taxes, lines, isEntry, onUpdate) {
     const refresh = () => {
       line.priceUnit = priceInput.value;
       line.quantity  = qtyInput.value;
+      line.discount  = discInput.value;
       line.taxIds    = Array.from(taxSel.selectedOptions).map(o => parseInt(o.value, 10));
       subTd.textContent = _fmt(_lineSubtotal(line));
       onUpdate();
     };
     priceInput.oninput = refresh;
     qtyInput.oninput   = refresh;
+    discInput.oninput  = refresh;
     taxSel.onchange    = refresh;
   }
 
@@ -1047,6 +1077,7 @@ async function _saveNewInvoice(moveType, companyId, currencyId, partnerSel, jour
         credit = isRevenue ? subtotal : 0;
         vals.quantity       = parseFloat(line.quantity || 1) || 1;
         vals.price_unit     = parseFloat(line.priceUnit || 0);
+        vals.discount       = parseFloat(line.discount || 0) || 0;
         vals.price_subtotal = subtotal;
         vals.tax_ids        = (line.taxIds || []).map(Number);
       }

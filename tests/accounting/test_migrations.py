@@ -18,6 +18,10 @@ EXPECTED_COLUMNS: list[tuple[str, str]] = [
     ("res_company", "fiscalyear_last_month"),
     ("res_company", "fiscalyear_last_day"),
     ("account_account_tag", "name"),
+    ("account_move_line", "discount"),
+    ("account_tax_repartition_line_tag_rel", "repartition_line_id"),
+    ("account_payment_term_line", "next_month"),
+    ("account_payment_term", "early_payment_discount_account_id"),
 ]
 
 EXPECTED_TABLES: list[str] = [

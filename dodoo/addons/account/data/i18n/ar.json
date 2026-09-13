@@ -6,5 +6,17 @@
   "Note": "ملاحظة",
   "Price Subtotal": "المجموع الفرعي",
   "Price Total": "الإجمالي",
-  "Price Unit": "سعر الوحدة"
+  "Price Unit": "سعر الوحدة",
+  "Discount %": "نسبة الخصم %",
+  "incl.": "شامل",
+  "Cancel Entry": "إلغاء القيد",
+  "Hash Chain": "سلسلة التجزئة",
+  "Lock Exceptions": "استثناءات القفل",
+  "Bank Statements": "كشوف الحساب البنكي",
+  "Cash Rounding": "تقريب النقد",
+  "Tax Report": "تقرير الضريبة",
+  "Analytic Accounts": "الحسابات التحليلية",
+  "Analytic Report": "التقرير التحليلي",
+  "Debit Note": "إشعار مدين",
+  "Down Payment": "دفعة مقدمة"
 }
