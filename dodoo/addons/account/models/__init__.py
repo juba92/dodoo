@@ -3,6 +3,11 @@ from dodoo.addons.account.models.account_account import (
     AccountAccountGroup,
 )
 from dodoo.addons.account.models.account_account_tag import AccountAccountTag
+from dodoo.addons.account.models.account_bank_statement import (
+    AccountBankStatement,
+    AccountBankStatementLine,
+)
+from dodoo.addons.account.models.account_cash_rounding import AccountCashRounding
 from dodoo.addons.account.models.account_fiscal_position import (
     AccountFiscalPosition,
     AccountFiscalPositionAccount,
@@ -38,6 +43,9 @@ __all__ = [
     "AccountAccount",
     "AccountAccountGroup",
     "AccountAccountTag",
+    "AccountBankStatement",
+    "AccountBankStatementLine",
+    "AccountCashRounding",
     "AccountJournal",
     "AccountMove",
     "AccountMoveLine",

@@ -2,13 +2,22 @@ from __future__ import annotations
 
 import datetime
 import logging
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP, Decimal
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import text
 
 from dodoo.core.exceptions import DodooError
-from dodoo.core.fields import Boolean, Char, Date, Many2one, Monetary, Selection, Text
+from dodoo.core.fields import (
+    Boolean,
+    Char,
+    Date,
+    Integer,
+    Many2one,
+    Monetary,
+    Selection,
+    Text,
+)
 from dodoo.core.models import BaseModel
 
 if TYPE_CHECKING:
@@ -127,6 +136,268 @@ class AccountMove(BaseModel):
     amount_residual = Monetary()
     reversed_entry_id = Many2one("account.move")
     posted_before = Boolean(default=False)
+    debit_origin_id = Many2one("account.move")
+    down_payment_origin_id = Many2one("account.move")
+    invoice_cash_rounding_id = Many2one("account.cash.rounding")
+    inalterable_hash = Char(size=64)
+    secure_sequence_number = Integer()
+
+    # ---- Multi-currency ----
+
+    @classmethod
+    async def _apply_fx_conversion(
+        cls,
+        conn,
+        move_id: int,
+        move_currency_id: int,
+        company_id: int,
+        move_date,
+    ) -> None:
+        """FR-024: for a move whose currency differs from the company's, convert
+        each line's ``amount_currency`` into company-currency ``debit``/``credit``
+        using the rate applicable to the move's date — ``currency_id`` stops being
+        decorative. A line with no ``amount_currency`` set is left untouched
+        (manual entries in company currency don't set it at all).
+        """
+        company_row = await conn.execute(
+            text("SELECT currency_id FROM res_company WHERE id = :cid"),
+            {"cid": company_id},
+        )
+        crow = company_row.fetchone()
+        company_currency_id = crow[0] if crow else None
+        if not company_currency_id or move_currency_id == company_currency_id:
+            return
+
+        if isinstance(move_date, str):
+            move_date = datetime.date.fromisoformat(move_date)
+        rate_row = await conn.execute(
+            text(
+                "SELECT rate FROM res_currency_rate "
+                "WHERE currency_id = :cid AND rate_date <= :dt "
+                "ORDER BY rate_date DESC LIMIT 1"
+            ),
+            {"cid": move_currency_id, "dt": move_date or datetime.date.today()},
+        )
+        rrow = rate_row.fetchone()
+        if not rrow:
+            raise DodooError(
+                f"No exchange rate found for currency {move_currency_id} on or before "
+                f"{move_date} — enter one via res.currency.rate before posting"
+            )
+        rate = Decimal(str(rrow[0]))
+
+        lines_row = await conn.execute(
+            text(
+                "SELECT id, amount_currency FROM account_move_line "
+                "WHERE move_id = :mid AND amount_currency IS NOT NULL AND amount_currency <> 0"
+            ),
+            {"mid": move_id},
+        )
+        for line_id, amount_currency in [(r[0], r[1]) for r in lines_row]:
+            ac = Decimal(str(amount_currency))
+            converted = (ac * rate).copy_abs()
+            debit = converted if ac > 0 else Decimal("0")
+            credit = Decimal("0") if ac > 0 else converted
+            await conn.execute(
+                text(
+                    "UPDATE account_move_line SET debit=:d, credit=:c, balance=:bal, "
+                    "write_date=now() WHERE id=:lid"
+                ),
+                {"d": str(debit), "c": str(credit), "bal": str(debit - credit), "lid": line_id},
+            )
+
+    @classmethod
+    async def revalue_currency_balances(
+        cls, env: Environment, company_id: int, as_of: datetime.date, uid: int | None = None
+    ) -> list[dict]:
+        """FR-026: period-end unrealized currency gain/loss revaluation.
+
+        For every open (``reconciled=False``) foreign-currency AR/AP line, posts
+        one adjustment move dated ``as_of`` to the exchange accounts, and
+        immediately creates its next-day reversal in draft (reversible next
+        period without affecting realized results).
+        """
+        async with env.dml_conn() as conn:
+            company_row = await conn.execute(
+                text(
+                    "SELECT currency_id, income_currency_exchange_account_id, "
+                    "       expense_currency_exchange_account_id "
+                    "FROM res_company WHERE id = :cid"
+                ),
+                {"cid": company_id},
+            )
+            company = company_row.fetchone()
+            if not company:
+                raise DodooError(f"Company {company_id} not found")
+            company_currency_id, income_acct, expense_acct = company
+            if not income_acct or not expense_acct:
+                raise DodooError(
+                    "Company has no income/expense currency exchange account configured"
+                )
+
+            open_rows = await conn.execute(
+                text(
+                    "SELECT ml.id, ml.account_id, ml.currency_id, ml.amount_currency, "
+                    "       ml.amount_residual "
+                    "FROM account_move_line ml "
+                    "JOIN account_account a ON a.id = ml.account_id "
+                    "JOIN account_move m ON m.id = ml.move_id "
+                    "WHERE m.company_id = :cid AND m.state = 'posted' "
+                    "  AND ml.reconciled = FALSE AND ml.currency_id IS NOT NULL "
+                    "  AND ml.currency_id <> :company_currency "
+                    "  AND a.account_type IN ('asset_receivable', 'liability_payable') "
+                    "  AND ABS(ml.amount_residual) > 0"
+                ),
+                {"cid": company_id, "company_currency": company_currency_id},
+            )
+            open_lines = [dict(r._mapping) for r in open_rows]
+
+        entries = []
+        for line in open_lines:
+            async with env.dml_conn() as conn:
+                rate_row = await conn.execute(
+                    text(
+                        "SELECT rate FROM res_currency_rate "
+                        "WHERE currency_id = :cid AND rate_date <= :dt "
+                        "ORDER BY rate_date DESC LIMIT 1"
+                    ),
+                    {"cid": line["currency_id"], "dt": as_of},
+                )
+                rrow = rate_row.fetchone()
+            if not rrow:
+                continue
+            rate = Decimal(str(rrow[0]))
+            revalued_company_amount = abs(Decimal(str(line["amount_currency"]))) * rate
+            current_residual = Decimal(str(line["amount_residual"]))
+            diff = revalued_company_amount - abs(current_residual)
+            if abs(diff) < Decimal("0.01"):
+                continue
+
+            # A receivable (positive residual) revalued UP is a gain; a payable
+            # (negative residual) revalued UP (owing more) is a loss — the two
+            # account types invert the same `diff > 0` sign.
+            is_receivable_side = current_residual >= 0
+            is_gain = (diff > 0) == is_receivable_side
+            gain_or_loss_account = income_acct if is_gain else expense_acct
+            amount = abs(diff)
+
+            # Plain balanced adjustment: move `amount` further onto the AR/AP
+            # account's own side (receivable → more debit; payable → more
+            # credit), offset by the gain/loss account — no reconciliation,
+            # the original open item is left exactly as open as it was.
+            move_id = await cls._post_revaluation_entry(
+                env,
+                company_id=company_id,
+                target_account_id=line["account_id"],
+                offset_account_id=gain_or_loss_account,
+                amount=amount,
+                is_receivable_side=is_receivable_side,
+                is_gain=is_gain,
+                date=as_of,
+                ref=f"Unrealized currency revaluation for line {line['id']}",
+            )
+            reversal_date = as_of + datetime.timedelta(days=1)
+            reversal_ids = await cls.action_reverse(
+                env, [move_id], date=reversal_date, auto_post=False
+            )
+            entries.append(
+                {"move_id": move_id, "reversal_move_id": reversal_ids[0], "amount": str(amount)}
+            )
+
+        return entries
+
+    @classmethod
+    async def _post_revaluation_entry(
+        cls,
+        env: Environment,
+        *,
+        company_id: int,
+        target_account_id: int,
+        offset_account_id: int,
+        amount: Decimal,
+        is_receivable_side: bool,
+        is_gain: bool,
+        date: datetime.date,
+        ref: str,
+    ) -> int:
+        """Post a balanced 2-line adjustment moving ``amount`` further onto
+        ``target_account_id`` (the AR/AP account) against ``offset_account_id``
+        (the gain/loss account) — no reconciliation; the original open item's
+        own residual/reconciliation status is left untouched.
+        """
+        # Receivable + gain, or payable + loss -> debit the AR/AP account more.
+        target_is_debit = is_receivable_side == is_gain
+        d1, c1 = (amount, Decimal("0")) if target_is_debit else (Decimal("0"), amount)
+        d2, c2 = (Decimal("0"), amount) if target_is_debit else (amount, Decimal("0"))
+
+        async with env.dml_conn() as conn:
+            jrow = await conn.execute(
+                text(
+                    "SELECT id FROM account_journal WHERE type='general' "
+                    "AND company_id=:cid LIMIT 1"
+                ),
+                {"cid": company_id},
+            )
+            journal_id = jrow.scalar_one()
+
+        move_id = await cls.create(
+            env,
+            {
+                "move_type": "entry",
+                "journal_id": journal_id,
+                "company_id": company_id,
+                "currency_id": (await cls._company_currency_id_for(env, company_id)),
+                "date": date,
+                "ref": ref,
+                "state": "draft",
+            },
+        )
+        async with env.dml_conn() as conn:
+            await conn.execute(
+                text(
+                    "INSERT INTO account_move_line "
+                    "(move_id, account_id, date, display_type, debit, credit, balance, "
+                    "create_date, write_date) "
+                    "VALUES (:mid, :acct, :dt, 'product', :d, :c, :bal, now(), now())"
+                ),
+                {
+                    "mid": move_id,
+                    "acct": target_account_id,
+                    "dt": date,
+                    "d": str(d1),
+                    "c": str(c1),
+                    "bal": str(d1 - c1),
+                },
+            )
+            await conn.execute(
+                text(
+                    "INSERT INTO account_move_line "
+                    "(move_id, account_id, date, display_type, debit, credit, balance, "
+                    "create_date, write_date) "
+                    "VALUES (:mid, :acct, :dt, 'product', :d, :c, :bal, now(), now())"
+                ),
+                {
+                    "mid": move_id,
+                    "acct": offset_account_id,
+                    "dt": date,
+                    "d": str(d2),
+                    "c": str(c2),
+                    "bal": str(d2 - c2),
+                },
+            )
+            await conn.commit()
+
+        await cls.action_post(env, [move_id])
+        return move_id
+
+    @classmethod
+    async def _company_currency_id_for(cls, env: Environment, company_id: int) -> int | None:
+        async with env.dml_conn() as conn:
+            row = await conn.execute(
+                text("SELECT currency_id FROM res_company WHERE id=:cid"), {"cid": company_id}
+            )
+            r = row.fetchone()
+            return r[0] if r else None
 
     # ---- Tax computation ----
 
@@ -371,6 +642,110 @@ class AccountMove(BaseModel):
             )
 
     @classmethod
+    async def _apply_cash_rounding(cls, conn, move_id: int, cash_rounding_id: int) -> None:
+        """FR-030: round the invoice total to the profile's increment, adding a
+        rounding line (``add_invoice_line``) or adjusting the largest tax line
+        (``biggest_tax``) for the difference."""
+        profile_row = await conn.execute(
+            text(
+                "SELECT rounding, rounding_method, strategy, account_id "
+                "FROM account_cash_rounding WHERE id = :id"
+            ),
+            {"id": cash_rounding_id},
+        )
+        profile = profile_row.fetchone()
+        if not profile:
+            return
+        increment, method, strategy, rounding_account_id = profile
+        increment = Decimal(str(increment))
+        if increment <= 0:
+            return
+
+        totals_row = await conn.execute(
+            text(
+                "SELECT COALESCE(SUM(debit - credit), 0) FROM account_move_line "
+                "WHERE move_id = :mid AND display_type IN ('product', 'tax')"
+            ),
+            {"mid": move_id},
+        )
+        total = Decimal(str(totals_row.scalar_one() or "0"))
+        sign = Decimal("1") if total >= 0 else Decimal("-1")
+        magnitude = abs(total)
+
+        steps = magnitude / increment
+        if method == "up":
+            steps = steps.to_integral_value(rounding=ROUND_CEILING)
+        elif method == "down":
+            steps = steps.to_integral_value(rounding=ROUND_FLOOR)
+        else:
+            steps = steps.to_integral_value(rounding=ROUND_HALF_UP)
+        rounded_magnitude = steps * increment
+        diff = sign * (rounded_magnitude - magnitude)  # signed adjustment to apply
+        if abs(diff) < Decimal("0.0001"):
+            return
+
+        acct_date_row = await conn.execute(
+            text(
+                "SELECT date FROM account_move_line WHERE move_id=:mid "
+                "AND display_type='product' LIMIT 1"
+            ),
+            {"mid": move_id},
+        )
+        acct_date = acct_date_row.scalar_one_or_none() or datetime.date.today()
+
+        if strategy == "biggest_tax" and rounding_account_id is None:
+            biggest_row = await conn.execute(
+                text(
+                    "SELECT id, debit, credit FROM account_move_line "
+                    "WHERE move_id = :mid AND display_type = 'tax' "
+                    "ORDER BY ABS(debit - credit) DESC LIMIT 1"
+                ),
+                {"mid": move_id},
+            )
+            biggest = biggest_row.fetchone()
+            if biggest:
+                line_id, debit, credit = biggest
+                new_balance = (Decimal(str(debit)) - Decimal(str(credit))) + diff
+                new_debit = new_balance if new_balance >= 0 else Decimal("0")
+                new_credit = Decimal("0") if new_balance >= 0 else -new_balance
+                await conn.execute(
+                    text(
+                        "UPDATE account_move_line SET debit=:d, credit=:c, balance=:bal, "
+                        "write_date=now() WHERE id=:lid"
+                    ),
+                    {
+                        "d": str(new_debit),
+                        "c": str(new_credit),
+                        "bal": str(new_balance),
+                        "lid": line_id,
+                    },
+                )
+                return
+            # No tax line to adjust — fall through to add-invoice-line below.
+
+        rounding_account = rounding_account_id
+        if rounding_account is None:
+            return  # add_invoice_line strategy with no configured account — nothing to do
+        debit = diff if diff >= 0 else Decimal("0")
+        credit = Decimal("0") if diff >= 0 else -diff
+        await conn.execute(
+            text(
+                "INSERT INTO account_move_line "
+                "(move_id, sequence, account_id, date, display_type, "
+                "debit, credit, balance, create_date, write_date) "
+                "VALUES (:mid, 9990, :acct, :dt, 'product', :d, :c, :bal, now(), now())"
+            ),
+            {
+                "mid": move_id,
+                "acct": rounding_account,
+                "dt": acct_date,
+                "d": str(debit),
+                "c": str(credit),
+                "bal": str(debit - credit),
+            },
+        )
+
+    @classmethod
     async def _compute_payment_term_lines(
         cls, conn, move_id: int, move_type: str, partner_id: int | None, company_id: int
     ) -> None:
@@ -602,6 +977,7 @@ class AccountMove(BaseModel):
                     "company_id",
                     "currency_id",
                     "partner_id",
+                    "invoice_cash_rounding_id",
                 ],
             )
             if not records:
@@ -613,8 +989,19 @@ class AccountMove(BaseModel):
             move_type = rec.get("move_type", "entry")
 
             async with env.dml_conn() as conn:
+                # FR-024: convert amount_currency -> company-currency debit/credit
+                # for a foreign-currency move, before tax/payment-term generation
+                # (both of which read debit/credit as the base).
+                await cls._apply_fx_conversion(
+                    conn, move_id, rec["currency_id"], rec["company_id"], rec.get("date")
+                )
                 # Run round-globally tax computation
                 await cls._compute_tax_lines(conn, move_id, move_type)
+                # FR-030: apply cash rounding right after tax computation.
+                if rec.get("invoice_cash_rounding_id"):
+                    await cls._apply_cash_rounding(
+                        conn, move_id, rec["invoice_cash_rounding_id"]
+                    )
                 # Auto-generate payment_term (AR/AP) line for invoice types
                 await cls._compute_payment_term_lines(
                     conn, move_id, move_type, rec.get("partner_id"), rec["company_id"]
@@ -751,8 +1138,11 @@ class AccountMove(BaseModel):
         ids: list[int],
         date: datetime.date | None = None,
         journal_id: int | None = None,
+        auto_post: bool = True,
     ) -> list[int]:
-        """Create and post reversal moves; auto-reconcile AR/AP lines."""
+        """Create reversal moves (mirrored debit/credit); auto-reconcile AR/AP
+        lines. FR-006: when ``auto_post`` is ``False``, the reversal is created
+        and left in ``draft`` for the caller to review/adjust before posting."""
 
         reversal_ids = []
         for move_id in ids:
@@ -838,7 +1228,8 @@ class AccountMove(BaseModel):
                     )
                 await conn.commit()
 
-            await cls.action_post(env, [rev_id])
+            if auto_post:
+                await cls.action_post(env, [rev_id])
             reversal_ids.append(rev_id)
 
             _log.info(
@@ -848,6 +1239,7 @@ class AccountMove(BaseModel):
                     "record_id": move_id,
                     "reversal_id": rev_id,
                     "event": "action_reverse",
+                    "auto_post": auto_post,
                 },
             )
 

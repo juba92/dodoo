@@ -52,12 +52,14 @@ async def action_reverse_move(request: Request, move_id: int) -> JSONResponse:
     body = await request.json()
     date = body.get("date")
     journal_id = body.get("journal_id")
+    auto_post = body.get("auto_post", True)
 
     try:
         reversal_ids = await AccountMove.action_reverse(
-            env, [move_id], date=date, journal_id=journal_id
+            env, [move_id], date=date, journal_id=journal_id, auto_post=auto_post
         )
-        return JSONResponse({"result": reversal_ids})
+        state = "posted" if auto_post else "draft"
+        return JSONResponse({"result": reversal_ids, "state": state})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
@@ -87,6 +89,65 @@ async def register_payment(request: Request, payment_id: int) -> JSONResponse:
             env, payment_id, invoice_ids
         )
         return JSONResponse({"result": result})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@route("/account/reconcile", methods=["POST"], auth="session")
+async def reconcile_with_writeoff(request: Request) -> JSONResponse:
+    """FR-020: direct-callable reconciliation, optionally with a write-off."""
+    env = request.app.state.env
+    from dodoo.addons.account.models.account_reconcile import AccountPartialReconcile
+    from dodoo.addons.account.validators import ReconcileWithWriteOff, validate
+
+    body = await request.json()
+    try:
+        payload = validate(ReconcileWithWriteOff, body)
+        result = await AccountPartialReconcile.reconcile_lines(
+            env,
+            payload.debit_line_id,
+            payload.credit_line_id,
+            payload.amount,
+            writeoff_account_id=payload.writeoff_account_id,
+            writeoff_journal_id=payload.writeoff_journal_id,
+        )
+        return JSONResponse({"result": result})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@route("/account/payment/{payment_id}/suggestions", methods=["GET"], auth="session")
+async def payment_suggestions(request: Request, payment_id: int) -> JSONResponse:
+    """FR-021: ranked, advisory-only reconciliation match suggestions."""
+    env = request.app.state.env
+    from dodoo.addons.account.models.account_reconcile import AccountPartialReconcile
+
+    try:
+        suggestions = await AccountPartialReconcile.suggest_matches(env, payment_id)
+        return JSONResponse({"suggestions": suggestions})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@route("/account/currency/revalue", methods=["POST"], auth="session")
+async def currency_revalue(request: Request) -> JSONResponse:
+    """FR-026: period-end unrealized currency gain/loss revaluation."""
+    env = request.app.state.env
+    from dodoo.addons.account.models.account_move import AccountMove
+    from dodoo.addons.account.security import GROUP_MANAGER
+    from dodoo.addons.account.validators import RunRevaluation, require_groups, validate
+
+    body = await request.json()
+    try:
+        payload = validate(RunRevaluation, body)
+        from dodoo.core.context import get_uid
+
+        uid = get_uid()
+        await require_groups(env, uid, GROUP_MANAGER)
+        entries = await AccountMove.revalue_currency_balances(
+            env, payload.company_id, payload.as_of, uid
+        )
+        return JSONResponse({"result": {"entries": entries}})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
@@ -197,4 +258,53 @@ async def report_aged_payable(request: Request) -> JSONResponse:
             )
         )
     except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+# ---- Bank statements (FR-027/028/029) ----
+
+
+@route("/account/statement/{statement_id}/confirm", methods=["POST"], auth="session")
+async def statement_confirm(request: Request, statement_id: int) -> JSONResponse:
+    env = request.app.state.env
+    from dodoo.addons.account.models.account_bank_statement import AccountBankStatement
+
+    try:
+        await AccountBankStatement.action_confirm(env, statement_id)
+        return JSONResponse({"result": True})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@route("/account/statement/{statement_id}/status", methods=["GET"], auth="session")
+async def statement_status(request: Request, statement_id: int) -> JSONResponse:
+    env = request.app.state.env
+    from dodoo.addons.account.models.account_bank_statement import AccountBankStatement
+
+    try:
+        return JSONResponse(await AccountBankStatement.get_status(env, statement_id))
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@route(
+    "/account/statement/{statement_id}/line/{line_id}/reconcile",
+    methods=["POST"],
+    auth="session",
+)
+async def statement_line_reconcile(
+    request: Request, statement_id: int, line_id: int
+) -> JSONResponse:
+    env = request.app.state.env
+    from dodoo.addons.account.models.account_bank_statement import AccountBankStatementLine
+    from dodoo.addons.account.validators import StatementLineReconcile, validate
+
+    body = await request.json()
+    try:
+        payload = validate(StatementLineReconcile, body)
+        result = await AccountBankStatementLine.reconcile_against(
+            env, line_id, payload.move_line_ids
+        )
+        return JSONResponse({"result": result})
+    except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)

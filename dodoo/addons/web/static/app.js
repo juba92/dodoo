@@ -124,8 +124,14 @@ const _MODEL_LABELS = {
   'stock.lot': 'Lots & Serial Numbers', 'stock.warehouse.orderpoint': 'Reordering Rules',
   'stock.inventory.adjustment.log': 'Adjustment History',
   'stock.valuation.layer': 'Valuation Layers',
+  'account.bank.statement': 'Bank Statements',
+  'account.bank.statement.line': 'Statement Lines',
+  'account.cash.rounding': 'Cash Rounding',
+  'account.lock.exception': 'Lock Exceptions',
+  'analytic.account': 'Analytic Accounts',
+  'analytic.plan': 'Analytic Plans',
 };
-const _SECTION_MODEL_PREFIXES = new Set(['hr', 'fleet', 'stock', 'product', 'uom']);
+const _SECTION_MODEL_PREFIXES = new Set(['hr', 'fleet', 'stock', 'product', 'uom', 'account', 'analytic']);
 function _modelLabel(name) {
   if (_MODEL_LABELS[name]) return t(_MODEL_LABELS[name]);
   const parts = name.split('.');

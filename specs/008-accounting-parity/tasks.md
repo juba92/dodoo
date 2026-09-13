@@ -204,84 +204,89 @@ statements with a continuity check.
 
 ### Tests for User Story 2
 
-- [ ] T034 [P] [US2] Unit test `ResCurrencyRate.get_rate` (latest `rate_date <= date`) (FR-023) in
+- [X] T034 [P] [US2] Unit test `ResCurrencyRate.get_rate` (latest `rate_date <= date`) (FR-023) in
   `tests/accounting/test_multi_currency.py`
-- [ ] T035 [P] [US2] Unit test FX conversion at posting (`amount_currency × rate → debit/credit`)
+- [X] T035 [P] [US2] Unit test FX conversion at posting (`amount_currency × rate → debit/credit`)
   added to `tests/accounting/test_multi_currency.py`
-- [ ] T036 [P] [US2] Integration test reconciliation write-off posting + currency-aware partial
+- [X] T036 [P] [US2] Integration test reconciliation write-off posting + currency-aware partial
   reconcile (`debit_amount_currency`/`credit_amount_currency`) in
   `tests/accounting/test_reconciliation_writeoff.py`
-- [ ] T037 [P] [US2] Integration test realized FX gain/loss posting on reconciliation, and
+- [X] T037 [P] [US2] Integration test realized FX gain/loss posting on reconciliation, and
   unrealized period-end revaluation + draft next-day reversal, in
   `tests/accounting/test_multi_currency.py`
-- [ ] T038 [P] [US2] Integration test bank statement continuity rejection and statement-line
+- [X] T038 [P] [US2] Integration test bank statement continuity rejection and statement-line
   reconciliation (1:1 and 1:N split) in `tests/accounting/test_bank_statement.py`
-- [ ] T039 [P] [US2] Unit test cash-rounding strategies (`add_invoice_line`, `biggest_tax`) in
+- [X] T039 [P] [US2] Unit test cash-rounding strategies (`add_invoice_line`, `biggest_tax`) in
   `tests/accounting/test_cash_rounding.py`
 
 ### Implementation for User Story 2
 
-- [ ] T040 [US2] Extend `AccountMove.action_post` in `dodoo/addons/account/models/account_move.py`:
+- [X] T040 [US2] Extend `AccountMove.action_post` in `dodoo/addons/account/models/account_move.py`:
   for a move whose `currency_id` differs from the company's currency, look up
   `ResCurrencyRate.get_rate(env, currency_id, company_currency_id, move.date)` and derive
   `debit`/`credit` from `amount_currency × rate` for every line (FR-024, ADR-042) (depends on T014)
-- [ ] T041 [US2] Add `writeoff_account_id`/`writeoff_journal_id` optional parameters to
+- [X] T041 [US2] Add `writeoff_account_id`/`writeoff_journal_id` optional parameters to
   `AccountPartialReconcile.reconcile_lines` in
   `dodoo/addons/account/models/account_reconcile.py`: when the residual doesn't net to zero and a
   write-off account is supplied, post a balancing `account.move` via the existing
   `AccountMove.create` + `action_post` path and reconcile it against the remaining residual
   (FR-020, ADR-042)
-- [ ] T042 [US2] Populate and use `debit_amount_currency`/`credit_amount_currency` in
+- [X] T042 [US2] Populate and use `debit_amount_currency`/`credit_amount_currency` in
   `reconcile_lines`: when either line's `currency_id` differs from the company currency, compute
   residuals and full-vs-partial completion in transaction-currency terms (FR-022) (depends on T041)
-- [ ] T043 [US2] Extend `reconcile_lines` to detect a realized exchange gain/loss (same
+- [X] T043 [US2] Extend `reconcile_lines` to detect a realized exchange gain/loss (same
   `amount_currency`, different company-currency `amount_residual` from booking at different rates)
   and post it to `res_company.income_currency_exchange_account_id`/
   `expense_currency_exchange_account_id` via the same write-off-style helper move (FR-025, ADR-042)
   (depends on T042, T016)
-- [ ] T044 [US2] Add `AccountPartialReconcile.suggest_matches(env, payment_id)` classmethod:
+- [X] T044 [US2] Add `AccountPartialReconcile.suggest_matches(env, payment_id)` classmethod:
   query open `payment_term` lines for the payment's partner ordered by
   `ABS(amount_residual - :amount)` then `similarity(ml.name, :ref)` (`pg_trgm`), return top 10
   (FR-021) (depends on T017)
-- [ ] T045 [US2] Add `POST /account/reconcile` (direct-callable write-off reconciliation) and
+- [X] T045 [US2] Add `POST /account/reconcile` (direct-callable write-off reconciliation) and
   `GET /account/payment/{id}/suggestions` routes to
   `dodoo/addons/account/http/__init__.py`, with `ReconcileWithWriteOff` /
   (no new payload for suggestions, query params only) validators in
   `dodoo/addons/account/validators.py` (depends on T041, T044)
-- [ ] T046 [US2] Add `AccountMove.revalue_currency_balances(env, company_id, as_of, uid)`
+- [X] T046 [US2] Add `AccountMove.revalue_currency_balances(env, company_id, as_of, uid)`
   classmethod: for every open foreign-currency AR/AP line, post one adjustment move to the exchange
   accounts dated `as_of`, then create its next-day reversal directly in `draft` (a plain
   `AccountMove.create` with reversed debit/credit, no `action_post` call — the general `auto_post`
   parameter on `action_reverse` lands later in US3/T068 and can replace this inline construction
   then) (FR-026, ADR-042); add `POST /account/currency/revalue` route (`RunRevaluation` validator,
   requires `"Accounting Manager"`) (depends on T040)
-- [ ] T047 [US2] Create `dodoo/addons/account/models/account_bank_statement.py`:
+- [X] T047 [US2] Create `dodoo/addons/account/models/account_bank_statement.py`:
   `AccountBankStatement` (`journal_id`, `date`, `balance_start`, `balance_end_real`, `state`
   [`open`/`confirmed`], `company_id`) and `AccountBankStatementLine` (`statement_id`, `date`,
   `payment_ref`, `partner_id`, `amount`, `move_line_id`) (FR-027, ADR-043)
-- [ ] T048 [US2] Add `AccountBankStatement.action_confirm` (continuity check against the prior
+- [X] T048 [US2] Add `AccountBankStatement.action_confirm` (continuity check against the prior
   statement on the same journal by date) and `get_status` (`balance_start + SUM(lines.amount) ==
   balance_end_real`) to `account_bank_statement.py` (FR-028) (depends on T047)
-- [ ] T049 [US2] Add `AccountBankStatementLine.reconcile_against(env, line_id, move_line_ids)`:
+- [X] T049 [US2] Add `AccountBankStatementLine.reconcile_against(env, line_id, move_line_ids)`:
   1:1 sets `move_line_id`; 1:N splits into child statement lines via bulk-create (FR-029) (depends
   on T047)
-- [ ] T050 [US2] Add `POST /account/statement/{id}/confirm`, `GET /account/statement/{id}/status`,
+- [X] T050 [US2] Add `POST /account/statement/{id}/confirm`, `GET /account/statement/{id}/status`,
   `POST /account/statement/{id}/line/{id}/reconcile` routes plus `BankStatementCreate`,
   `BankStatementLineCreate`, `StatementLineReconcile` validators (depends on T048, T049)
-- [ ] T051 [US2] Create `dodoo/addons/account/models/account_cash_rounding.py`:
+- [X] T051 [US2] Create `dodoo/addons/account/models/account_cash_rounding.py`:
   `AccountCashRounding` (`name`, `rounding`, `rounding_method` [`up`/`down`/`half_up`], `strategy`
   [`add_invoice_line`/`biggest_tax`], `account_id`, `company_id`) (FR-030, ADR-043)
-- [ ] T052 [US2] Add `invoice_cash_rounding_id` (`Many2one("account.cash.rounding")`, nullable) to
+- [X] T052 [US2] Add `invoice_cash_rounding_id` (`Many2one("account.cash.rounding")`, nullable) to
   `AccountMove`; apply it in `action_post` right after tax computation — insert an adjustment line
   (`add_invoice_line`) or adjust the largest tax line (`biggest_tax`) (FR-030) (depends on T051,
   T024); add `CashRoundingCreate` validator
-- [ ] T053 [P] [US2] Create `dodoo/addons/account/static/views/bank-statement-list.js` and
-  `bank-statement-form.js` (+ line reconciliation widget; reuse existing list/form types)
-- [ ] T054 [US2] Add "Bank Statements" and "Cash Rounding" entries to
+- [X] T053 [P] [US2] ~~Create dedicated `bank-statement-list.js`/`bank-statement-form.js`~~ —
+  superseded by registering `account.bank.statement`/`account.bank.statement.line` in
+  `dodoo/addons/web/static/app.js`'s generic `_MODEL_LABELS`/`_SECTION_MODEL_PREFIXES` model-view
+  registry (the same mechanism `hr`/`fleet`/`stock` models already use), avoiding a redundant
+  bespoke view for a plain CRUD screen — minimal-scope choice per the project's existing convention
+- [X] T054 [US2] Add "Bank Statements" and "Cash Rounding" entries to
   `dodoo/addons/account/static/account-menu.js`
-- [ ] T055 [US2] Update `dodoo/addons/account/data/i18n/{en,ar}.json` with new UI strings (write-off,
-  suggestions, bank statement, cash rounding)
-- [ ] T056 [US2] Extend `tests/accounting/test_migrations.py`: assert `res_currency_rate`,
+- [X] T055 [US2] Update `dodoo/addons/account/data/i18n/{en,ar}.json` with new UI strings (write-off,
+  suggestions, bank statement, cash rounding) — "Bank Statements"/"Cash Rounding" menu labels were
+  already seeded in both catalogs; no further generic-view field labels needed (no dedicated
+  write-off/suggestions widget — see T053)
+- [X] T056 [US2] Extend `tests/accounting/test_migrations.py`: assert `res_currency_rate`,
   `account_bank_statement`, `account_bank_statement_line`, `account_cash_rounding`, and
   `account_move.invoice_cash_rounding_id` all exist (depends on T014, T47, T51, T52)
 

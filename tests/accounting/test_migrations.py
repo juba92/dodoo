@@ -22,6 +22,11 @@ EXPECTED_COLUMNS: list[tuple[str, str]] = [
     ("account_tax_repartition_line_tag_rel", "repartition_line_id"),
     ("account_payment_term_line", "next_month"),
     ("account_payment_term", "early_payment_discount_account_id"),
+    ("account_move", "invoice_cash_rounding_id"),
+    ("account_move", "inalterable_hash"),
+    ("account_move", "secure_sequence_number"),
+    ("account_move", "debit_origin_id"),
+    ("account_move", "down_payment_origin_id"),
 ]
 
 EXPECTED_TABLES: list[str] = [
@@ -29,6 +34,9 @@ EXPECTED_TABLES: list[str] = [
     "analytic_account",
     "res_currency_rate",
     "account_account_tag",
+    "account_bank_statement",
+    "account_bank_statement_line",
+    "account_cash_rounding",
 ]
 
 

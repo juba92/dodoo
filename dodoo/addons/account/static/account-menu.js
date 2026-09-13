@@ -21,6 +21,13 @@ export const ACCOUNTING_MENU = [
       { label: 'Journal Entries',   hash: '#/accounting/journal-entries' },
       { label: 'Chart of Accounts', hash: '#/accounting/chart-of-accounts' },
       { label: 'Journals',          hash: '#/accounting/journals' },
+      { label: 'Bank Statements',   hash: '#/accounting/model/account.bank.statement' },
+    ],
+  },
+  {
+    section: 'Configuration',
+    items: [
+      { label: 'Cash Rounding', hash: '#/accounting/model/account.cash.rounding' },
     ],
   },
   {
