@@ -306,16 +306,20 @@ hash-chain-verified journal, and a lock-date rejection with an exception grant.
 - [ ] T057 [P] [US3] Unit test `group_id` auto-resolution from code-prefix range, and the
   off-balance/cash-type reconcile constraint (FR-001/002) in `tests/accounting/test_coa_groups.py`
 - [ ] T058 [P] [US3] Integration test per-journal sequence scoping across two same-type journals,
-  and `action_cancel`'s draft-only transition (FR-003/004) in
-  `tests/accounting/test_journal_sequencing.py`
+  concurrent posting in the same journal (fire two `action_post` calls concurrently; assert no
+  duplicate/skipped sequence number, exercising `account_sequence`'s existing atomic
+  `INSERT ... ON CONFLICT DO UPDATE ... RETURNING`), and `action_cancel`'s draft-only transition
+  (FR-003/004) in `tests/accounting/test_journal_sequencing.py`
 - [ ] T059 [P] [US3] Integration test reused-number-on-repost and `action_reverse(auto_post=False)`
   draft option (FR-005/006) added to `tests/accounting/test_journal_sequencing.py`
 - [ ] T060 [P] [US3] Integration test hash-chain compute/verify and posted-line write rejection
   (FR-007/008) in `tests/accounting/test_hash_chain_audit_trail.py`
 - [ ] T061 [P] [US3] Integration test `action_reset_to_draft` rejection for hash-secured and
   lock-dated moves (FR-009) added to `tests/accounting/test_hash_chain_audit_trail.py`
-- [ ] T062 [P] [US3] Integration test lock-date auto-advance-with-warning and lock-exception
-  grant/revoke/expiry scoping (FR-031/032/033) in `tests/accounting/test_lock_dates_exceptions.py`
+- [ ] T062 [P] [US3] Integration test lock-date auto-advance-with-warning (including the exact
+  boundary case — a move dated *on* the lock date itself, not just before it, is also blocked) and
+  lock-exception grant/revoke/expiry scoping (FR-031/032/033) in
+  `tests/accounting/test_lock_dates_exceptions.py`
 
 ### Implementation for User Story 3
 
@@ -504,8 +508,9 @@ across them, and confirm the analytic report's roll-up.
 
 ### Tests for User Story 6
 
-- [ ] T104 [P] [US6] Unit test `analytic_distribution` validation (unknown analytic-account id,
-  percentages ≠ 100 ± 0.01) (FR-038) in `tests/analytic/test_analytic_distribution.py`
+- [ ] T104 [P] [US6] Unit test `analytic_distribution` validation (unknown analytic-account id, an
+  archived/`active=False` analytic-account id, and percentages ≠ 100 ± 0.01 — all three rejected)
+  (FR-038) in `tests/analytic/test_analytic_distribution.py`
 - [ ] T105 [P] [US6] Integration test `analytic.plan`/`analytic.account` CRUD in
   `tests/analytic/test_analytic_accounts.py`
 - [ ] T106 [P] [US6] Integration test `AccountReportAnalytic` roll-up by analytic account/plan
