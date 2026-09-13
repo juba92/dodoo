@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dodoo.core.fields import Char, Many2one, Selection
+from dodoo.core.fields import Char, Date, Integer, Many2one, Selection
 from dodoo.core.models import BaseModel
 
 TAX_ROUNDING_CHOICES = [
@@ -25,3 +25,20 @@ class ResCompany(BaseModel):
     country_id = Many2one("res.country")
     tax_label = Char(size=16, default="VAT")
     tax_rounding_method = Selection(TAX_ROUNDING_CHOICES, default="round_globally")
+
+    # 008-accounting-parity: fiscal lock dates (FR-031, ADR-039) and realized/
+    # unrealized FX gain-loss accounts (FR-025, ADR-042). The columns are
+    # added via account_data.py's ALTER TABLE idiom (research.md D5, so
+    # `base` itself declares no dependency on `account`'s migration code),
+    # but they must still be declared here as real fields — otherwise
+    # BaseModel.write()/create() silently drop them (both filter `vals`
+    # against `cls._fields`), making them permanently unwritable through the
+    # ORM despite existing in the database.
+    fiscalyear_lock_date = Date()
+    tax_lock_date = Date()
+    sale_lock_date = Date()
+    purchase_lock_date = Date()
+    income_currency_exchange_account_id = Many2one("account.account")
+    expense_currency_exchange_account_id = Many2one("account.account")
+    fiscalyear_last_month = Integer(default=12)
+    fiscalyear_last_day = Integer(default=31)

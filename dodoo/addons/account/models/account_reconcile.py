@@ -143,8 +143,8 @@ class AccountPartialReconcile(BaseModel):
                     "did": debit_line_id,
                     "cid": credit_line_id,
                     "amt": str(amount),
-                    "dca": str(d_cur_amt) if d_cur_amt is not None else None,
-                    "cca": str(c_cur_amt) if c_cur_amt is not None else None,
+                    "dca": str(d_cur_amt) if d_cur_amt is not None else "0",
+                    "cca": str(c_cur_amt) if c_cur_amt is not None else "0",
                     "coid": company_id,
                 },
             )
@@ -192,19 +192,26 @@ class AccountPartialReconcile(BaseModel):
             new_d_residual = Decimal("0") if open_line_id == debit_line_id else new_d_residual
             new_c_residual = Decimal("0") if open_line_id == credit_line_id else new_c_residual
 
-        # FR-025: same transaction-currency exposure fully matched on both
-        # sides, but the company-currency residuals don't net to zero because
-        # the two lines were booked at different rates — the gap is a realized
-        # exchange gain/loss, not a real open balance. Auto-post it to the
-        # company's exchange accounts (skipped when an explicit write-off
-        # above already closed the gap, or the currencies aren't foreign/
-        # matched, or no exchange accounts are configured).
+        # FR-025: same transaction-currency exposure fully matched from at
+        # least one side, but the company-currency residuals don't net to
+        # zero because the two lines were booked at different rates — the gap
+        # is a realized exchange gain/loss, not a real open balance. Once one
+        # side's *entire* currency exposure is consumed, the two lines
+        # represent the identical currency amount, so the other side's
+        # leftover company-currency residual is FX drift by definition (it
+        # was capped below its own full currency-equivalent amount by
+        # `max_amount`'s min() over both sides' company-currency residuals) —
+        # this is exactly why both sides don't reach zero currency residual
+        # simultaneously when rates differ. Auto-post it to the company's
+        # exchange accounts (skipped when an explicit write-off above already
+        # closed the gap, or the currencies aren't foreign/matched, or no
+        # exchange accounts are configured).
         fx_move_id = None
         if gap is None and same_foreign_currency and d_cur_amt is not None and c_cur_amt is not None:
             d_cur_left = d_cur_residual - d_cur_amt
             c_cur_left = c_cur_residual - c_cur_amt
             currency_fully_matched = (
-                abs(d_cur_left) < Decimal("0.01") and abs(c_cur_left) < Decimal("0.01")
+                abs(d_cur_left) < Decimal("0.01") or abs(c_cur_left) < Decimal("0.01")
             )
             fx_gap = None
             if currency_fully_matched:

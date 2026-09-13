@@ -76,26 +76,22 @@ async def test_action_confirm_rejects_broken_continuity(env, bank_journal, compa
     await AccountBankStatement.action_confirm(env, first_id)
 
     # Second statement's balance_start doesn't match the first's balance_end_real.
-    second_id = await _create_statement(
+    broken_id = await _create_statement(
         env, journal_id=bank_journal, company_id=company_id,
         date=datetime.date(2026, 2, 28), balance_start=Decimal("1300.00"),
         balance_end_real=Decimal("1400.00"),
     )
     with pytest.raises(DodooError):
-        await AccountBankStatement.action_confirm(env, second_id)
+        await AccountBankStatement.action_confirm(env, broken_id)
 
-    # A correctly-continued statement confirms cleanly.
-    third_id = await _create_statement(
-        env, journal_id=bank_journal, company_id=company_id,
-        date=datetime.date(2026, 3, 31), balance_start=Decimal("1250.00"),
-        balance_end_real=Decimal("1500.00"),
-    )
-    assert await AccountBankStatement.action_confirm(env, third_id) is True
+    # Correcting the same statement's starting balance lets it confirm cleanly.
+    await AccountBankStatement.write(env, [broken_id], {"balance_start": Decimal("1250.00")})
+    assert await AccountBankStatement.action_confirm(env, broken_id) is True
 
 
 @pytest.mark.asyncio
 async def test_reconcile_against_one_to_one_and_one_to_many(
-    env, bank_journal, company_id, journal_sale, partner_id
+    env, bank_journal, company_id, currency_id, journal_sale, partner_id
 ):
     from dodoo.addons.account.models.account_bank_statement import (
         AccountBankStatementLine,
@@ -130,6 +126,7 @@ async def test_reconcile_against_one_to_one_and_one_to_many(
                 "move_type": "entry",
                 "journal_id": journal_sale,
                 "company_id": company_id,
+                "currency_id": currency_id,
                 "date": datetime.date(2026, 1, 10),
             },
         )

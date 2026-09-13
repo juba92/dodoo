@@ -35,11 +35,21 @@ async def usd_currency_id(env):
 
 
 async def _post_ar_line_move(
-    env, *, journal_id, company_id, partner_id, amount, currency_id=None, amount_currency=None
+    env, *, journal_id, company_id, partner_id, amount, header_currency_id,
+    line_currency_id=None, amount_currency=None
 ):
     """Post a two-line ``entry`` move: one AR (payment_term) line for
     ``amount`` (positive = debit/receivable, negative = credit) plus a
-    balancing line, returning the AR line's id."""
+    balancing line, returning the AR line's id.
+
+    ``header_currency_id`` is the move's own currency — always the company's
+    own currency here, so `action_post`'s FX-conversion-at-posting step
+    (FR-024, keyed off the *header* currency) never fires and never needs a
+    ``res_currency_rate`` row. ``line_currency_id``/``amount_currency`` are
+    set directly on the AR line only, independent of the header, to exercise
+    `reconcile_lines`'s own currency-aware residual logic (FR-022) in
+    isolation — a low-level raw-SQL construction, not the normal invoice flow.
+    """
     from dodoo.addons.account.models.account_move import AccountMove
 
     async with env.dml_conn() as conn:
@@ -63,7 +73,7 @@ async def _post_ar_line_move(
             "move_type": "entry",
             "journal_id": journal_id,
             "company_id": company_id,
-            "currency_id": currency_id,
+            "currency_id": header_currency_id,
             "date": datetime.date(2026, 1, 1),
         },
     )
@@ -91,8 +101,8 @@ async def _post_ar_line_move(
                 "d": str(ar_debit),
                 "c": str(ar_credit),
                 "bal": str(ar_debit - ar_credit),
-                "cur": currency_id,
-                "ac": str(amount_currency) if amount_currency is not None else None,
+                "cur": line_currency_id,
+                "ac": str(amount_currency) if amount_currency is not None else "0",
             },
         )
         ar_line_id = ar_line_row.scalar_one()
@@ -120,7 +130,7 @@ async def _post_ar_line_move(
 
 @pytest.mark.asyncio
 async def test_writeoff_closes_residual_gap(
-    env, company_id, journal_sale, partner_id, writeoff_account
+    env, company_id, currency_id, journal_sale, partner_id, writeoff_account
 ):
     """FR-020: a short payment (98 against a 100 receivable) reconciled with a
     write-off closes both lines fully and posts the 2.00 gap."""
@@ -128,11 +138,11 @@ async def test_writeoff_closes_residual_gap(
 
     debit_line_id = await _post_ar_line_move(
         env, journal_id=journal_sale, company_id=company_id, partner_id=partner_id,
-        amount=Decimal("100.00"),
+        amount=Decimal("100.00"), header_currency_id=currency_id,
     )
     credit_line_id = await _post_ar_line_move(
         env, journal_id=journal_sale, company_id=company_id, partner_id=partner_id,
-        amount=Decimal("-98.00"),
+        amount=Decimal("-98.00"), header_currency_id=currency_id,
     )
 
     result = await AccountPartialReconcile.reconcile_lines(
@@ -170,7 +180,7 @@ async def test_writeoff_closes_residual_gap(
 
 @pytest.mark.asyncio
 async def test_partial_reconcile_populates_amount_currency(
-    env, company_id, journal_sale, partner_id, usd_currency_id
+    env, company_id, currency_id, journal_sale, partner_id, usd_currency_id
 ):
     """FR-022: a partial (not full) reconciliation between two same-foreign-
     currency lines records each side's proportional ``*_amount_currency``."""
@@ -178,13 +188,13 @@ async def test_partial_reconcile_populates_amount_currency(
 
     debit_line_id = await _post_ar_line_move(
         env, journal_id=journal_sale, company_id=company_id, partner_id=partner_id,
-        amount=Decimal("200.00"), currency_id=usd_currency_id,
-        amount_currency=Decimal("200.00"),
+        amount=Decimal("200.00"), header_currency_id=currency_id,
+        line_currency_id=usd_currency_id, amount_currency=Decimal("200.00"),
     )
     credit_line_id = await _post_ar_line_move(
         env, journal_id=journal_sale, company_id=company_id, partner_id=partner_id,
-        amount=Decimal("-200.00"), currency_id=usd_currency_id,
-        amount_currency=Decimal("-200.00"),
+        amount=Decimal("-200.00"), header_currency_id=currency_id,
+        line_currency_id=usd_currency_id, amount_currency=Decimal("-200.00"),
     )
 
     result = await AccountPartialReconcile.reconcile_lines(

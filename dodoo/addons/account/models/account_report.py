@@ -107,7 +107,7 @@ class AccountReportTrialBalance(_VirtualReport):
         """
         async with env.dml_conn() as conn:
             rows = await conn.execute(text(sql), period_params)
-            by_account = {r["account_id"]: dict(r._mapping) for r in rows}
+            by_account = {r._mapping["account_id"]: dict(r._mapping) for r in rows}
 
         # FR-034, ADR-044: each account's opening balance is everything posted
         # strictly before `date_from` — merged in as a starting point rather

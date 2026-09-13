@@ -134,7 +134,9 @@ async def test_valid_distribution_accepted_and_rolls_up(
             "account_id": revenue_account,
             "date": datetime.date(2025, 4, 1),
             "display_type": "product",
+            "debit": 0,
             "credit": 1000,
+            "balance": -1000,
             "analytic_distribution": {str(a1): 70, str(a2): 30},
         },
     )

@@ -7,13 +7,52 @@ from decimal import Decimal
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import text
+
+
+async def _tax_account_id(env, company_id):
+    async with env.dml_conn() as conn:
+        row = await conn.execute(
+            text("SELECT id FROM account_account WHERE code='2500' AND company_id=:cid"),
+            {"cid": company_id},
+        )
+        return row.scalar_one()
+
+
+async def _add_tax_repartition_line(env, tax_id, company_id):
+    """Every tax needs a `tax`-type repartition line with an account, or
+    `_compute_tax_lines` has nowhere to post it and silently skips the line."""
+    from dodoo.addons.account.models.account_tax import AccountTaxRepartitionLine
+
+    account_id = await _tax_account_id(env, company_id)
+    await AccountTaxRepartitionLine.create(
+        env,
+        {
+            "tax_id": tax_id,
+            "document_type": "invoice",
+            "repartition_type": "base",
+            "factor_percent": 100,
+            "sequence": 1,
+        },
+    )
+    await AccountTaxRepartitionLine.create(
+        env,
+        {
+            "tax_id": tax_id,
+            "document_type": "invoice",
+            "repartition_type": "tax",
+            "factor_percent": 100,
+            "account_id": account_id,
+            "sequence": 2,
+        },
+    )
 
 
 @pytest_asyncio.fixture
 async def sale_tax_15(env, company_id):
     from dodoo.addons.account.models.account_tax import AccountTax
 
-    return await AccountTax.create(
+    tax_id = await AccountTax.create(
         env,
         {
             "name": "VAT 15%",
@@ -24,13 +63,15 @@ async def sale_tax_15(env, company_id):
             "company_id": company_id,
         },
     )
+    await _add_tax_repartition_line(env, tax_id, company_id)
+    return tax_id
 
 
 @pytest_asyncio.fixture
 async def sale_tax_15_incl(env, company_id):
     from dodoo.addons.account.models.account_tax import AccountTax
 
-    return await AccountTax.create(
+    tax_id = await AccountTax.create(
         env,
         {
             "name": "VAT 15% (incl.)",
@@ -41,6 +82,8 @@ async def sale_tax_15_incl(env, company_id):
             "company_id": company_id,
         },
     )
+    await _add_tax_repartition_line(env, tax_id, company_id)
+    return tax_id
 
 
 @pytest_asyncio.fixture
@@ -151,6 +194,7 @@ async def _two_line_invoice_with_tax(env, company_id, journal_sale, currency_id,
             "company_id": company_id,
         },
     )
+    await _add_tax_repartition_line(env, tax_id, company_id)
     # Each line's raw tax is 64.5484 * 15.5% = 10.005002 — rounds up to 10.01
     # individually, but the raw *sum* (20.010004) rounds down to 20.01.
     for _ in range(2):

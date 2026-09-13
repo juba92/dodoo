@@ -1,5 +1,13 @@
 {
   "Currency Code": "رمز العملة",
+  "Expense Currency Exchange Account": "حساب فروق العملة للمصروفات",
+  "Fiscalyear Last Day": "آخر يوم في السنة المالية",
+  "Fiscalyear Last Month": "آخر شهر في السنة المالية",
+  "Fiscalyear Lock Date": "تاريخ قفل السنة المالية",
+  "Income Currency Exchange Account": "حساب فروق العملة للإيرادات",
+  "Purchase Lock Date": "تاريخ قفل المشتريات",
+  "Sale Lock Date": "تاريخ قفل المبيعات",
+  "Tax Lock Date": "تاريخ قفل الضريبة",
   "Date Format": "تنسيق التاريخ",
   "Decimal Point": "الفاصلة العشرية",
   "Default Val": "القيمة الافتراضية",

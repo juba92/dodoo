@@ -1,5 +1,13 @@
 {
   "Currency Code": "Currency Code",
+  "Expense Currency Exchange Account": "Expense Currency Exchange Account",
+  "Fiscalyear Last Day": "Fiscal Year Last Day",
+  "Fiscalyear Last Month": "Fiscal Year Last Month",
+  "Fiscalyear Lock Date": "Fiscal Year Lock Date",
+  "Income Currency Exchange Account": "Income Currency Exchange Account",
+  "Purchase Lock Date": "Purchase Lock Date",
+  "Sale Lock Date": "Sale Lock Date",
+  "Tax Lock Date": "Tax Lock Date",
   "Date Format": "Date Format",
   "Decimal Point": "Decimal Separator",
   "Default Val": "Default Value",

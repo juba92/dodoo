@@ -12,9 +12,9 @@ from sqlalchemy import text
 
 @pytest_asyncio.fixture
 async def sale_tax_15(env, company_id):
-    from dodoo.addons.account.models.account_tax import AccountTax
+    from dodoo.addons.account.models.account_tax import AccountTax, AccountTaxRepartitionLine
 
-    return await AccountTax.create(
+    tax_id = await AccountTax.create(
         env,
         {
             "name": "VAT 15%",
@@ -25,6 +25,29 @@ async def sale_tax_15(env, company_id):
             "company_id": company_id,
         },
     )
+    # A tax needs a `tax`-type repartition line with an account, or
+    # `_compute_tax_lines` has nowhere to post it and silently skips it.
+    async with env.dml_conn() as conn:
+        row = await conn.execute(
+            text("SELECT id FROM account_account WHERE code='2500' AND company_id=:cid"),
+            {"cid": company_id},
+        )
+        tax_account_id = row.scalar_one()
+    await AccountTaxRepartitionLine.create(
+        env,
+        {
+            "tax_id": tax_id, "document_type": "invoice", "repartition_type": "base",
+            "factor_percent": 100, "sequence": 1,
+        },
+    )
+    await AccountTaxRepartitionLine.create(
+        env,
+        {
+            "tax_id": tax_id, "document_type": "invoice", "repartition_type": "tax",
+            "factor_percent": 100, "account_id": tax_account_id, "sequence": 2,
+        },
+    )
+    return tax_id
 
 
 @pytest_asyncio.fixture

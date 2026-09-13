@@ -487,13 +487,13 @@ class AccountMove(BaseModel):
             tax_rows = await conn.execute(
                 text(
                     "SELECT t.id, t.type_tax_use, t.amount_type, t.amount, t.price_include, "
-                    "       r.account_id AS rep_account_id, t.sequence "
+                    "       r.account_id AS rep_account_id "
                     "FROM account_move_line_tax_rel rel "
                     "JOIN account_tax t ON t.id = rel.tax_id "
                     "LEFT JOIN account_tax_repartition_line r ON r.tax_id = t.id "
                     "   AND r.document_type = 'invoice' AND r.repartition_type = 'tax' "
                     "WHERE rel.move_line_id = :lid "
-                    "ORDER BY t.sequence, t.id"
+                    "ORDER BY t.id"
                 ),
                 {"lid": line_id},
             )
@@ -995,7 +995,7 @@ class AccountMove(BaseModel):
             rows = await conn.execute(
                 text(
                     "SELECT id, account_id, partner_id, name, date, price_unit, "
-                    "quantity, discount FROM account_move_line "
+                    "quantity, discount, debit, credit FROM account_move_line "
                     "WHERE move_id=:mid AND display_type='product' ORDER BY sequence, id"
                 ),
                 {"mid": move_id},
@@ -1043,6 +1043,8 @@ class AccountMove(BaseModel):
                     "price_unit": line["price_unit"],
                     "quantity": line["quantity"],
                     "discount": line.get("discount") or 0,
+                    "debit": line["debit"],
+                    "credit": line["credit"],
                     "tax_ids": tax_ids_by_line.get(line["id"], []),
                 },
             )
@@ -1160,10 +1162,12 @@ class AccountMove(BaseModel):
         if move_type not in _INVOICE_TYPES:
             return
 
-        # Sum balances of non-payment_term lines
+        # Sum balances (and, for a foreign-currency move, amount_currency too)
+        # of non-payment_term lines.
         bal_row = await conn.execute(
             text(
-                "SELECT COALESCE(SUM(debit),0), COALESCE(SUM(credit),0) "
+                "SELECT COALESCE(SUM(debit),0), COALESCE(SUM(credit),0), "
+                "       COALESCE(SUM(amount_currency),0) "
                 "FROM account_move_line "
                 "WHERE move_id=:mid AND display_type NOT IN ('line_section','line_note','payment_term')"
             ),
@@ -1172,10 +1176,30 @@ class AccountMove(BaseModel):
         row = bal_row.fetchone()
         total_debit = Decimal(str(row[0] or "0"))
         total_credit = Decimal(str(row[1] or "0"))
+        total_amount_currency = Decimal(str(row[2] or "0"))
         imbalance = total_credit - total_debit  # positive → need a debit line
 
         if imbalance == 0:
             return  # Already balanced without a payment_term line
+
+        # FR-022/024: the auto-generated AR/AP line must also carry its own
+        # currency_id/amount_currency for a foreign-currency move, or
+        # reconcile_lines's currency-aware residual logic never sees this
+        # line as foreign-currency at all (amount_currency would default to
+        # 0, the same as a domestic line).
+        move_row = await conn.execute(
+            text("SELECT currency_id FROM account_move WHERE id=:mid"), {"mid": move_id}
+        )
+        move_currency_id = move_row.scalar_one_or_none()
+        company_row = await conn.execute(
+            text("SELECT currency_id FROM res_company WHERE id=:cid"), {"cid": company_id}
+        )
+        company_currency_id = company_row.scalar_one_or_none()
+        is_foreign = bool(
+            move_currency_id and company_currency_id and move_currency_id != company_currency_id
+        )
+        line_currency_id = move_currency_id if is_foreign else None
+        line_amount_currency = -total_amount_currency if is_foreign else Decimal("0")
 
         # Determine AR or AP account
         is_receivable = move_type in _SALE_TYPES
@@ -1241,9 +1265,10 @@ class AccountMove(BaseModel):
             text(
                 "INSERT INTO account_move_line "
                 "(move_id, sequence, account_id, partner_id, date, display_type, "
-                "debit, credit, balance, amount_residual, create_date, write_date) "
+                "debit, credit, balance, amount_residual, currency_id, amount_currency, "
+                "create_date, write_date) "
                 "VALUES (:mid, 9998, :acct, :pid, :dt, 'payment_term', "
-                ":debit, :credit, :bal, :bal, now(), now())"
+                ":debit, :credit, :bal, :bal, :cur, :ac, now(), now())"
             ),
             {
                 "mid": move_id,
@@ -1253,6 +1278,8 @@ class AccountMove(BaseModel):
                 "debit": str(debit),
                 "credit": str(credit),
                 "bal": str(bal),
+                "cur": line_currency_id,
+                "ac": str(line_amount_currency),
             },
         )
 
