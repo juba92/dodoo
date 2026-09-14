@@ -547,7 +547,7 @@ now independently functional.
 
 ## Phase 9: Polish & Cross-Cutting Concerns
 
-- [ ] T112 [P] Documentation: verify all nine ADR files from T005 accurately reflect the final
+- [X] T112 [P] Documentation: verify all nine ADR files from T005 accurately reflect the final
   implementation (Principle V)
 - [X] T113 [P] Create `dodoo/addons/account/data/indexes.py` (account's first — mirrors
   `hr`/`stock`'s `ensure_indexes(env, ddl)` convention): `(account_id, date)` composite for the

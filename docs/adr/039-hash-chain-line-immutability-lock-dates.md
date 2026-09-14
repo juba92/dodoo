@@ -21,10 +21,14 @@ prefix `f"HASH/{journal.code}"`). `AccountMove.verify_hash_chain` recomputes eve
 hash in order and returns the first mismatch. `AccountMoveLine.write` gains a state check
 rejecting writes when the parent move is `posted`/`cancel`. `AccountMove.action_reset_to_draft`
 gains two more rejection conditions: `inalterable_hash is not None`, and the move's `date` on/
-before the applicable lock date. Lock dates live as four new `res_company` columns
-(`fiscalyear_lock_date`, `tax_lock_date`, `sale_lock_date`, `purchase_lock_date`) added via the
-existing `ALTER TABLE` idiom — not a new `account.fiscal.year` model, matching Odoo 19's own
-design (lock enforcement reads `res.company` fields directly). A new `AccountLockException` model
+before the applicable lock date. Lock dates live as four new `res_company` fields
+(`fiscalyear_lock_date`, `tax_lock_date`, `sale_lock_date`, `purchase_lock_date`) — not a new
+`account.fiscal.year` model, matching Odoo 19's own design (lock enforcement reads `res.company`
+fields directly). These were initially added only as raw `ALTER TABLE` columns (the idiom used for
+extending a cross-addon model like `res_company` from `account`'s data seeder); that was a real bug,
+since `BaseModel.write`/`create` filter `vals` against `cls._fields`, silently dropping any column
+not also declared as a real field, so the lock dates could never actually be set through the ORM.
+Fixed by declaring all four as proper `Date` fields on `ResCompany` alongside the raw-column DDL. A new `AccountLockException` model
 (`company_id`, `lock_date_field`, `lock_date`, `user_id`, `journal_id`, `end_date`,
 `granted_by_id`, `active`) is checked by `_get_effective_lock_date`. A lock hit does not
 hard-fail: `action_post`/`write` push the move's `date` to `lock_date + 1 day` and return a
