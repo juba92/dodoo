@@ -309,6 +309,16 @@ class AccountMove(BaseModel):
                 {"move_id": move_id, "reversal_move_id": reversal_ids[0], "amount": str(amount)}
             )
 
+        _log.info(
+            "account.move currency revaluation run",
+            extra={
+                "model": "res.company",
+                "record_id": company_id,
+                "event": "revalue_currency_balances",
+                "as_of": as_of.isoformat(),
+                "entries": len(entries),
+            },
+        )
         return entries
 
     @classmethod
@@ -952,9 +962,28 @@ class AccountMove(BaseModel):
             )
             expected = hashlib.sha256(digest_input.encode("utf-8")).hexdigest()
             if expected != move["inalterable_hash"]:
+                _log.info(
+                    "account.journal hash chain broken",
+                    extra={
+                        "model": "account.journal",
+                        "record_id": journal_id,
+                        "event": "verify_hash_chain",
+                        "valid": False,
+                        "first_break_move_id": move["id"],
+                    },
+                )
                 return {"valid": False, "first_break_move_id": move["id"]}
             previous_hash = move["inalterable_hash"]
 
+        _log.info(
+            "account.journal hash chain verified",
+            extra={
+                "model": "account.journal",
+                "record_id": journal_id,
+                "event": "verify_hash_chain",
+                "valid": True,
+            },
+        )
         return {"valid": True, "first_break_move_id": None}
 
     # ---- Debit notes and down payments (FR-011/012, ADR-040) ----
@@ -1153,6 +1182,16 @@ class AccountMove(BaseModel):
                 },
             )
             await conn.commit()
+
+        _log.info(
+            "account.move down payments applied",
+            extra={
+                "model": "account.move",
+                "record_id": invoice_id,
+                "event": "apply_down_payments",
+                "total_down_payment": str(total_dp),
+            },
+        )
 
     @classmethod
     async def _compute_payment_term_lines(

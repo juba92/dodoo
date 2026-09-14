@@ -562,7 +562,7 @@ now independently functional.
 - [ ] T115 [P] Extend `tests/e2e/test_web_ui_a11y.py` for the four new screens (bank statements,
   lock exceptions, analytic accounts, tax report): zero WCAG 2.1 AA violations, keyboard-operable,
   no colour-only status indicator (ACC-001…003)
-- [ ] T116 Security hardening pass: confirm OWASP focus areas from plan.md's Constitution Check —
+- [X] T116 Security hardening pass: confirm OWASP focus areas from plan.md's Constitution Check —
   A01 (only `"Accounting Manager"` can grant a lock exception or toggle hash-chain mode; verified
   by an explicit non-manager-rejection test in `tests/accounting/test_lock_dates_exceptions.py`)
   and A08 (a tampered posted line's hash-chain break is detected by `verify_hash_chain`; verified
@@ -572,10 +572,10 @@ now independently functional.
 - [ ] T118 Confirm `tests/accounting/test_reports_opening_balance.py` and
   `tests/accounting/test_tax_report.py` are excluded from any batched/parallel `tests/accounting/`
   run in CI config, per `[[accounting-test-isolation]]`
-- [ ] T119 Run the full pre-existing `tests/accounting/` suite (the 6 files predating this
+- [X] T119 Run the full pre-existing `tests/accounting/` suite (the 6 files predating this
   feature) unchanged and confirm 100% pass, verifying SC-007 (no regression to already-correct
   behavior)
-- [ ] T120 Observability review (Principle IX): confirm every new state-changing action added by
+- [X] T120 Observability review (Principle IX): confirm every new state-changing action added by
   this feature (`action_cancel`, `verify_hash_chain`, hash-chain toggle, lock-exception grant/
   revoke, `revalue_currency_balances`, bank-statement `action_confirm`/`reconcile_against`,
   `action_create_debit_note`, `apply_down_payments`, `close_fiscal_year`) emits a `_log.info(...)`

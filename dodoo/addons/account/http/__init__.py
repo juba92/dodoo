@@ -113,6 +113,15 @@ async def toggle_hash_chain(request: Request, journal_id: int) -> JSONResponse:
         await AccountJournal.write(
             env, [journal_id], {"restrict_mode_hash_table": payload.enabled}
         )
+        _log.info(
+            "account.journal hash chain toggled",
+            extra={
+                "model": "account.journal",
+                "record_id": journal_id,
+                "event": "toggle_hash_chain",
+                "enabled": payload.enabled,
+            },
+        )
         return JSONResponse({"result": True})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -157,6 +166,16 @@ async def grant_lock_exception(request: Request) -> JSONResponse:
                 "granted_by_id": uid,
             },
         )
+        _log.info(
+            "account.lock.exception granted",
+            extra={
+                "model": "account.lock.exception",
+                "record_id": exception_id,
+                "event": "grant_lock_exception",
+                "lock_date_field": payload.lock_date_field,
+                "granted_by_id": uid,
+            },
+        )
         return JSONResponse({"result": exception_id})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -175,6 +194,14 @@ async def revoke_lock_exception(request: Request, exception_id: int) -> JSONResp
 
         await require_groups(env, get_uid(), GROUP_MANAGER)
         await AccountLockException.write(env, [exception_id], {"active": False})
+        _log.info(
+            "account.lock.exception revoked",
+            extra={
+                "model": "account.lock.exception",
+                "record_id": exception_id,
+                "event": "revoke_lock_exception",
+            },
+        )
         return JSONResponse({"result": True})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
@@ -11,6 +12,8 @@ from dodoo.core.models import BaseModel
 
 if TYPE_CHECKING:
     from dodoo import Environment
+
+_log = logging.getLogger(__name__)
 
 STATEMENT_STATE_CHOICES = [
     ("open", "Open"),
@@ -93,6 +96,14 @@ class AccountBankStatement(BaseModel):
                 )
 
         await super().write(env, [statement_id], {"state": "confirmed"})
+        _log.info(
+            "account.bank.statement confirmed",
+            extra={
+                "model": "account.bank.statement",
+                "record_id": statement_id,
+                "event": "action_confirm",
+            },
+        )
         return True
 
 
@@ -140,6 +151,15 @@ class AccountBankStatementLine(BaseModel):
 
         if len(move_line_ids) == 1:
             await super().write(env, [line_id], {"move_line_id": move_line_ids[0]})
+            _log.info(
+                "account.bank.statement.line reconciled",
+                extra={
+                    "model": "account.bank.statement.line",
+                    "record_id": line_id,
+                    "event": "reconcile_against",
+                    "move_line_ids": move_line_ids,
+                },
+            )
             return {"reconciled": [line_id]}
 
         # 1:N split: this line's own amount is divided across N child lines,
@@ -170,4 +190,14 @@ class AccountBankStatementLine(BaseModel):
             )
             await conn.commit()
 
+        _log.info(
+            "account.bank.statement.line split-reconciled",
+            extra={
+                "model": "account.bank.statement.line",
+                "record_id": line_id,
+                "event": "reconcile_against",
+                "move_line_ids": move_line_ids,
+                "created_ids": created_ids,
+            },
+        )
         return {"reconciled": created_ids}
