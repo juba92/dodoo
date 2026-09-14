@@ -19,7 +19,7 @@
   --border-hard:  rgba(0,0,0,.15);
 
   --text:         #3d4154;
-  --text-muted:   #8f8f8f;
+  --text-muted:   #6b6b6b; /* WCAG 2.1 AA: >=4.5:1 on both --surface (#fff) and --bg (#f8f9fa); #8f8f8f was 3.23:1, failing color-contrast */
   --text-light:   #c8c8c8;
 
   --navbar-h:     46px;

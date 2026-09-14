@@ -180,7 +180,18 @@ export async function render(container, params) {
     } else {
       records.forEach(rec => {
         const tr = document.createElement('tr');
-        tr.onclick = () => App.navigate(`${modelRouteBase()}/${model}/${rec.id}`);
+        const open = () => App.navigate(`${modelRouteBase()}/${model}/${rec.id}`);
+        tr.onclick = open;
+        // A row is the only way to open a record — it must be reachable and
+        // operable from the keyboard, not just a pointer (ACC-002).
+        tr.tabIndex = 0;
+        tr.setAttribute('role', 'button');
+        tr.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            open();
+          }
+        });
         columns.forEach(col => {
           const td = document.createElement('td');
           td.textContent = _cellText(rec[col]);  // always textContent

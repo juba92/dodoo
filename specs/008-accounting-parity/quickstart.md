@@ -154,6 +154,7 @@ Verified 2026-09-14 against a real local PostgreSQL 15 instance (see T117/T119 i
       per this project's convention that the 6 pre-existing files are never modified for correctness.
 - [X] PERF-001/002/004 CI benchmarks pass (`tests/benchmarks/test_accounting_perf.py`); no regression
       on pre-existing report/posting benchmarks.
-- [ ] Zero WCAG 2.1 AA violations on the four new screens — NOT verified: Playwright is not
-      installed in this environment, so `tests/e2e/test_web_ui_a11y.py` could not be executed
-      (see T115).
+- [X] Zero WCAG 2.1 AA violations on the four new screens — verified for real with Playwright/
+      Chromium (installed this session) against a live server; see T115 for the two sitewide,
+      pre-existing bugs this surfaced and fixed (a client module-duplication navigation bug and a
+      `--text-muted` contrast failure), neither specific to these four screens.

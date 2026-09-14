@@ -40,7 +40,12 @@ def _login(page: Page) -> None:
     page.fill("#f-login", "admin")
     page.fill("#f-password", "admin")
     page.click("button[type=submit]")
-    page.wait_for_url("**#/home")
+    # Not wait_for_url("**#/home"): the SPA's post-login redirect is a
+    # same-document hash change with no 'load' lifecycle event, so
+    # wait_for_url's default wait_until="load" never resolves and times out
+    # even though the navigation already happened. Wait for the home
+    # screen's own content instead.
+    page.wait_for_selector(".module-tile")
 
 
 def _run_axe(page: Page) -> list[dict]:
@@ -100,4 +105,101 @@ def test_a11y_form(a11y_page: Page):
     assert critical == [], (
         "WCAG 2.1 AA critical violations on form screen:\n"
         + "\n".join(f"  [{v['id']}] {v['description']}" for v in critical)
+    )
+
+
+# 008-accounting-parity (ACC-001…003): four new screens — bank statements, lock
+# exceptions, analytic accounts, tax report — same axe pass as the generic
+# list/form/report screens above (zero WCAG 2.1 AA critical/serious violations).
+
+
+def test_a11y_bank_statements_list(a11y_page: Page):
+    _login(a11y_page)
+    a11y_page.goto(f"{_CLIENT}#/model/account.bank.statement")
+    a11y_page.wait_for_selector("table, .empty-state")
+    violations = _run_axe(a11y_page)
+    critical = [v for v in violations if v.get("impact") in ("critical", "serious")]
+    assert critical == [], (
+        "WCAG 2.1 AA critical violations on bank statements list:\n"
+        + "\n".join(f"  [{v['id']}] {v['description']}" for v in critical)
+    )
+
+
+def test_a11y_lock_exceptions_list(a11y_page: Page):
+    _login(a11y_page)
+    a11y_page.goto(f"{_CLIENT}#/model/account.lock.exception")
+    a11y_page.wait_for_selector("table, .empty-state")
+    violations = _run_axe(a11y_page)
+    critical = [v for v in violations if v.get("impact") in ("critical", "serious")]
+    assert critical == [], (
+        "WCAG 2.1 AA critical violations on lock exceptions list:\n"
+        + "\n".join(f"  [{v['id']}] {v['description']}" for v in critical)
+    )
+
+
+def test_a11y_analytic_accounts_list(a11y_page: Page):
+    _login(a11y_page)
+    a11y_page.goto(f"{_CLIENT}#/model/analytic.account")
+    a11y_page.wait_for_selector("table, .empty-state")
+    violations = _run_axe(a11y_page)
+    critical = [v for v in violations if v.get("impact") in ("critical", "serious")]
+    assert critical == [], (
+        "WCAG 2.1 AA critical violations on analytic accounts list:\n"
+        + "\n".join(f"  [{v['id']}] {v['description']}" for v in critical)
+    )
+
+
+def test_a11y_tax_report(a11y_page: Page):
+    _login(a11y_page)
+    a11y_page.goto(f"{_CLIENT}#/accounting/reports/tax-report")
+    a11y_page.wait_for_selector("table, .empty-state")
+    violations = _run_axe(a11y_page)
+    critical = [v for v in violations if v.get("impact") in ("critical", "serious")]
+    assert critical == [], (
+        "WCAG 2.1 AA critical violations on tax report screen:\n"
+        + "\n".join(f"  [{v['id']}] {v['description']}" for v in critical)
+    )
+
+
+def test_a11y_lock_exception_active_status_is_text_not_color_only(a11y_page: Page):
+    """ACC-003: `account.lock.exception`'s `active` field (the only status
+    indicator on this screen — revoked exceptions are soft-deleted via
+    `active=False`) must render as a visible text label ("Yes"/"No" per the
+    generic list renderer's `_cellText`), not a color-only badge."""
+    _login(a11y_page)
+    a11y_page.goto(f"{_CLIENT}#/model/account.lock.exception")
+    a11y_page.wait_for_selector("table, .empty-state")
+    headers = a11y_page.locator("table.data-table thead th")
+    active_col = None
+    for i in range(headers.count()):
+        if headers.nth(i).inner_text().strip().lower() == "active":
+            active_col = i
+            break
+    if active_col is None:
+        pytest.skip("'active' column not present among the picked list columns")
+    first_row_cells = a11y_page.locator("table.data-table tbody tr").first.locator("td")
+    if first_row_cells.count() == 0 or "No records" in first_row_cells.first.inner_text():
+        pytest.skip("no lock exceptions seeded")
+    text = first_row_cells.nth(active_col).inner_text().strip()
+    assert text in ("Yes", "No"), (
+        f"active-status cell must carry a visible Yes/No text label, not color alone; got {text!r}"
+    )
+
+
+def test_a11y_list_rows_keyboard_reachable(a11y_page: Page):
+    """ACC-002: every row-activation affordance on the four new screens must
+    be operable without a pointer. This is a framework-level property of the
+    shared generic list renderer (dodoo/addons/web/static/views/list.js),
+    verified once here rather than per-screen since all four new screens
+    (and every other model list) go through the same `<tr onclick=...>` code
+    path with no feature-specific override."""
+    _login(a11y_page)
+    a11y_page.goto(f"{_CLIENT}#/model/account.bank.statement")
+    a11y_page.wait_for_selector("table.data-table")
+    row = a11y_page.locator("table.data-table tbody tr").first
+    if row.count() == 0 or "No records" in row.inner_text():
+        pytest.skip("no bank statements seeded")
+    assert row.get_attribute("tabindex") not in (None, "-1"), (
+        "list rows are the only way to open a record and must be in the tab "
+        "order (tabindex must be set and not -1) for keyboard operability"
     )

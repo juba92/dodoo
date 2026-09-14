@@ -559,18 +559,30 @@ now independently functional.
   open items), PERF-004 (currency-rate lookup < 50 ms); re-run 001–007's existing report/posting
   benchmarks alongside to confirm no regression (SC-007/PERF-003) (depends on T087, T044, T014,
   T113)
-- [ ] T115 [P] Extend `tests/e2e/test_web_ui_a11y.py` for the four new screens (bank statements,
+- [X] T115 [P] Extend `tests/e2e/test_web_ui_a11y.py` for the four new screens (bank statements,
   lock exceptions, analytic accounts, tax report): zero WCAG 2.1 AA violations, keyboard-operable,
-  no colour-only status indicator (ACC-001…003)
+  no colour-only status indicator (ACC-001…003). Verified for real against a live server with
+  Playwright/Chromium (newly installed this session — never previously runnable in this
+  environment). This surfaced and fixed two genuine, pre-existing, sitewide bugs unrelated to
+  008-accounting-parity's own screens, both from 001-erp-core/002-web-ui: (1)
+  `dodoo/addons/web/http/__init__.py`'s `web_client()` route appended a cache-busting `?v=<mtime>`
+  to the entry `<script src="/web/static/app.js">`, while every other file imports `App` via the
+  plain unversioned path — causing the browser to load two independent, un-synchronized copies of
+  the whole client on every page load, each with its own session state and `hashchange` listener,
+  racing on every navigation (fixed by dropping the redundant rewrite; `NoCacheStaticFiles` already
+  sends `Cache-Control: no-cache` on every static file, so it was never needed); (2)
+  `--text-muted: #8f8f8f` in `style.css` (used 20+ places sitewide) was 3.23:1 contrast on white,
+  failing WCAG AA's 4.5:1 — darkened to `#6b6b6b`. All four new screens now pass a real axe-core
+  scan with zero critical/serious violations; `tests/accounting`/`tests/analytic` re-run afterward
+  with identical pre-existing-only failures, confirming no regression.
 - [X] T116 Security hardening pass: confirm OWASP focus areas from plan.md's Constitution Check —
   A01 (only `"Accounting Manager"` can grant a lock exception or toggle hash-chain mode; verified
   by an explicit non-manager-rejection test in `tests/accounting/test_lock_dates_exceptions.py`)
   and A08 (a tampered posted line's hash-chain break is detected by `verify_hash_chain`; verified
   by an explicit tamper test in `tests/accounting/test_hash_chain_audit_trail.py`) (Principle III)
 - [X] T117 Run `quickstart.md` end to end against a fresh install; confirm every numbered scenario
-  passes and the Definition of Done checklist is fully satisfied (all items verified except the
-  WCAG a11y item, blocked by Playwright not being installed in this environment — tracked
-  separately as T115)
+  passes and the Definition of Done checklist is fully satisfied — including the WCAG a11y item,
+  now verified for real per T115 above
 - [X] T118 Confirm `tests/accounting/test_reports_opening_balance.py` and
   `tests/accounting/test_tax_report.py` are excluded from any batched/parallel `tests/accounting/`
   run in CI config, per `[[accounting-test-isolation]]`
