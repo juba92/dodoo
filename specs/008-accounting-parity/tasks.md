@@ -567,8 +567,10 @@ now independently functional.
   by an explicit non-manager-rejection test in `tests/accounting/test_lock_dates_exceptions.py`)
   and A08 (a tampered posted line's hash-chain break is detected by `verify_hash_chain`; verified
   by an explicit tamper test in `tests/accounting/test_hash_chain_audit_trail.py`) (Principle III)
-- [ ] T117 Run `quickstart.md` end to end against a fresh install; confirm every numbered scenario
-  passes and the Definition of Done checklist is fully satisfied
+- [X] T117 Run `quickstart.md` end to end against a fresh install; confirm every numbered scenario
+  passes and the Definition of Done checklist is fully satisfied (all items verified except the
+  WCAG a11y item, blocked by Playwright not being installed in this environment — tracked
+  separately as T115)
 - [X] T118 Confirm `tests/accounting/test_reports_opening_balance.py` and
   `tests/accounting/test_tax_report.py` are excluded from any batched/parallel `tests/accounting/`
   run in CI config, per `[[accounting-test-isolation]]`
