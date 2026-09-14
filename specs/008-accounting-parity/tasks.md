@@ -569,7 +569,7 @@ now independently functional.
   by an explicit tamper test in `tests/accounting/test_hash_chain_audit_trail.py`) (Principle III)
 - [ ] T117 Run `quickstart.md` end to end against a fresh install; confirm every numbered scenario
   passes and the Definition of Done checklist is fully satisfied
-- [ ] T118 Confirm `tests/accounting/test_reports_opening_balance.py` and
+- [X] T118 Confirm `tests/accounting/test_reports_opening_balance.py` and
   `tests/accounting/test_tax_report.py` are excluded from any batched/parallel `tests/accounting/`
   run in CI config, per `[[accounting-test-isolation]]`
 - [X] T119 Run the full pre-existing `tests/accounting/` suite (the 6 files predating this
