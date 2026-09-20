@@ -34,11 +34,11 @@ the existing `dodoo/addons/account` addon; no changes to `base`, no new addon.
 
 ## Phase 1: Setup
 
-- [ ] T001 [P] File ADR docs from `plan.md`'s embedded ADR text: `docs/adr/049-supplier-rank-cross-addon-column.md`,
+- [X] T001 [P] File ADR docs from `plan.md`'s embedded ADR text: `docs/adr/049-supplier-rank-cross-addon-column.md`,
   `docs/adr/050-ap-ledger-on-demand-computed-endpoint.md`,
   `docs/adr/051-bespoke-vendor-views-dedicated-create-update-routes.md` (title/status/context/decision/consequences
   + one-line threat note each, per Principle V)
-- [ ] T002 [P] Confirm `pyproject.toml`'s ruff/pytest globs already cover the touched paths
+- [X] T002 [P] Confirm `pyproject.toml`'s ruff/pytest globs already cover the touched paths
   (`dodoo/addons/account`, `tests/accounting`) — no new addon, no config change expected; run
   `ruff check` as a sanity check
 
@@ -50,17 +50,17 @@ the existing `dodoo/addons/account` addon; no changes to `base`, no new addon.
 schema column, the write path for the raw `account`-owned columns, and the shared test fixture
 created here.
 
-- [ ] T003 [P] Extend `_PARTNER_FK_COLUMNS` in `dodoo/addons/account/data/account_data.py` with
+- [X] T003 [P] Extend `_PARTNER_FK_COLUMNS` in `dodoo/addons/account/data/account_data.py` with
   `"ALTER TABLE res_partner ADD COLUMN IF NOT EXISTS supplier_rank INTEGER DEFAULT 0"`, appended
   after the existing `customer_rank`/`property_currency_id` entries without modifying them
   (ADR-049, data-model.md)
-- [ ] T004 [P] Extend `_PROPERTY_COLUMNS` in `dodoo/addons/account/models/account_partner.py`'s
+- [X] T004 [P] Extend `_PROPERTY_COLUMNS` in `dodoo/addons/account/models/account_partner.py`'s
   `write_partner_properties` with `"supplier_rank"` and `"property_supplier_payment_term_id"`
   alongside its existing three entries, so the vendor create/update routes (US1) can persist them
   (data-model.md)
-- [ ] T005 Extend `tests/accounting/test_migrations.py`'s `EXPECTED_COLUMNS` with
+- [X] T005 Extend `tests/accounting/test_migrations.py`'s `EXPECTED_COLUMNS` with
   `("res_partner", "supplier_rank")` (depends on T003)
-- [ ] T006 [P] Add a `vendor_id` fixture to `tests/accounting/conftest.py` for use by all three
+- [X] T006 [P] Add a `vendor_id` fixture to `tests/accounting/conftest.py` for use by all three
   stories' tests: `ResPartner.create` for the plain fields (`name`, `company_id`, `active`,
   `email`, `phone`, `street`, `city`, `zip`, `vat`) followed by `write_partner_properties(env,
   partner_id, {"supplier_rank": 1, "property_supplier_payment_term_id": payment_term_id,
@@ -86,27 +86,27 @@ ledger stays reachable, confirm delete is blocked once it has a posted bill.
 
 ### Tests for User Story 1
 
-- [ ] T007 [P] [US1] Integration test: `POST /account/vendor` with all fields → result,
+- [X] T007 [P] [US1] Integration test: `POST /account/vendor` with all fields → result,
   `supplier_rank == 1`, fields persist on read-back (FR-001/007), in
   `tests/accounting/test_vendor_database.py`
-- [ ] T008 [P] [US1] Integration test: `PATCH /account/vendor/{id}` updates a field, confirmed on
+- [X] T008 [P] [US1] Integration test: `PATCH /account/vendor/{id}` updates a field, confirmed on
   read-back (FR-002), in `tests/accounting/test_vendor_database.py`
-- [ ] T009 [P] [US1] Integration test: `POST /account/vendor` with no `name` → `400` naming the
+- [X] T009 [P] [US1] Integration test: `POST /account/vendor` with no `name` → `400` naming the
   missing field (FR-001), in `tests/accounting/test_vendor_database.py`
-- [ ] T010 [P] [US1] Integration test: `write(active=False)` hides the vendor from
+- [X] T010 [P] [US1] Integration test: `write(active=False)` hides the vendor from
   `GET /account/vendors`' default active-only response but a direct `GET /account/partner/{id}`
   and its AP ledger still work (FR-005), in `tests/accounting/test_vendor_database.py`
-- [ ] T011 [P] [US1] Integration test: `unlink` on a vendor with a posted bill/payment raises
+- [X] T011 [P] [US1] Integration test: `unlink` on a vendor with a posted bill/payment raises
   `DodooError`; `unlink` on a vendor with no financial history succeeds (FR-006, the existing 009
   guard), in `tests/accounting/test_vendor_database.py`
-- [ ] T012 [P] [US1] Integration test: `POST /account/vendor` with no `property_currency_id`/
+- [X] T012 [P] [US1] Integration test: `POST /account/vendor` with no `property_currency_id`/
   `property_supplier_payment_term_id` → both persist as `NULL` (defer-to-company-default); a
   subsequent `PATCH` setting either explicitly persists the override (FR-011), in
   `tests/accounting/test_vendor_database.py`
-- [ ] T013 [P] [US1] Integration test: creating a second vendor with a `vat` already used by an
+- [X] T013 [P] [US1] Integration test: creating a second vendor with a `vat` already used by an
   existing active vendor succeeds (no hard block) — duplicate-VAT is UI-side advisory only, not a
   server-side rejection (Edge Cases), in `tests/accounting/test_vendor_database.py`
-- [ ] T014 [P] [US1] Integration test: build an ad hoc customer partner inline
+- [X] T014 [P] [US1] Integration test: build an ad hoc customer partner inline
   (`ResPartner.create` + `write_partner_properties(..., {"customer_rank": 1})` — **not** the
   existing `customer_id` fixture, which silently fails to persist `customer_rank`/
   `property_payment_term_id`/`property_currency_id` since `BaseModel.create` filters `vals` to
@@ -120,31 +120,31 @@ ledger stays reachable, confirm delete is blocked once it has a posted bill.
 
 ### Implementation for User Story 1
 
-- [ ] T015 [US1] Add `VendorCreate`/`VendorUpdate` Pydantic models to
+- [X] T015 [US1] Add `VendorCreate`/`VendorUpdate` Pydantic models to
   `dodoo/addons/account/validators.py`: `extra="forbid"`, `name` required on `VendorCreate`
   (optional on `VendorUpdate`), `email` validated by reusing `CustomerCreate`'s existing `_EMAIL_RE`
   pattern (no new regex, no new dependency) (SEC-001, FR-001/013, contracts/vendor-database.md)
   (depends on T007–T014 existing as failing tests)
-- [ ] T016 [US1] Add `POST /account/vendor` and `PATCH /account/vendor/{partner_id}` routes to
+- [X] T016 [US1] Add `POST /account/vendor` and `PATCH /account/vendor/{partner_id}` routes to
   `dodoo/addons/account/http/__init__.py` using `VendorCreate`/`VendorUpdate`; set
   `supplier_rank=1` on create via `write_partner_properties`; structured `_log.info(...)` on
   create/write (`extra={"model": "res.partner", "record_id": ..., "event": ...}`, Principle IX)
   (depends on T015, T004)
-- [ ] T017 [US1] Create `dodoo/addons/account/static/views/vendor-form.js`: field inputs for
+- [X] T017 [US1] Create `dodoo/addons/account/static/views/vendor-form.js`: field inputs for
   `name`/`email`/`phone`/`street`/`city`/`state_id`/`zip`/`country_id`/`vat`/
   `property_supplier_payment_term_id`/`property_currency_id`, Save/Discard/Delete/Archive actions
   calling the routes above, non-color-only validation errors; before save, if `vat` is set, a
   `search_read` for another active partner with the same `vat` shows a non-blocking warning banner
   (save still proceeds) — a file-for-file mirror of `customer-form.js` (ADR-051, Edge Cases)
   (depends on T016)
-- [ ] T018 [US1] Register `#/accounting/vendor/(new|\d+)` → `vendor-form.js` in
+- [X] T018 [US1] Register `#/accounting/vendor/(new|\d+)` → `vendor-form.js` in
   `dodoo/addons/web/static/app.js`'s `_ROUTES`, immediately after the existing customer routes and
   ahead of the generic `#/accounting/([^/]+)` catch-all; add the vendor id-parsing branches to
   `_paramsFromHash` (ADR-051) (depends on T017)
-- [ ] T019 [US1] Add a "Vendors" item (`hash: '#/accounting/vendors'`) to the existing "Vendors"
+- [X] T019 [US1] Add a "Vendors" item (`hash: '#/accounting/vendors'`) to the existing "Vendors"
   section in `dodoo/addons/account/static/account-menu.js`, alongside its existing Bills/Credit
   Notes/Payments items
-- [ ] T020 [US1] Add new UI strings (vendor form field labels, archive action, delete-blocked
+- [X] T020 [US1] Add new UI strings (vendor form field labels, archive action, delete-blocked
   message, duplicate-VAT warning) to `dodoo/addons/account/data/i18n/{en,ar}.json` per
   `[[i18n-per-addon-catalogs]]`
 
@@ -163,26 +163,26 @@ partial name, search by exact VAT, search with no matches.
 
 ### Tests for User Story 2
 
-- [ ] T021 [P] [US2] Integration test: partial-name search returns only matching vendors (FR-004),
+- [X] T021 [P] [US2] Integration test: partial-name search returns only matching vendors (FR-004),
   in `tests/accounting/test_vendor_database.py`
-- [ ] T022 [P] [US2] Integration test: exact-VAT search returns the matching vendor (FR-004), in
+- [X] T022 [P] [US2] Integration test: exact-VAT search returns the matching vendor (FR-004), in
   `tests/accounting/test_vendor_database.py`
-- [ ] T023 [P] [US2] Integration test: a search matching nothing returns an empty result, not an
+- [X] T023 [P] [US2] Integration test: a search matching nothing returns an empty result, not an
   error (Edge Cases), in `tests/accounting/test_vendor_database.py`
 
 ### Implementation for User Story 2
 
-- [ ] T024 [US2] Add `GET /account/vendors` route to `dodoo/addons/account/http/__init__.py`
+- [X] T024 [US2] Add `GET /account/vendors` route to `dodoo/addons/account/http/__init__.py`
   (`list_vendors`, mirroring `list_customers`'s raw-SQL shape for `supplier_rank > 0`, since it's
   an undeclared column — contracts/vendor-database.md correction) and create
   `dodoo/addons/account/static/views/vendor-list.js`: fetch vendors via that route, client-side
   substring filter on `name`/`vat` (the `customer-list.js` pattern), New button, archived toggle,
   columns name/VAT/balance (balance column wired in US3, T034) (ADR-051, FR-003/004) (depends on
   T017 for row-click navigation target)
-- [ ] T025 [US2] Register `#/accounting/vendors` → `vendor-list.js` in
+- [X] T025 [US2] Register `#/accounting/vendors` → `vendor-list.js` in
   `dodoo/addons/web/static/app.js`'s `_ROUTES`, ahead of the generic `#/accounting/([^/]+)$`
   catch-all (depends on T024)
-- [ ] T026 [US2] Add search-box and empty-state UI strings to
+- [X] T026 [US2] Add search-box and empty-state UI strings to
   `dodoo/addons/account/data/i18n/{en,ar}.json`
 
 **Checkpoint**: the vendor list is searchable and reachable from the menu.
@@ -201,14 +201,14 @@ empty history; confirm a cancelled bill is excluded from the balance but still l
 
 ### Tests for User Story 3
 
-- [ ] T027 [P] [US3] Integration test: two posted bills + one partial payment → `balance` and each
+- [X] T027 [P] [US3] Integration test: two posted bills + one partial payment → `balance` and each
   line's `status` are correct (FR-008/009), in `tests/accounting/test_vendor_database.py`
-- [ ] T028 [P] [US3] Integration test: brand-new vendor → `{"balance": "0.00", "lines": []}`, not
+- [X] T028 [P] [US3] Integration test: brand-new vendor → `{"balance": "0.00", "lines": []}`, not
   an error (FR-008, Edge Cases), in `tests/accounting/test_vendor_database.py`
-- [ ] T029 [P] [US3] Integration test: a cancelled bill is excluded from `balance` but still
+- [X] T029 [P] [US3] Integration test: a cancelled bill is excluded from `balance` but still
   appears with `status: "cancelled"` (FR-012, Edge Cases), in
   `tests/accounting/test_vendor_database.py`
-- [ ] T030 [P] [US3] Unit test (no DB): feed `_status_and_balance(lines)` a fixed list of
+- [X] T030 [P] [US3] Unit test (no DB): feed `_status_and_balance(lines)` a fixed list of
   bill/credit_note/payment/cancellation fixture dicts (AP-labeled `type` values) and confirm
   balance summation and per-line paid/partial/open/cancelled classification match the same
   behavior already proven for AR-labeled input in `test_customer_database.py` — confirms the
@@ -217,7 +217,7 @@ empty history; confirm a cancelled bill is excluded from the balance but still l
 
 ### Implementation for User Story 3
 
-- [ ] T031 [US3] Add `get_ap_ledger(env, partner_id)` to
+- [X] T031 [US3] Add `get_ap_ledger(env, partner_id)` to
   `dodoo/addons/account/models/account_partner.py`, alongside the existing `get_ar_ledger`: unions
   posted `in_invoice`/`in_refund`/`in_receipt` move lines hitting a `liability_payable`-type
   account with `account_payment` rows where `partner_type = 'supplier'` for the partner into one
@@ -225,17 +225,17 @@ empty history; confirm a cancelled bill is excluded from the balance but still l
   `_status_and_balance(lines)` function — no AP-specific variant — in the partner's
   `property_currency_id` (falling back to `res_company.currency_id`) (ADR-050, data-model.md)
   (depends on T003)
-- [ ] T032 [US3] Add `GET /account/partner/{partner_id}/ap-ledger` to
+- [X] T032 [US3] Add `GET /account/partner/{partner_id}/ap-ledger` to
   `dodoo/addons/account/http/__init__.py`, `400 DodooError` for an unknown `partner_id`, structured
   `_log.info(...)` on read (Principle IX); extend the existing `read_customer` handler's `SELECT`
   to also return `supplier_rank`/`property_supplier_payment_term_id` (ADR-049) (depends on T031)
-- [ ] T033 [US3] Extend `vendor-form.js` with a read-only Accounts Payable panel (date/reference/
+- [X] T033 [US3] Extend `vendor-form.js` with a read-only Accounts Payable panel (date/reference/
   amount/status table, "Bill" type label in place of "Invoice") calling the new route; each row
   links to `#/accounting/move/{move_id}` (ADR-050/051, FR-009/010) (depends on T017, T032)
-- [ ] T034 [US3] Wire `vendor-list.js`'s balance column to the `ap-ledger` endpoint, fetched once
+- [X] T034 [US3] Wire `vendor-list.js`'s balance column to the `ap-ledger` endpoint, fetched once
   per visible page rather than per keystroke (contracts/vendor-database.md's behavior note)
   (depends on T024, T032)
-- [ ] T035 [US3] Add AP-ledger UI strings ("Bill" type label, "Accounts Payable" panel heading,
+- [X] T035 [US3] Add AP-ledger UI strings ("Bill" type label, "Accounts Payable" panel heading,
   empty-state message) to `dodoo/addons/account/data/i18n/{en,ar}.json`
 
 **Checkpoint**: all three user stories are independently functional — the vendor database feature
@@ -245,31 +245,40 @@ is complete end to end.
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T036 [P] Extend `tests/benchmarks/test_accounting_perf.py`: PERF-001 (10,000 vendors,
+**Environment note**: T037/T042/T043 require a live PostgreSQL instance (via Docker/testcontainers
+or a `TEST_DATABASE_URL`/`DATABASE_URL` override) to execute — unavailable in the sandboxed
+environment this implementation pass ran in (no `docker`, no local `postgres`, no DB URL set,
+confirmed by direct check). All code for every task below was written and verified by
+`py_compile`/`ruff check`/`node --check`/`pytest --collect-only`, and the DB-independent test
+(`test_status_and_balance_reused_for_ap_shaped_input`) and the i18n coverage suite (T039) were
+actually executed and pass. T037/T042/T043 remain unchecked pending a run against a real Postgres
+instance — the next actionable step for whoever picks this up with DB access.
+
+- [X] T036 [P] Extend `tests/benchmarks/test_accounting_perf.py`: PERF-001 (10,000 vendors,
   list-fetch + client-side filter stays interactive), PERF-002 (5,000 AP-ledger lines for one
   vendor, `GET .../ap-ledger` < 1s) — this also empirically confirms 009's existing indexes are
   sufficient with zero new ones added (research.md D6) (depends on T024, T031)
 - [ ] T037 Re-run `tests/benchmarks/test_accounting_perf.py`'s existing invoice/payment **and**
   bill/payment posting benchmarks; confirm no regression, since the AP balance is never written at
   posting time (PERF-003) (depends on T036)
-- [ ] T038 [P] Extend `tests/e2e/test_web_ui_a11y.py` for the vendor list and form (including the
+- [X] T038 [P] Extend `tests/e2e/test_web_ui_a11y.py` for the vendor list and form (including the
   AP-ledger panel): zero WCAG 2.1 AA contrast violations, full keyboard navigation, no color-only
   validation/status indicators (ACC-001…003) (depends on T017, T024, T033)
-- [ ] T039 Run the project's i18n coverage check against the new vendor screens' strings, per
+- [X] T039 Run the project's i18n coverage check against the new vendor screens' strings, per
   `[[i18n-per-addon-catalogs]]` — confirm Arabic mode shows no English fallback text (depends on
   T020, T026, T035)
-- [ ] T040 Security hardening pass: confirm SEC-001…004 — `VendorCreate`/`VendorUpdate`'s
+- [X] T040 Security hardening pass: confirm SEC-001…004 — `VendorCreate`/`VendorUpdate`'s
   `extra="forbid"` boundary rejects unexpected fields, every new route requires `auth="session"`,
   `get_ap_ledger` and the vendor search use parameterized SQL only (no string-interpolated user
   input) (Principle III) (depends on T015, T016, T024, T031, T032)
-- [ ] T041 [P] Documentation: verify `docs/adr/049…051-*.md` (T001) accurately reflect the final
+- [X] T041 [P] Documentation: verify `docs/adr/049…051-*.md` (T001) accurately reflect the final
   implementation, including the `get_ap_ledger`/reused-`_status_and_balance` split (Principle V)
 - [ ] T042 Run `quickstart.md` end to end against a fresh install; confirm every numbered scenario
   passes, including §4's dual customer/vendor-role check (depends on T001–T041)
 - [ ] T043 Run the full pre-existing `tests/accounting/` suite unchanged (including
   `test_customer_database.py`); confirm 100% pass — no regression from touching the shared
   `account_partner.py`/`http/__init__.py`/`account_data.py` files (depends on T042)
-- [ ] T044 Observability review (Principle IX): confirm vendor `create`/`write`/`unlink` and the
+- [X] T044 Observability review (Principle IX): confirm vendor `create`/`write`/`unlink` and the
   AP-ledger read each emit a structured `_log.info(...)` entry matching the existing
   `extra={"model": ..., "record_id": ..., "event": ...}` convention; add any missing call sites
   (depends on T016, T032)

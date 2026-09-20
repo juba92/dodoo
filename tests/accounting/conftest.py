@@ -197,3 +197,43 @@ async def customer_id(env, company_id, currency_id, payment_term_id):
             "property_currency_id": currency_id,
         },
     )
+
+
+@pytest_asyncio.fixture
+async def vendor_id(env, company_id, currency_id, payment_term_id):
+    """010-vendor-database: a partner flagged as a vendor (`supplier_rank > 0`) with
+    billing address and default payment terms set.
+
+    Built via the proven two-step ``ResPartner.create`` + ``write_partner_properties``
+    shape (not a single ``create`` call with the raw columns inline) — those raw,
+    undeclared columns (`supplier_rank`/`property_supplier_payment_term_id`/
+    `property_currency_id`) are silently dropped by the generic `create` path, per
+    `account_partner.py`'s own module docstring.
+    """
+    from dodoo.addons.account.models.account_partner import write_partner_properties
+    from dodoo.addons.base.models.res_partner import ResPartner
+
+    partner_id = await ResPartner.create(
+        env,
+        {
+            "name": "Test Vendor",
+            "company_id": company_id,
+            "active": True,
+            "email": "vendor@example.test",
+            "phone": "+1-555-0200",
+            "street": "9 Industrial Way",
+            "city": "Riverside",
+            "zip": "00001",
+            "vat": "US000333444",
+        },
+    )
+    await write_partner_properties(
+        env,
+        partner_id,
+        {
+            "supplier_rank": 1,
+            "property_supplier_payment_term_id": payment_term_id,
+            "property_currency_id": currency_id,
+        },
+    )
+    return partner_id

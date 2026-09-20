@@ -28,6 +28,8 @@ _PARTNER_FK_COLUMNS = [
     # 009-customer-database, ADR-046: customer designation + per-customer currency override.
     "ALTER TABLE res_partner ADD COLUMN IF NOT EXISTS customer_rank INTEGER DEFAULT 0",
     "ALTER TABLE res_partner ADD COLUMN IF NOT EXISTS property_currency_id INTEGER",
+    # 010-vendor-database, ADR-049: vendor designation, mirroring customer_rank above.
+    "ALTER TABLE res_partner ADD COLUMN IF NOT EXISTS supplier_rank INTEGER DEFAULT 0",
 ]
 
 # Fiscal lock dates (FR-031, ADR-039) and realized/unrealized FX gain-loss accounts (FR-025,

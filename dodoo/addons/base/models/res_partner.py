@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import text
@@ -10,6 +11,8 @@ from dodoo.core.models import BaseModel
 
 if TYPE_CHECKING:
     from dodoo import Environment
+
+_log = logging.getLogger(__name__)
 
 
 class ResPartner(BaseModel):
@@ -74,4 +77,13 @@ class ResPartner(BaseModel):
                         f"Partner {partner_id} has {ref_count} referencing invoice/payment "
                         "record(s) and cannot be deleted. Archive it instead."
                     )
-        return await super().unlink(env, ids)
+        result = await super().unlink(env, ids)
+        # 010-vendor-database, Principle IX: the guard above already covers
+        # both roles (customer/vendor) — logged once here rather than
+        # per-caller, so neither role's delete path silently skips it.
+        for partner_id in ids:
+            _log.info(
+                "res.partner unlinked",
+                extra={"model": "res.partner", "record_id": partner_id, "event": "unlink"},
+            )
+        return result

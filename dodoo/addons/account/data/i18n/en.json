@@ -65,5 +65,12 @@
   "Another customer already uses this Tax/VAT number.": "Another customer already uses this Tax/VAT number.",
   "Failed to load Accounts Receivable data": "Failed to load Accounts Receivable data",
   "Credit Note": "Credit Note",
-  "Payment": "Payment"
+  "Payment": "Payment",
+  "New Vendor": "New Vendor",
+  "Accounts Payable": "Accounts Payable",
+  "No bills, credit notes, or payments yet.": "No bills, credit notes, or payments yet.",
+  "No vendors found.": "No vendors found.",
+  "Another vendor already uses this Tax/VAT number.": "Another vendor already uses this Tax/VAT number.",
+  "Failed to load Accounts Payable data": "Failed to load Accounts Payable data",
+  "Bill": "Bill"
 }

@@ -218,3 +218,32 @@ class CustomerCreate(Payload):
 
 class CustomerUpdate(CustomerCreate):
     name: str | None = Field(default=None, min_length=1, max_length=256)  # optional on update
+
+
+# --------------------------------------------------------------------------- 010-vendor-database
+
+
+class VendorCreate(Payload):
+    name: str = Field(min_length=1, max_length=256)
+    email: str | None = Field(default=None, max_length=256)
+    phone: str | None = Field(default=None, max_length=64)
+    street: str | None = Field(default=None, max_length=256)
+    city: str | None = Field(default=None, max_length=128)
+    state_id: int | None = None
+    zip: str | None = Field(default=None, max_length=32)
+    country_id: int | None = None
+    vat: str | None = Field(default=None, max_length=32)
+    property_supplier_payment_term_id: int | None = None
+    property_currency_id: int | None = None
+
+    @field_validator("email")
+    @classmethod
+    def _valid_email(cls, v: str | None) -> str | None:
+        # Reuses CustomerCreate's stdlib _EMAIL_RE pattern — no duplicate regex.
+        if v and not _EMAIL_RE.match(v):
+            raise ValueError("invalid email format")
+        return v
+
+
+class VendorUpdate(VendorCreate):
+    name: str | None = Field(default=None, min_length=1, max_length=256)  # optional on update

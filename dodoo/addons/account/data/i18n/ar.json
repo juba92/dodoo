@@ -65,5 +65,12 @@
   "Failed to load Accounts Receivable data": "فشل تحميل بيانات الذمم المدينة",
   "Credit Note": "إشعار دائن",
   "Payment": "دفعة",
-  "Zip": "الرمز البريدي"
+  "Zip": "الرمز البريدي",
+  "New Vendor": "مورد جديد",
+  "Accounts Payable": "الذمم الدائنة",
+  "No bills, credit notes, or payments yet.": "لا توجد فواتير مشتريات أو إشعارات دائن أو مدفوعات بعد.",
+  "No vendors found.": "لم يتم العثور على موردين.",
+  "Another vendor already uses this Tax/VAT number.": "يستخدم مورد آخر هذا الرقم الضريبي بالفعل.",
+  "Failed to load Accounts Payable data": "فشل تحميل بيانات الذمم الدائنة",
+  "Bill": "فاتورة مورد"
 }

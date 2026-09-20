@@ -574,9 +574,12 @@ async def create_customer(request: Request) -> JSONResponse:
 @route("/account/partner/{partner_id}", methods=["GET"], auth="session")
 async def read_customer(request: Request, partner_id: int) -> JSONResponse:
     """Full `res.partner` read including the account-owned raw columns
-    (`customer_rank`/`property_currency_id`/`property_payment_term_id`) the
-    generic `read`/`search_read` RPC can't return, since they aren't declared
-    `Field`s on `base`'s `ResPartner` (ADR-046)."""
+    (`customer_rank`/`property_currency_id`/`property_payment_term_id`/
+    `supplier_rank`/`property_supplier_payment_term_id`) the generic
+    `read`/`search_read` RPC can't return, since they aren't declared `Field`s
+    on `base`'s `ResPartner` (ADR-046/049). Shared by both `customer-form.js`
+    and `vendor-form.js` — a partner's role columns are read together
+    regardless of which form is loading it (010-vendor-database)."""
     env = request.app.state.env
 
     try:
@@ -587,7 +590,8 @@ async def read_customer(request: Request, partner_id: int) -> JSONResponse:
                 text(
                     "SELECT id, name, email, phone, street, city, state_id, zip, "
                     "country_id, vat, active, customer_rank, property_currency_id, "
-                    "property_payment_term_id "
+                    "property_payment_term_id, supplier_rank, "
+                    "property_supplier_payment_term_id "
                     "FROM res_partner WHERE id = :pid"
                 ),
                 {"pid": partner_id},
@@ -642,6 +646,125 @@ async def partner_ar_ledger(request: Request, partner_id: int) -> JSONResponse:
         _log.info(
             "res.partner AR ledger read",
             extra={"model": "res.partner", "record_id": partner_id, "event": "ar_ledger_read"},
+        )
+        return JSONResponse(result)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+# ---- Vendor database (010-vendor-database, FR-001/002/008/009/010) ----
+
+
+@route("/account/vendors", methods=["GET"], auth="session")
+async def list_vendors(request: Request) -> JSONResponse:
+    """FR-003/004: vendors (`supplier_rank > 0`) for the list/search view — a
+    raw route because `supplier_rank` isn't a declared `Field` on `base`'s
+    `ResPartner`, so the generic `search_read` domain compiler can't filter on
+    it (ADR-049)."""
+    env = request.app.state.env
+    include_archived = request.query_params.get("include_archived") == "true"
+
+    try:
+        async with env.dml_conn() as conn:
+            from sqlalchemy import text
+
+            active_clause = "" if include_archived else "AND active = TRUE"
+            rows = await conn.execute(
+                text(
+                    "SELECT id, name, vat, email, phone, active, supplier_rank "
+                    f"FROM res_partner WHERE supplier_rank > 0 {active_clause} "  # noqa: S608
+                    "ORDER BY name"
+                )
+            )
+            return JSONResponse({"result": [dict(r) for r in rows.mappings()]})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@route("/account/vendor", methods=["POST"], auth="session")
+async def create_vendor(request: Request) -> JSONResponse:
+    """FR-001/007/013: creates a `res.partner` flagged as a vendor
+    (`supplier_rank=1`). A distinct path from `POST /account/partner`
+    (customer create) since that route is fixed to `CustomerCreate`, which
+    would reject a vendor-shaped payload's `supplier_rank`/
+    `property_supplier_payment_term_id` fields (ADR-051)."""
+    env = request.app.state.env
+    from dodoo.addons.account.models.account_partner import write_partner_properties
+    from dodoo.addons.account.validators import VendorCreate, validate
+    from dodoo.addons.base.models.res_partner import ResPartner
+
+    body = await request.json()
+    try:
+        payload = validate(VendorCreate, body)
+        vals = payload.model_dump(
+            exclude={"property_supplier_payment_term_id", "property_currency_id"},
+            exclude_none=True,
+        )
+        partner_id = await ResPartner.create(env, vals)
+        await write_partner_properties(
+            env,
+            partner_id,
+            {
+                "supplier_rank": 1,
+                "property_supplier_payment_term_id": payload.property_supplier_payment_term_id,
+                "property_currency_id": payload.property_currency_id,
+            },
+        )
+        _log.info(
+            "res.partner vendor created",
+            extra={"model": "res.partner", "record_id": partner_id, "event": "create_vendor"},
+        )
+        return JSONResponse({"result": partner_id})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@route("/account/vendor/{partner_id}", methods=["PATCH"], auth="session")
+async def update_vendor(request: Request, partner_id: int) -> JSONResponse:
+    """FR-002: partial update of a vendor record. A distinct path from
+    `PATCH /account/partner/{id}` (customer update) for the same reason as
+    `POST /account/vendor` above (ADR-051)."""
+    env = request.app.state.env
+    from dodoo.addons.account.models.account_partner import write_partner_properties
+    from dodoo.addons.account.validators import VendorUpdate, validate
+    from dodoo.addons.base.models.res_partner import ResPartner
+
+    body = await request.json()
+    try:
+        payload = validate(VendorUpdate, body)
+        vals = payload.model_dump(
+            exclude={"property_supplier_payment_term_id", "property_currency_id"},
+            exclude_unset=True,
+        )
+        if vals:
+            await ResPartner.write(env, [partner_id], vals)
+        raw_vals = payload.model_dump(
+            include={"property_supplier_payment_term_id", "property_currency_id"},
+            exclude_unset=True,
+        )
+        if raw_vals:
+            await write_partner_properties(env, partner_id, raw_vals)
+        _log.info(
+            "res.partner vendor updated",
+            extra={"model": "res.partner", "record_id": partner_id, "event": "update_vendor"},
+        )
+        return JSONResponse({"result": True})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@route("/account/partner/{partner_id}/ap-ledger", methods=["GET"], auth="session")
+async def partner_ap_ledger(request: Request, partner_id: int) -> JSONResponse:
+    """FR-008/009/010/012, ADR-050: outstanding AP balance + posted bill/
+    credit-note/payment history, computed on demand."""
+    env = request.app.state.env
+    from dodoo.addons.account.models.account_partner import get_ap_ledger
+
+    try:
+        result = await get_ap_ledger(env, partner_id)
+        _log.info(
+            "res.partner AP ledger read",
+            extra={"model": "res.partner", "record_id": partner_id, "event": "ap_ledger_read"},
         )
         return JSONResponse(result)
     except Exception as e:

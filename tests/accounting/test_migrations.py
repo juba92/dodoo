@@ -37,6 +37,8 @@ EXPECTED_COLUMNS: list[tuple[str, str]] = [
     ("res_partner", "country_id"),
     ("res_partner", "customer_rank"),
     ("res_partner", "property_currency_id"),
+    # 010-vendor-database (ADR-049)
+    ("res_partner", "supplier_rank"),
 ]
 
 EXPECTED_TABLES: list[str] = [

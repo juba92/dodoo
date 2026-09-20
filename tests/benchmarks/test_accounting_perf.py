@@ -574,3 +574,167 @@ async def test_perf_002_ar_ledger_under_1s_at_5k_lines(env, seeded_5k_ar_lines):
 
     assert len(ledger["lines"]) >= 5_000
     assert elapsed_ms < 1000.0, f"PERF-002 (AR ledger) violated: {elapsed_ms:.1f}ms (limit 1000ms)"
+
+
+# --------------------------------------------------------------------------- 010-vendor-database
+
+
+@pytest_asyncio.fixture(scope="module")
+async def seeded_10k_vendors(module_env):
+    """PERF-001: 10,000 `res.partner` rows flagged as vendors for one company,
+    bulk-inserted directly (this benchmark targets the list/search *read*
+    path only)."""
+    env = module_env
+    async with env.dml_conn() as conn:
+        cid = (await conn.execute(text("SELECT id FROM res_company LIMIT 1"))).scalar_one()
+        existing = (
+            await conn.execute(
+                text("SELECT COUNT(*) FROM res_partner WHERE name LIKE 'PERF-VEND-%'")
+            )
+        ).scalar_one()
+        if existing < 10_000:
+            await conn.execute(
+                text(
+                    """
+                    INSERT INTO res_partner
+                        (name, company_id, active, supplier_rank, vat, create_date, write_date)
+                    SELECT 'PERF-VEND-' || g, :cid, TRUE, 1, 'VAT' || g, now(), now()
+                    FROM generate_series(1, 10000) AS g
+                    """
+                ),
+                {"cid": cid},
+            )
+            await conn.commit()
+    return {"company_id": cid}
+
+
+@pytest.mark.asyncio
+async def test_perf_001_vendor_list_query_stays_interactive(env, seeded_10k_vendors):
+    """PERF-001: the vendor list's backing query (GET /account/vendors)
+    returns within standard interactive latency (<1s) at 10,000 vendors. Also
+    confirms 009's existing indexes are sufficient — no new index was added
+    for this feature (research.md D6)."""
+    start = time.perf_counter()
+    async with env.dml_conn() as conn:
+        rows = await conn.execute(
+            text(
+                "SELECT id, name, vat, email, phone, active, supplier_rank "
+                "FROM res_partner WHERE supplier_rank > 0 AND active = TRUE ORDER BY name"
+            )
+        )
+        result = rows.mappings().all()
+    elapsed_ms = (time.perf_counter() - start) * 1000
+
+    assert len(result) >= 10_000
+    assert elapsed_ms < 1000.0, f"PERF-001 (vendor list) violated: {elapsed_ms:.1f}ms (limit 1000ms)"
+
+
+@pytest_asyncio.fixture(scope="module")
+async def seeded_5k_ap_lines(module_env):
+    """PERF-002: ~5,000 posted vendor bills (one payment_term/AP line each)
+    for a single vendor, bulk-inserted directly."""
+    env = module_env
+    async with env.dml_conn() as conn:
+        company_id = (await conn.execute(text("SELECT id FROM res_company LIMIT 1"))).scalar_one()
+        journal_id = (
+            await conn.execute(
+                text("SELECT id FROM account_journal WHERE type='general' AND company_id=:c"),
+                {"c": company_id},
+            )
+        ).scalar_one()
+        currency_id = (await conn.execute(text("SELECT id FROM res_currency WHERE code='EUR'"))).scalar_one()
+        ap_account = (
+            await conn.execute(
+                text(
+                    "SELECT id FROM account_account WHERE account_type='liability_payable' "
+                    "AND company_id=:c"
+                ),
+                {"c": company_id},
+            )
+        ).scalar_one()
+
+        partner_id = (
+            await conn.execute(
+                text(
+                    "SELECT id FROM res_partner WHERE name = 'PERF-002 AP Vendor' LIMIT 1"
+                )
+            )
+        ).scalar_one_or_none()
+        if not partner_id:
+            partner_id = (
+                await conn.execute(
+                    text(
+                        "INSERT INTO res_partner (name, company_id, active, supplier_rank, "
+                        "create_date, write_date) "
+                        "VALUES ('PERF-002 AP Vendor', :cid, TRUE, 1, now(), now()) "
+                        "RETURNING id"
+                    ),
+                    {"cid": company_id},
+                )
+            ).scalar_one()
+
+        existing = (
+            await conn.execute(
+                text("SELECT COUNT(*) FROM account_move WHERE ref = 'PERF-002-AP'")
+            )
+        ).scalar_one()
+        if existing < 5_000:
+            move_ids = (
+                await conn.execute(
+                    text(
+                        """
+                        INSERT INTO account_move
+                            (move_type, state, journal_id, company_id, currency_id, partner_id,
+                             date, name, ref, posted_before, payment_state, amount_untaxed,
+                             amount_tax, amount_total, amount_residual, create_date, write_date)
+                        SELECT
+                            'in_invoice', 'posted', :jid, :cid, :curid, :pid,
+                            (DATE '2024-01-01' + (g % 700) * INTERVAL '1 day')::date,
+                            'PERF002B/' || g, 'PERF-002-AP', TRUE, 'not_paid', 100, 0, 100, 100,
+                            now(), now()
+                        FROM generate_series(1, 5000) AS g
+                        RETURNING id
+                        """
+                    ),
+                    {"jid": journal_id, "cid": company_id, "curid": currency_id, "pid": partner_id},
+                )
+            )
+            move_ids = [row[0] for row in move_ids.fetchall()]
+            await conn.execute(
+                text(
+                    """
+                    INSERT INTO account_move_line
+                        (move_id, account_id, date, display_type, debit, credit, balance,
+                         amount_residual, create_date, write_date)
+                    SELECT m_id, :acct, CURRENT_DATE, 'payment_term', 0, 100, -100, 100, now(), now()
+                    FROM unnest(CAST(:mids AS INTEGER[])) AS m_id
+                    """
+                ),
+                {"acct": ap_account, "mids": list(move_ids)},
+            )
+            await conn.commit()
+
+        # Same reasoning as seeded_5k_ar_lines above (research.md D6 — this
+        # feature reuses 009's idx_account_move_partner_type/
+        # idx_account_move_line_payment_term_move as-is).
+        async with env.dml_conn() as conn:
+            await conn.execute(text("ANALYZE account_move"))
+            await conn.execute(text("ANALYZE account_move_line"))
+            await conn.commit()
+    return {"partner_id": partner_id}
+
+
+@pytest.mark.asyncio
+async def test_perf_002_ap_ledger_under_1s_at_5k_lines(env, seeded_5k_ap_lines):
+    """PERF-002: GET .../ap-ledger returns within 1s for a vendor with 5,000
+    historical bills."""
+    from dodoo.addons.account.models.account_partner import get_ap_ledger
+
+    partner_id = seeded_5k_ap_lines["partner_id"]
+
+    start = time.perf_counter()
+    ledger = await get_ap_ledger(env, partner_id)
+    elapsed_ms = (time.perf_counter() - start) * 1000
+
+    assert len(ledger["lines"]) >= 5_000
+    assert elapsed_ms < 1000.0, f"PERF-002 (AP ledger) violated: {elapsed_ms:.1f}ms (limit 1000ms)"

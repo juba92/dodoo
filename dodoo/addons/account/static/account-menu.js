@@ -11,6 +11,7 @@ export const ACCOUNTING_MENU = [
   {
     section: 'Vendors',
     items: [
+      { label: 'Vendors',      hash: '#/accounting/vendors' },
       { label: 'Bills',        hash: '#/accounting/bills' },
       { label: 'Credit Notes', hash: '#/accounting/vendor-credit-notes' },
       { label: 'Payments',     hash: '#/accounting/vendor-payments' },
