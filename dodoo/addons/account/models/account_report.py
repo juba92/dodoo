@@ -652,6 +652,145 @@ async def _aged_report(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Cash Flow Statement — indirect method
+# ─────────────────────────────────────────────────────────────────────────────
+_WC_ASSET_TYPES = ("asset_receivable", "asset_current", "asset_prepayments")
+_WC_LIABILITY_TYPES = ("liability_payable", "liability_credit_card", "liability_current")
+_FIXED_ASSET_TYPES = ("asset_fixed", "asset_non_current")
+_LONG_TERM_DEBT_TYPES = ("liability_non_current",)
+_EQUITY_TYPES = ("equity", "equity_unaffected")
+_CASH_TYPES = ("asset_cash",)
+
+
+async def _balance_by_types(
+    env: Environment,
+    as_of: datetime.date | None,
+    types: tuple[str, ...],
+    company_id: int | None,
+) -> Decimal:
+    """Sum of posted ``debit - credit`` for every account of ``types``, as of
+    (and including) ``as_of``. ``as_of=None`` means "before any activity"
+    (opening balance 0), mirroring how the other reports treat an omitted
+    ``date_from``."""
+    if as_of is None:
+        return Decimal("0")
+    params: dict[str, Any] = {"types": list(types), "as_of": as_of}
+    where_company = ""
+    if company_id:
+        where_company = " AND a.company_id = :company_id"
+        params["company_id"] = company_id
+    sql = f"""
+        SELECT COALESCE(SUM(ml.debit - ml.credit), 0) AS balance
+        FROM account_move_line ml
+        JOIN account_account a ON a.id = ml.account_id
+        JOIN account_move m ON m.id = ml.move_id
+        WHERE m.{_POSTED} AND {_REAL_LINE}
+          AND a.account_type = ANY(:types) AND m.date <= :as_of {where_company}
+    """
+    async with env.dml_conn() as conn:
+        row = await conn.execute(text(sql), params)
+        return _d(row.scalar())
+
+
+class AccountReportCashFlow(_VirtualReport):
+    """Indirect-method Statement of Cash Flows: starts from net income
+    (``_pl_rows``) and reclassifies the period's balance-sheet movements into
+    operating/investing/financing effects.
+
+    For a balanced ledger, ``Δcash`` always equals ``-Σ(Δ every other
+    account)`` — every posted move nets its debits and credits to zero, so
+    the whole chart of accounts nets to zero over any period. Depreciation is
+    therefore both added back in Operating *and* subtracted back out of the
+    raw fixed-asset delta in Investing (this system has no separate
+    accumulated-depreciation contra-account, so a depreciation entry directly
+    reduces the fixed-asset balance) — the two cancel exactly, so the
+    statement reads like a normal indirect-method cash flow while staying
+    mathematically exact (see the ``balanced`` check in ``totals``)."""
+
+    _abstract = False
+    _name = "account.report.cash.flow"
+
+    @classmethod
+    async def get_report(
+        cls,
+        env: Environment,
+        date_from: str | datetime.date | None = None,
+        date_to: str | datetime.date | None = None,
+        company_id: int | None = None,
+    ) -> dict[str, Any]:
+        df = _as_date(date_from)
+        dt = _as_date(date_to) or datetime.date.today()
+        opening_date = (df - datetime.timedelta(days=1)) if df else None
+
+        pl = await _pl_rows(env, _PL_TYPES, df, dt, company_id)
+        net_income = -sum((_d(r["balance"]) for r in pl), Decimal("0"))
+        depreciation = sum(
+            (_d(r["balance"]) for r in pl if r["account_type"] == "expense_depreciation"),
+            Decimal("0"),
+        )
+
+        async def _effect(types: tuple[str, ...]) -> Decimal:
+            opening = await _balance_by_types(env, opening_date, types, company_id)
+            closing = await _balance_by_types(env, dt, types, company_id)
+            return -(closing - opening)
+
+        wc_assets = await _effect(_WC_ASSET_TYPES)
+        wc_liabilities = await _effect(_WC_LIABILITY_TYPES)
+        fixed_assets_effect = await _effect(_FIXED_ASSET_TYPES)
+        long_term_debt = await _effect(_LONG_TERM_DEBT_TYPES)
+        equity = await _effect(_EQUITY_TYPES)
+
+        operating_total = net_income + depreciation + wc_assets + wc_liabilities
+        investing_total = fixed_assets_effect - depreciation
+        financing_total = long_term_debt + equity
+        net_change = operating_total + investing_total + financing_total
+
+        cash_opening = await _balance_by_types(env, opening_date, _CASH_TYPES, company_id)
+        cash_closing_actual = await _balance_by_types(env, dt, _CASH_TYPES, company_id)
+        cash_closing_computed = cash_opening + net_change
+
+        return {
+            "operating": {
+                "lines": [
+                    {"label": "Net Income", "amount": str(net_income)},
+                    {"label": "Depreciation & Amortization", "amount": str(depreciation)},
+                    {
+                        "label": "Change in Receivables & Other Current Assets",
+                        "amount": str(wc_assets),
+                    },
+                    {
+                        "label": "Change in Payables & Other Current Liabilities",
+                        "amount": str(wc_liabilities),
+                    },
+                ],
+                "total": str(operating_total),
+            },
+            "investing": {
+                "lines": [
+                    {"label": "Purchase/Sale of Fixed Assets", "amount": str(investing_total)},
+                ],
+                "total": str(investing_total),
+            },
+            "financing": {
+                "lines": [
+                    {"label": "Change in Long-term Debt", "amount": str(long_term_debt)},
+                    {"label": "Change in Equity", "amount": str(equity)},
+                ],
+                "total": str(financing_total),
+            },
+            "net_change_in_cash": str(net_change),
+            "cash_at_beginning": str(cash_opening),
+            "cash_at_end": str(cash_closing_computed),
+            "totals": {
+                "cash_at_end_actual": str(cash_closing_actual),
+                "balanced": abs(cash_closing_computed - cash_closing_actual) < Decimal("0.01"),
+            },
+            "date_from": df.isoformat() if df else None,
+            "date_to": dt.isoformat(),
+        }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Tax Report — FR-016, ADR-040/044
 # ─────────────────────────────────────────────────────────────────────────────
 class AccountReportTax(_VirtualReport):

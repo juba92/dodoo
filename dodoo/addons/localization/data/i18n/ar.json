@@ -330,5 +330,19 @@
   "0-30": "0-30",
   "31-60": "31-60",
   "61-90": "61-90",
-  "90+": "+90"
+  "90+": "+90",
+  "Cash Flow Statement": "قائمة التدفقات النقدية",
+  "Operating Activities": "الأنشطة التشغيلية",
+  "Investing Activities": "الأنشطة الاستثمارية",
+  "Financing Activities": "الأنشطة التمويلية",
+  "Net Income": "صافي الدخل",
+  "Depreciation & Amortization": "الإهلاك والاستهلاك",
+  "Change in Receivables & Other Current Assets": "التغير في الذمم المدينة والأصول المتداولة الأخرى",
+  "Change in Payables & Other Current Liabilities": "التغير في الذمم الدائنة والالتزامات المتداولة الأخرى",
+  "Purchase/Sale of Fixed Assets": "شراء/بيع الأصول الثابتة",
+  "Change in Long-term Debt": "التغير في الديون طويلة الأجل",
+  "Change in Equity": "التغير في حقوق الملكية",
+  "Net Increase in Cash": "صافي الزيادة في النقدية",
+  "Cash at Beginning of Period": "النقدية في بداية الفترة",
+  "Cash at End of Period": "النقدية في نهاية الفترة"
 }

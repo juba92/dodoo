@@ -52,10 +52,13 @@ jobs:
           python-version: "3.12"
       - run: pip install -e ".[dev]"
       - name: Run batched test suite with coverage
-        # test_post_fails_on_imbalance and the 5 test_reports.py cases deselected below
-        # predate 008-accounting-parity (see tests/accounting's pre-existing 6 files,
-        # never modified for correctness) and are tracked as known, out-of-scope bugs —
-        # not skipped to hide a regression.
+        # test_post_fails_on_imbalance and the first 5 test_reports.py cases deselected
+        # below predate 008-accounting-parity (see tests/accounting's pre-existing 6
+        # files, never modified for correctness) and are tracked as known, out-of-scope
+        # bugs — not skipped to hide a regression. test_cash_flow_reconciles_to_actual_
+        # cash_balance is a different case: it's correct but, like test_reports_opening_
+        # balance.py/test_tax_report.py, aggregates by account type with no date floor,
+        # so it needs accounting-test-isolation too — see the standalone step below.
         run: |
           pytest tests/unit/ tests/integration/ tests/e2e/ tests/accounting/ tests/analytic/ \
             --ignore=tests/accounting/test_reports_opening_balance.py \
@@ -66,17 +69,19 @@ jobs:
             --deselect=tests/accounting/test_reports.py::test_profit_loss_income_positive_net_computed \
             --deselect=tests/accounting/test_reports.py::test_balance_sheet_balances_with_current_year_earnings \
             --deselect=tests/accounting/test_reports.py::test_aged_receivable_buckets_by_due_date \
+            --deselect=tests/accounting/test_reports.py::test_cash_flow_reconciles_to_actual_cash_balance \
             --cov=dodoo --cov-report=
         env:
           DATABASE_URL: postgresql+asyncpg://dodoo_admin:testpass@localhost/dodoo_test
           DATABASE_MIGRATION_URL: postgresql+asyncpg://dodoo_admin:testpass@localhost/dodoo_test
           SESSION_EXPIRY_HOURS: "8"
       - name: Run isolation-required accounting report tests standalone
-        # Per accounting-test-isolation: these two files share mutable state
-        # with sibling tests/accounting/ files and must not run batched.
+        # Per accounting-test-isolation: these share mutable state with sibling
+        # tests/accounting/ files/tests and must not run batched.
         run: |
           pytest tests/accounting/test_reports_opening_balance.py --cov=dodoo --cov-append --cov-report=
           pytest tests/accounting/test_tax_report.py --cov=dodoo --cov-append --cov-report=
+          pytest tests/accounting/test_reports.py::test_cash_flow_reconciles_to_actual_cash_balance --cov=dodoo --cov-append --cov-report=
         env:
           DATABASE_URL: postgresql+asyncpg://dodoo_admin:testpass@localhost/dodoo_test
           DATABASE_MIGRATION_URL: postgresql+asyncpg://dodoo_admin:testpass@localhost/dodoo_test

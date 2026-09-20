@@ -122,6 +122,10 @@ const REPORTS = {
     label: 'Aged Payable', filter: 'asof', endpoint: '/account/report/aged-payable',
     render: renderAged,
   },
+  'cash-flow': {
+    label: 'Cash Flow Statement', filter: 'range', endpoint: '/account/report/cash-flow',
+    render: renderCashFlow,
+  },
   'tax-report': {
     label: 'Tax Report', filter: 'range', endpoint: '/account/report/tax-report',
     render: renderTaxReport,
@@ -431,6 +435,31 @@ function renderAged(parent, data) {
     _money(tt.total, { strong: true }),
   ], { cls: 'report-total-row' });
   _mount(parent, table);
+}
+
+// ── Cash Flow Statement ──────────────────────────────────────────────────────
+function renderCashFlow(parent, data) {
+  const { table, tbody } = _table([t('Label'), { txt: t('Amount'), right: true }]);
+
+  const section = (labelKey, sec) => {
+    _row(tbody, [{ txt: t(labelKey), strong: true }, { txt: '', right: true }], { cls: 'report-group-row' });
+    (sec.lines || []).forEach(l =>
+      _row(tbody, [{ txt: t(l.label), indent: 1 }, _money(l.amount)]));
+    _row(tbody, [{ txt: t(labelKey) + ' — ' + t('Total'), strong: true }, _money(sec.total, { strong: true })],
+      { cls: 'report-subtotal-row' });
+  };
+
+  section('Operating Activities', data.operating || {});
+  section('Investing Activities', data.investing || {});
+  section('Financing Activities', data.financing || {});
+
+  _row(tbody, [{ txt: t('Net Increase in Cash'), strong: true }, _money(data.net_change_in_cash, { strong: true })],
+    { cls: 'report-total-row' });
+  _row(tbody, [{ txt: t('Cash at Beginning of Period') }, _money(data.cash_at_beginning)]);
+  _row(tbody, [{ txt: t('Cash at End of Period'), strong: true }, _money(data.cash_at_end, { strong: true })],
+    { cls: 'report-total-row' });
+  _mount(parent, table);
+  _balanceBadge(parent, (data.totals || {}).balanced);
 }
 
 // ── Tax Report ───────────────────────────────────────────────────────────────

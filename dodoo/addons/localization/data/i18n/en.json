@@ -330,5 +330,19 @@
   "0-30": "0-30",
   "31-60": "31-60",
   "61-90": "61-90",
-  "90+": "90+"
+  "90+": "90+",
+  "Cash Flow Statement": "Cash Flow Statement",
+  "Operating Activities": "Operating Activities",
+  "Investing Activities": "Investing Activities",
+  "Financing Activities": "Financing Activities",
+  "Net Income": "Net Income",
+  "Depreciation & Amortization": "Depreciation & Amortization",
+  "Change in Receivables & Other Current Assets": "Change in Receivables & Other Current Assets",
+  "Change in Payables & Other Current Liabilities": "Change in Payables & Other Current Liabilities",
+  "Purchase/Sale of Fixed Assets": "Purchase/Sale of Fixed Assets",
+  "Change in Long-term Debt": "Change in Long-term Debt",
+  "Change in Equity": "Change in Equity",
+  "Net Increase in Cash": "Net Increase in Cash",
+  "Cash at Beginning of Period": "Cash at Beginning of Period",
+  "Cash at End of Period": "Cash at End of Period"
 }
