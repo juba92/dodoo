@@ -99,13 +99,16 @@ JS views (list + form) + 1 menu entry, 14 functional requirements (FR-001…FR-0
   tooling. New fields follow `ResPartner`'s existing `snake_case`/`Field()` declaration style; the
   two `account`-owned columns follow `_PARTNER_FK_COLUMNS`'s existing raw-SQL-idiom naming
   (`property_*` prefix, matching the three columns already there).
-- [X] **II. Testing**: Unit-level coverage for pure logic (AR-ledger balance arithmetic against a
-  fixed set of invoice/payment/cancellation fixtures, search-matching predicate). Integration tests
-  cover the full CRUD + archive + delete-guard + AR-ledger-against-real-Postgres path in
-  `test_customer_database.py`, using `tests/accounting/conftest.py`'s existing `company_id`/
-  `currency_id`/`journal_sale`/`ar_account`/`partner_id` fixtures. E2E extends
-  `test_web_ui_a11y.py` for the customer list and form (including the AR-ledger panel). Coverage
-  thresholds match 001–008's CI gate (≥80% unit, 100% on the AR-balance computation critical path).
+- [X] **II. Testing**: Unit-level coverage for the pure `_status_and_balance(lines)` helper (ADR-047)
+  against a fixed set of invoice/payment/cancellation fixture dicts — no DB. (Customer search
+  matching is client-side JS filtering, exercised by `customer-list.js`'s own e2e coverage below,
+  not a Python unit test — the same split `coa-list.js`'s equivalent client-side filter already has
+  in this codebase.) Integration tests cover the full CRUD + archive + delete-guard +
+  AR-ledger-against-real-Postgres path in `test_customer_database.py`, using
+  `tests/accounting/conftest.py`'s existing `company_id`/`currency_id`/`journal_sale`/`ar_account`/
+  `partner_id` fixtures. E2E extends `test_web_ui_a11y.py` for the customer list and form (including
+  the AR-ledger panel). Coverage thresholds match 001–008's CI gate (≥80% unit, 100% on the
+  `_status_and_balance` critical path).
 - [X] **III. Security**: SEC-001…004 map to: Pydantic `extra="forbid"` validators for every field on
   the new customer create/update payload (`CustomerCreate`/`CustomerUpdate` in
   `account/validators.py`, reusing the whitelist-boundary pattern every other validator in that file
@@ -177,18 +180,22 @@ each addon's existing ownership idiom**
 
 **ADR-047: AR ledger as an on-demand computed endpoint, not a stored entity**
 
-- **Decision**: A new `AccountReportPartnerLedger`-style helper — in practice a plain classmethod,
-  `ResPartner.get_ar_ledger(env, partner_id)` (in `account`'s own `models/`, since `res.partner`
-  itself lives in `base` but this method is an accounting concern — placed as a module-level
-  function in a new `dodoo/addons/account/models/account_partner.py`, not a change to `base`'s
-  `ResPartner` class) — queries `account_move`/`account_move_line` for the partner's posted
-  invoices/credit notes (`move_type` in the existing `_SALE_TYPES`) whose lines hit an
-  `asset_receivable`-type account, plus `account_payment` rows for the same partner, unions them
-  into one chronological list (`date`, document type, reference/`name`, `amount`, computed
-  paid/partial/open status from the line's existing `amount_residual`, `move_id` for drill-down),
-  and sums open lines' `amount_residual` for the balance — all in the partner's `property_currency_id`
-  (or company currency if unset). Exposed via `GET /account/partner/{partner_id}/ar-ledger`. Not a
-  stored/maintained field or table; computed at read time on every call.
+- **Decision**: A new module-level function, `get_ar_ledger(env, partner_id)` — **not** a method on
+  `base`'s `ResPartner` class, since `res.partner` itself lives in `base` but this query is an
+  accounting concern — placed in a new `dodoo/addons/account/models/account_partner.py`. It queries
+  `account_move`/`account_move_line` for the partner's posted invoices/credit notes (`move_type` in
+  the existing `_SALE_TYPES`) whose lines hit an `asset_receivable`-type account, plus
+  `account_payment` rows for the same partner, unions them into one chronological list of plain
+  dicts (`date`, document type, reference/`name`, `amount`, `move_id`, and each line's raw
+  `amount_residual`), then hands that list to a second, pure function, `_status_and_balance(lines)`
+  (no DB access — just arithmetic and a `status` classification per line), which returns the final
+  `(balance, lines_with_status)` — all in the partner's `property_currency_id` (or company currency
+  if unset). Exposed via `GET /account/partner/{partner_id}/ar-ledger`. Not a stored/maintained
+  field or table; computed at read time on every call. Splitting out `_status_and_balance` as a
+  pure function (rather than inlining the arithmetic into the DB-querying function) is what makes
+  the balance/status computation unit-testable without Postgres (Principle II) — the exact
+  "pure-logic piece with no DB" shape 008-accounting-parity's own unit tests already use for tax/
+  due-date math.
 - **Rationale**: This is the exact "compute a summary on demand from source rows" convention
   `AccountAccount.get_balance` already established (`account_account.py`, backing
   `/account/account/{account_id}/balance`) and the read-time `is_complete` check
@@ -278,7 +285,8 @@ dodoo/addons/account/
 │   └── i18n/{en,ar}.json              # EDIT: new UI strings for customer screens
 │                                      #   (per [[i18n-per-addon-catalogs]])
 ├── models/
-│   ├── account_partner.py            # NEW: ResPartner.get_ar_ledger(env, partner_id) (ADR-047)
+│   ├── account_partner.py            # NEW: get_ar_ledger(env, partner_id) +
+│   │                                  #   _status_and_balance(lines) pure helper (ADR-047)
 │   └── __init__.py                   # EDIT: import + register the new module
 ├── validators.py                     # EDIT: + CustomerCreate/CustomerUpdate Pydantic models
 │                                      #   (name required, email regex-validated, extra="forbid")

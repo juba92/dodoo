@@ -50,8 +50,9 @@ remains unrestricted regardless of financial history (Edge Cases).
 
 ## Derived (non-stored) view: AR ledger
 
-Not a table or model — a computed response shape returned by `ResPartner.get_ar_ledger(env,
-partner_id)` (ADR-047), consumed by `GET /account/partner/{partner_id}/ar-ledger`:
+Not a table or model — a computed response shape returned by `get_ar_ledger(env, partner_id)`, a
+module-level function in `account/models/account_partner.py` (ADR-047, **not** a `ResPartner`
+method — `res.partner` lives in `base`), consumed by `GET /account/partner/{partner_id}/ar-ledger`:
 
 ```text
 {
