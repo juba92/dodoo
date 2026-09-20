@@ -186,6 +186,52 @@ def test_a11y_lock_exception_active_status_is_text_not_color_only(a11y_page: Pag
     )
 
 
+# 009-customer-database (ACC-001…003): customer list + form (including the
+# AR-ledger panel) — same axe pass as the generic/008 screens above.
+
+
+def test_a11y_customer_list(a11y_page: Page):
+    _login(a11y_page)
+    a11y_page.goto(f"{_CLIENT}#/accounting/customers")
+    a11y_page.wait_for_selector("table, .empty-state")
+    violations = _run_axe(a11y_page)
+    critical = [v for v in violations if v.get("impact") in ("critical", "serious")]
+    assert critical == [], (
+        "WCAG 2.1 AA critical violations on customer list:\n"
+        + "\n".join(f"  [{v['id']}] {v['description']}" for v in critical)
+    )
+
+
+def test_a11y_customer_form_new(a11y_page: Page):
+    _login(a11y_page)
+    a11y_page.goto(f"{_CLIENT}#/accounting/customer/new")
+    a11y_page.wait_for_selector(".form-card")
+    violations = _run_axe(a11y_page)
+    critical = [v for v in violations if v.get("impact") in ("critical", "serious")]
+    assert critical == [], (
+        "WCAG 2.1 AA critical violations on new-customer form:\n"
+        + "\n".join(f"  [{v['id']}] {v['description']}" for v in critical)
+    )
+
+
+def test_a11y_customer_list_rows_keyboard_reachable(a11y_page: Page):
+    """ACC-002: customer-list.js's rows are its only way to open a record —
+    same tabIndex=0 + Enter/Space pattern web/static/views/list.js already
+    proves works, applied to this bespoke view (ADR-048)."""
+    _login(a11y_page)
+    a11y_page.goto(f"{_CLIENT}#/accounting/customers")
+    a11y_page.wait_for_selector("table.data-table")
+    row = a11y_page.locator("table.data-table tbody tr").first
+    # Language-independent empty-state check: the empty-state row is a single
+    # colspan'd <td>, a real customer row has three (name/vat/balance) — a
+    # hardcoded English-text check would silently mis-skip under Arabic mode.
+    if row.count() == 0 or row.locator("td").count() < 3:
+        pytest.skip("no customers seeded")
+    assert row.get_attribute("tabindex") not in (None, "-1"), (
+        "customer list rows must be in the tab order for keyboard operability"
+    )
+
+
 def test_a11y_list_rows_keyboard_reachable(a11y_page: Page):
     """ACC-002: every row-activation affordance on the four new screens must
     be operable without a pointer. This is a framework-level property of the

@@ -7,10 +7,11 @@ feature is parsed through a Pydantic v2 model with ``extra="forbid"``.
 from __future__ import annotations
 
 import datetime as _dt
+import re
 from decimal import Decimal
 from typing import Any, Literal, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from sqlalchemy import text
 
 from dodoo.core.exceptions import AccessError, DodooError
@@ -184,3 +185,36 @@ class FiscalYearClose(Payload):
 
 class DebitNoteCreate(Payload):
     pass  # empty body
+
+
+# --------------------------------------------------------------------------- 009-customer-database
+
+# Plain stdlib `re` check, not `EmailStr` — this codebase has no
+# `pydantic[email]`/`email-validator` dependency today and FR-013 doesn't
+# warrant adding one (Technical Context, research.md).
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+class CustomerCreate(Payload):
+    name: str = Field(min_length=1, max_length=256)
+    email: str | None = Field(default=None, max_length=256)
+    phone: str | None = Field(default=None, max_length=64)
+    street: str | None = Field(default=None, max_length=256)
+    city: str | None = Field(default=None, max_length=128)
+    state_id: int | None = None
+    zip: str | None = Field(default=None, max_length=32)
+    country_id: int | None = None
+    vat: str | None = Field(default=None, max_length=32)
+    property_payment_term_id: int | None = None
+    property_currency_id: int | None = None
+
+    @field_validator("email")
+    @classmethod
+    def _valid_email(cls, v: str | None) -> str | None:
+        if v and not _EMAIL_RE.match(v):
+            raise ValueError("invalid email format")
+        return v
+
+
+class CustomerUpdate(CustomerCreate):
+    name: str | None = Field(default=None, min_length=1, max_length=256)  # optional on update

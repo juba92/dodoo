@@ -69,12 +69,18 @@ does, so it runs standalone like the existing balance/report test files.
 precedent (not the generic `#/accounting/model/:model` route — see ADR-048).
 
 **Performance Goals**: PERF-001/002 (customer list/search ≤10k records, AR ledger ≤5k
-lines, both <1s) are met by two `(partner_id, ...)`-scoped queries reusing `account_move_line`'s
-existing `idx_account_move_line_account_reconciled` shape: a new
-`idx_account_move_line_partner_account` composite index `(partner_id, account_id)` on
-`account_move_line` (added via `account/data/indexes.py`'s existing `ensure_indexes` helper) lets
-the AR-ledger query filter to one partner's receivable-account lines without a sequential scan; the
-customer list's balance column reuses the same index grouped by `partner_id`. PERF-003: no
+lines, both <1s) are met by two new indexes in `account/data/indexes.py` (added via the existing
+`ensure_indexes` helper), both arrived at empirically via `EXPLAIN ANALYZE` against a real
+5,000-line benchmark on a 100k-row `account_move`/`account_move_line` table, not guessed upfront:
+(1) `idx_account_move_partner_type` `(partner_id, move_type)` on `account_move` — a table with no
+`partner_id` index at all before this feature, and the first table `get_ar_ledger`'s query filters
+(13.7s → fast index scan without it); (2) a **partial** index,
+`idx_account_move_line_payment_term_move` `(move_id) WHERE display_type = 'payment_term'`, on
+`account_move_line` for the join — a plain composite `(move_id, display_type)` index was tried
+first and made things *worse* (20.5s) because the planner mis-estimated its selectivity and fell
+back to scanning `idx_account_move_line_display_type` per outer row instead; scoping the index to
+exactly this query's predicate resolved the mis-estimate (19ms). See `docs/adr/047-*.md`'s
+Consequences for the full iteration. PERF-003: no
 regression on invoice/payment posting — the AR balance is never written at posting time (Clarified:
 computed on demand), so `action_post` paths are untouched by this feature.
 
@@ -280,7 +286,7 @@ dodoo/addons/account/
 ├── data/
 │   ├── account_data.py               # EDIT: _PARTNER_FK_COLUMNS + customer_rank,
 │   │                                  #   property_currency_id (ADR-046)
-│   ├── indexes.py                    # EDIT: + idx_account_move_line_partner_account
+│   ├── indexes.py                    # EDIT: + idx_account_move_partner_type
 │   │                                  #   (partner_id, account_id) — PERF-001/002
 │   └── i18n/{en,ar}.json              # EDIT: new UI strings for customer screens
 │                                      #   (per [[i18n-per-addon-catalogs]])

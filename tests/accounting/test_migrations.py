@@ -29,6 +29,14 @@ EXPECTED_COLUMNS: list[tuple[str, str]] = [
     ("account_move", "down_payment_origin_id"),
     ("account_account", "group_id"),
     ("account_journal", "restrict_mode_hash_table"),
+    # 009-customer-database (ADR-046)
+    ("res_partner", "street"),
+    ("res_partner", "city"),
+    ("res_partner", "state_id"),
+    ("res_partner", "zip"),
+    ("res_partner", "country_id"),
+    ("res_partner", "customer_rank"),
+    ("res_partner", "property_currency_id"),
 ]
 
 EXPECTED_TABLES: list[str] = [

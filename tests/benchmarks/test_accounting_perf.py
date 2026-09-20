@@ -411,3 +411,166 @@ async def test_perf_004_currency_rate_lookup_under_50ms(env, seeded_5yr_currency
 
     assert rate is not None
     assert elapsed_ms < 50.0, f"PERF-004 violated: {elapsed_ms:.1f}ms (limit 50ms)"
+
+
+# --------------------------------------------------------------------------- 009-customer-database
+
+
+@pytest_asyncio.fixture(scope="module")
+async def seeded_10k_customers(module_env):
+    """PERF-001: 10,000 `res.partner` rows flagged as customers for one
+    company, bulk-inserted directly (this benchmark targets the list/search
+    *read* path only)."""
+    env = module_env
+    async with env.dml_conn() as conn:
+        cid = (await conn.execute(text("SELECT id FROM res_company LIMIT 1"))).scalar_one()
+        existing = (
+            await conn.execute(
+                text("SELECT COUNT(*) FROM res_partner WHERE name LIKE 'PERF-CUST-%'")
+            )
+        ).scalar_one()
+        if existing < 10_000:
+            await conn.execute(
+                text(
+                    """
+                    INSERT INTO res_partner
+                        (name, company_id, active, customer_rank, vat, create_date, write_date)
+                    SELECT 'PERF-CUST-' || g, :cid, TRUE, 1, 'VAT' || g, now(), now()
+                    FROM generate_series(1, 10000) AS g
+                    """
+                ),
+                {"cid": cid},
+            )
+            await conn.commit()
+    return {"company_id": cid}
+
+
+@pytest.mark.asyncio
+async def test_perf_001_customer_list_query_stays_interactive(env, seeded_10k_customers):
+    """PERF-001: the customer list's backing query (GET /account/customers)
+    returns within standard interactive latency (<1s) at 10,000 customers."""
+    start = time.perf_counter()
+    async with env.dml_conn() as conn:
+        rows = await conn.execute(
+            text(
+                "SELECT id, name, vat, email, phone, active, customer_rank "
+                "FROM res_partner WHERE customer_rank > 0 AND active = TRUE ORDER BY name"
+            )
+        )
+        result = rows.mappings().all()
+    elapsed_ms = (time.perf_counter() - start) * 1000
+
+    assert len(result) >= 10_000
+    assert elapsed_ms < 1000.0, f"PERF-001 (customer list) violated: {elapsed_ms:.1f}ms (limit 1000ms)"
+
+
+@pytest_asyncio.fixture(scope="module")
+async def seeded_5k_ar_lines(module_env):
+    """PERF-002: ~5,000 posted invoices (one payment_term/AR line each) for a
+    single customer, bulk-inserted directly."""
+    env = module_env
+    async with env.dml_conn() as conn:
+        company_id = (await conn.execute(text("SELECT id FROM res_company LIMIT 1"))).scalar_one()
+        journal_id = (
+            await conn.execute(
+                text("SELECT id FROM account_journal WHERE type='general' AND company_id=:c"),
+                {"c": company_id},
+            )
+        ).scalar_one()
+        currency_id = (await conn.execute(text("SELECT id FROM res_currency WHERE code='EUR'"))).scalar_one()
+        ar_account = (
+            await conn.execute(
+                text(
+                    "SELECT id FROM account_account WHERE account_type='asset_receivable' "
+                    "AND company_id=:c"
+                ),
+                {"c": company_id},
+            )
+        ).scalar_one()
+
+        partner_id = (
+            await conn.execute(
+                text(
+                    "SELECT id FROM res_partner WHERE name = 'PERF-002 AR Customer' LIMIT 1"
+                )
+            )
+        ).scalar_one_or_none()
+        if not partner_id:
+            partner_id = (
+                await conn.execute(
+                    text(
+                        "INSERT INTO res_partner (name, company_id, active, customer_rank, "
+                        "create_date, write_date) "
+                        "VALUES ('PERF-002 AR Customer', :cid, TRUE, 1, now(), now()) "
+                        "RETURNING id"
+                    ),
+                    {"cid": company_id},
+                )
+            ).scalar_one()
+
+        existing = (
+            await conn.execute(
+                text("SELECT COUNT(*) FROM account_move WHERE ref = 'PERF-002-AR'")
+            )
+        ).scalar_one()
+        if existing < 5_000:
+            move_ids = (
+                await conn.execute(
+                    text(
+                        """
+                        INSERT INTO account_move
+                            (move_type, state, journal_id, company_id, currency_id, partner_id,
+                             date, name, ref, posted_before, payment_state, amount_untaxed,
+                             amount_tax, amount_total, amount_residual, create_date, write_date)
+                        SELECT
+                            'out_invoice', 'posted', :jid, :cid, :curid, :pid,
+                            (DATE '2024-01-01' + (g % 700) * INTERVAL '1 day')::date,
+                            'PERF002/' || g, 'PERF-002-AR', TRUE, 'not_paid', 100, 0, 100, 100,
+                            now(), now()
+                        FROM generate_series(1, 5000) AS g
+                        RETURNING id
+                        """
+                    ),
+                    {"jid": journal_id, "cid": company_id, "curid": currency_id, "pid": partner_id},
+                )
+            )
+            move_ids = [row[0] for row in move_ids.fetchall()]
+            await conn.execute(
+                text(
+                    """
+                    INSERT INTO account_move_line
+                        (move_id, account_id, date, display_type, debit, credit, balance,
+                         amount_residual, create_date, write_date)
+                    SELECT m_id, :acct, CURRENT_DATE, 'payment_term', 100, 0, 100, 100, now(), now()
+                    FROM unnest(CAST(:mids AS INTEGER[])) AS m_id
+                    """
+                ),
+                {"acct": ar_account, "mids": list(move_ids)},
+            )
+            await conn.commit()
+
+        # Same reasoning as seeded_100k_lines above: a bulk INSERT this size
+        # needs fresh statistics or the planner drastically mis-estimates the
+        # payment_term-line join's selectivity (measured: 13.7s→4.9s without
+        # this vs. 19ms with it, at 100k+ background rows — docs/adr/047-*.md).
+        async with env.dml_conn() as conn:
+            await conn.execute(text("ANALYZE account_move"))
+            await conn.execute(text("ANALYZE account_move_line"))
+            await conn.commit()
+    return {"partner_id": partner_id}
+
+
+@pytest.mark.asyncio
+async def test_perf_002_ar_ledger_under_1s_at_5k_lines(env, seeded_5k_ar_lines):
+    """PERF-002: GET .../ar-ledger returns within 1s for a customer with
+    5,000 historical invoices."""
+    from dodoo.addons.account.models.account_partner import get_ar_ledger
+
+    partner_id = seeded_5k_ar_lines["partner_id"]
+
+    start = time.perf_counter()
+    ledger = await get_ar_ledger(env, partner_id)
+    elapsed_ms = (time.perf_counter() - start) * 1000
+
+    assert len(ledger["lines"]) >= 5_000
+    assert elapsed_ms < 1000.0, f"PERF-002 (AR ledger) violated: {elapsed_ms:.1f}ms (limit 1000ms)"

@@ -8,7 +8,7 @@ Covers FR-001…FR-014 (ADR-046/047/048).
 |---|---|---|---|
 | `create` | `{name, email?, phone?, street?, city?, state_id?, zip?, country_id?, vat?, property_payment_term_id?, property_currency_id?, customer_rank?}` | id | Validated against `CustomerCreate` at the HTTP boundary is **not** applicable here — generic `execute_kw` dispatch has no per-model Pydantic hook today, so `name`-required and email-format validation are enforced in `ResPartner.create`/`write` itself (a `classmethod` override, the same "override create/write, validate, call super()" pattern `AccountPaymentTermLine`/`AccountAccount` already use), not in `account/validators.py` (that file only backs dedicated `@route`s — see note below). `customer_rank` defaults to `1` when omitted and `name` is provided (a plain create is assumed to be a customer create from this feature's UI). |
 | `write` | `{id: [...], vals: {...same fields...}}` | `True` | Same validation as `create`. |
-| `search_read` | `domain=[["customer_rank", ">", 0], ...]`, `fields=[...]` | rows | Customer list/search (FR-003/004) — `customer-list.js` builds the domain client-side (`customer_rank > 0` plus, if `active` isn't requested, the model's existing default active-only filter); name/VAT substring matching is done client-side over the fetched page, following `coa-list.js`'s existing pattern. |
+| `search_read` | n/a for the customer list | — | **Correction**: `customer_rank` is a raw, undeclared column (ADR-046), so `compile_domain` rejects `[["customer_rank", ">", 0]]` — the generic RPC cannot filter on it. `customer-list.js` uses `GET /account/customers` instead (below); name/VAT substring matching is still done client-side over the fetched page, following `coa-list.js`'s existing pattern. |
 | `unlink` | `{ids: [...]}` | `True` / `400 DodooError` | FR-006: rejected if any id is referenced by `account_move.partner_id` or `account_payment.partner_id`. |
 
 **Note on validation placement**: `CustomerCreate`/`CustomerUpdate` in `account/validators.py` are
@@ -20,10 +20,25 @@ works in this codebase) but the customer UI itself goes through the validated ro
 
 ## REST routes
 
+### `GET /account/customers`
+
+Read-only. Query param `include_archived=true` to include archived customers (default: active
+only). Returns `{"result": [{id, name, vat, email, phone, active, customer_rank}, ...]}`, ordered
+by name — the raw route `customer-list.js` uses in place of the generic `search_read` (see
+correction above).
+
 ### `POST /account/partner`
 
 Body: `CustomerCreate`. Creates a `res.partner` with `customer_rank=1`. Returns
 `{"result": <partner_id>}`.
+
+### `GET /account/partner/{partner_id}`
+
+Read-only. Returns the full customer record **including** the three raw, undeclared columns
+(`customer_rank`, `property_currency_id`, `property_payment_term_id`) that the generic
+`read`/`search_read` RPC cannot return (they aren't declared `Field`s on `base`'s `ResPartner`,
+per ADR-046). `customer-form.js` uses this route to load a customer for editing, instead of the
+generic RPC.
 
 ### `PATCH /account/partner/{partner_id}`
 

@@ -550,6 +550,8 @@ const _ROUTES = [
   [/^#\/accounting\/move\/(new|\d+)$/, () => _view('/account/static/views/invoice-form.js')],
   [/^#\/accounting\/chart-of-accounts$/, () => _view('/account/static/views/coa-list.js')],
   [/^#\/accounting\/account\/(new|\d+)$/, () => _view('/account/static/views/account-form.js')],
+  [/^#\/accounting\/customers$/, () => _view('/account/static/views/customer-list.js')],
+  [/^#\/accounting\/customer\/(new|\d+)$/, () => _view('/account/static/views/customer-form.js')],
   [/^#\/accounting\/reports\/([^/]+)$/, () => _view('/account/static/views/report-view.js')],
   [/^#\/accounting\/model\/([^/]+)\/new$/, () => _view('/web/static/views/form.js')],
   [/^#\/accounting\/model\/([^/]+)\/(\d+)$/, () => _view('/web/static/views/form.js')],
@@ -605,6 +607,8 @@ function _paramsFromHash(hash) {
   if ((m = base.match(/^#\/accounting\/move\/(\d+)$/)))                return { id: parseInt(m[1], 10) };
   if ((m = base.match(/^#\/accounting\/account\/new$/)))               return { id: 'new' };
   if ((m = base.match(/^#\/accounting\/account\/(\d+)$/)))             return { id: parseInt(m[1], 10) };
+  if ((m = base.match(/^#\/accounting\/customer\/new$/)))              return { id: 'new' };
+  if ((m = base.match(/^#\/accounting\/customer\/(\d+)$/)))            return { id: parseInt(m[1], 10) };
   if ((m = base.match(/^#\/accounting\/reports\/([^/]+)$/)))           return { report: m[1], account_id: qs.get('account_id') ? parseInt(qs.get('account_id'), 10) : null };
   if ((m = base.match(/^#\/accounting\/model\/([^/]+)\/new$/)))        return { model: m[1], id: 'new' };
   if ((m = base.match(/^#\/accounting\/model\/([^/]+)\/(\d+)$/)))      return { model: m[1], id: parseInt(m[2], 10) };

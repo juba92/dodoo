@@ -583,6 +583,18 @@ fieldset.form-group legend {
   margin-bottom: 12px;
 }
 
+/* Advisory, non-blocking warning (e.g. 009-customer-database's duplicate-VAT
+   notice) — same proven contrast pair as .badge-partial. */
+.alert-warning {
+  background: #FEF9E7;
+  border: 1px solid #F9E79F;
+  color: #B7950B;
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: .84rem;
+  margin-bottom: 12px;
+}
+
 /* ── Loading spinner ─────────────────────────────────────────────────────────── */
 .loading {
   display: flex;

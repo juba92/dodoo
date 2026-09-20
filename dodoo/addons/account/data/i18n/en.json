@@ -48,5 +48,22 @@
   "Restrict Mode Hash Table": "Hash Chain Mode",
   "Strategy": "Strategy",
   "Tag": "Tag",
-  "Analytic Account": "Analytic Account"
+  "Analytic Account": "Analytic Account",
+  "Street": "Street",
+  "City": "City",
+  "ZIP": "ZIP",
+  "Zip": "ZIP",
+  "State/Region": "State/Region",
+  "Tax/VAT Number": "Tax/VAT Number",
+  "Open": "Open",
+  "New Customer": "New Customer",
+  "— Company default —": "— Company default —",
+  "Accounts Receivable": "Accounts Receivable",
+  "Outstanding Balance": "Outstanding Balance",
+  "No invoices, credit notes, or payments yet.": "No invoices, credit notes, or payments yet.",
+  "No customers found.": "No customers found.",
+  "Another customer already uses this Tax/VAT number.": "Another customer already uses this Tax/VAT number.",
+  "Failed to load Accounts Receivable data": "Failed to load Accounts Receivable data",
+  "Credit Note": "Credit Note",
+  "Payment": "Payment"
 }

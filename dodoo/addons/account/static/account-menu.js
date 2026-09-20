@@ -2,6 +2,7 @@ export const ACCOUNTING_MENU = [
   {
     section: 'Customers',
     items: [
+      { label: 'Customers',    hash: '#/accounting/customers' },
       { label: 'Invoices',     hash: '#/accounting/invoices' },
       { label: 'Credit Notes', hash: '#/accounting/credit-notes' },
       { label: 'Payments',     hash: '#/accounting/customer-payments' },

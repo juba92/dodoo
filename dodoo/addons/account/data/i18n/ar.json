@@ -48,5 +48,22 @@
   "Restrict Mode Hash Table": "وضع سلسلة التجزئة",
   "Strategy": "الاستراتيجية",
   "Tag": "الوسم",
-  "Analytic Account": "الحساب التحليلي"
+  "Analytic Account": "الحساب التحليلي",
+  "Street": "الشارع",
+  "City": "المدينة",
+  "ZIP": "الرمز البريدي",
+  "State/Region": "المنطقة",
+  "Tax/VAT Number": "الرقم الضريبي",
+  "Open": "مفتوح",
+  "New Customer": "عميل جديد",
+  "— Company default —": "— الافتراضي للشركة —",
+  "Accounts Receivable": "الذمم المدينة",
+  "Outstanding Balance": "الرصيد المستحق",
+  "No invoices, credit notes, or payments yet.": "لا توجد فواتير أو إشعارات دائن أو مدفوعات بعد.",
+  "No customers found.": "لم يتم العثور على عملاء.",
+  "Another customer already uses this Tax/VAT number.": "يستخدم عميل آخر هذا الرقم الضريبي بالفعل.",
+  "Failed to load Accounts Receivable data": "فشل تحميل بيانات الذمم المدينة",
+  "Credit Note": "إشعار دائن",
+  "Payment": "دفعة",
+  "Zip": "الرمز البريدي"
 }

@@ -163,3 +163,37 @@ async def partner_id(env, company_id):
         env,
         {"name": "Test Partner", "company_id": company_id, "active": True},
     )
+
+
+@pytest_asyncio.fixture
+async def payment_term_id(env, company_id):
+    from dodoo.addons.account.models.account_payment_term import AccountPaymentTerm
+
+    return await AccountPaymentTerm.create(
+        env, {"name": "Immediate", "company_id": company_id}
+    )
+
+
+@pytest_asyncio.fixture
+async def customer_id(env, company_id, currency_id, payment_term_id):
+    """009-customer-database: a partner flagged as a customer (`customer_rank > 0`)
+    with billing address and default payment terms set."""
+    from dodoo.addons.base.models.res_partner import ResPartner
+
+    return await ResPartner.create(
+        env,
+        {
+            "name": "Test Customer",
+            "company_id": company_id,
+            "active": True,
+            "email": "customer@example.test",
+            "phone": "+1-555-0100",
+            "street": "1 Main St",
+            "city": "Springfield",
+            "zip": "00000",
+            "vat": "US000111222",
+            "customer_rank": 1,
+            "property_payment_term_id": payment_term_id,
+            "property_currency_id": currency_id,
+        },
+    )

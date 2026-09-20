@@ -17,6 +17,10 @@ from dodoo.addons.account.models.account_journal import AccountJournal
 from dodoo.addons.account.models.account_lock_exception import AccountLockException
 from dodoo.addons.account.models.account_move import AccountMove
 from dodoo.addons.account.models.account_move_line import AccountMoveLine
+from dodoo.addons.account.models.account_partner import (
+    get_ar_ledger,
+    write_partner_properties,
+)
 from dodoo.addons.account.models.account_payment import AccountPayment
 from dodoo.addons.account.models.account_payment_term import (
     AccountPaymentTerm,
@@ -51,6 +55,8 @@ __all__ = [
     "AccountCashRounding",
     "AccountJournal",
     "AccountLockException",
+    "get_ar_ledger",
+    "write_partner_properties",
     "AccountMove",
     "AccountMoveLine",
     "AccountPayment",

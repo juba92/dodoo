@@ -506,3 +506,143 @@ async def statement_line_reconcile(
         return JSONResponse({"result": result})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
+
+
+# ---- Customer database (009-customer-database, FR-001/002/008/009/010) ----
+
+
+@route("/account/customers", methods=["GET"], auth="session")
+async def list_customers(request: Request) -> JSONResponse:
+    """FR-003/004: customers (`customer_rank > 0`) for the list/search view —
+    a raw route because `customer_rank` isn't a declared `Field` on `base`'s
+    `ResPartner`, so the generic `search_read` domain compiler can't filter on
+    it (ADR-046)."""
+    env = request.app.state.env
+    include_archived = request.query_params.get("include_archived") == "true"
+
+    try:
+        async with env.dml_conn() as conn:
+            from sqlalchemy import text
+
+            active_clause = "" if include_archived else "AND active = TRUE"
+            rows = await conn.execute(
+                text(
+                    "SELECT id, name, vat, email, phone, active, customer_rank "
+                    f"FROM res_partner WHERE customer_rank > 0 {active_clause} "  # noqa: S608
+                    "ORDER BY name"
+                )
+            )
+            return JSONResponse({"result": [dict(r) for r in rows.mappings()]})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@route("/account/partner", methods=["POST"], auth="session")
+async def create_customer(request: Request) -> JSONResponse:
+    """FR-001/007/013: creates a `res.partner` flagged as a customer
+    (`customer_rank=1`)."""
+    env = request.app.state.env
+    from dodoo.addons.account.models.account_partner import write_partner_properties
+    from dodoo.addons.account.validators import CustomerCreate, validate
+    from dodoo.addons.base.models.res_partner import ResPartner
+
+    body = await request.json()
+    try:
+        payload = validate(CustomerCreate, body)
+        vals = payload.model_dump(
+            exclude={"property_payment_term_id", "property_currency_id"}, exclude_none=True
+        )
+        partner_id = await ResPartner.create(env, vals)
+        await write_partner_properties(
+            env,
+            partner_id,
+            {
+                "customer_rank": 1,
+                "property_payment_term_id": payload.property_payment_term_id,
+                "property_currency_id": payload.property_currency_id,
+            },
+        )
+        _log.info(
+            "res.partner customer created",
+            extra={"model": "res.partner", "record_id": partner_id, "event": "create_customer"},
+        )
+        return JSONResponse({"result": partner_id})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@route("/account/partner/{partner_id}", methods=["GET"], auth="session")
+async def read_customer(request: Request, partner_id: int) -> JSONResponse:
+    """Full `res.partner` read including the account-owned raw columns
+    (`customer_rank`/`property_currency_id`/`property_payment_term_id`) the
+    generic `read`/`search_read` RPC can't return, since they aren't declared
+    `Field`s on `base`'s `ResPartner` (ADR-046)."""
+    env = request.app.state.env
+
+    try:
+        async with env.dml_conn() as conn:
+            from sqlalchemy import text
+
+            row = await conn.execute(
+                text(
+                    "SELECT id, name, email, phone, street, city, state_id, zip, "
+                    "country_id, vat, active, customer_rank, property_currency_id, "
+                    "property_payment_term_id "
+                    "FROM res_partner WHERE id = :pid"
+                ),
+                {"pid": partner_id},
+            )
+            rec = row.mappings().fetchone()
+        if not rec:
+            return JSONResponse({"error": f"Partner {partner_id} does not exist"}, status_code=400)
+        return JSONResponse({"result": dict(rec)})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@route("/account/partner/{partner_id}", methods=["PATCH"], auth="session")
+async def update_customer(request: Request, partner_id: int) -> JSONResponse:
+    """FR-002: partial update of a customer record."""
+    env = request.app.state.env
+    from dodoo.addons.account.models.account_partner import write_partner_properties
+    from dodoo.addons.account.validators import CustomerUpdate, validate
+    from dodoo.addons.base.models.res_partner import ResPartner
+
+    body = await request.json()
+    try:
+        payload = validate(CustomerUpdate, body)
+        vals = payload.model_dump(
+            exclude={"property_payment_term_id", "property_currency_id"}, exclude_unset=True
+        )
+        if vals:
+            await ResPartner.write(env, [partner_id], vals)
+        raw_vals = payload.model_dump(
+            include={"property_payment_term_id", "property_currency_id"}, exclude_unset=True
+        )
+        if raw_vals:
+            await write_partner_properties(env, partner_id, raw_vals)
+        _log.info(
+            "res.partner customer updated",
+            extra={"model": "res.partner", "record_id": partner_id, "event": "update_customer"},
+        )
+        return JSONResponse({"result": True})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@route("/account/partner/{partner_id}/ar-ledger", methods=["GET"], auth="session")
+async def partner_ar_ledger(request: Request, partner_id: int) -> JSONResponse:
+    """FR-008/009/010/012, ADR-047: outstanding AR balance + posted invoice/
+    credit-note/payment history, computed on demand."""
+    env = request.app.state.env
+    from dodoo.addons.account.models.account_partner import get_ar_ledger
+
+    try:
+        result = await get_ar_ledger(env, partner_id)
+        _log.info(
+            "res.partner AR ledger read",
+            extra={"model": "res.partner", "record_id": partner_id, "event": "ar_ledger_read"},
+        )
+        return JSONResponse(result)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)

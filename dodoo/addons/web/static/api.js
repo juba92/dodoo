@@ -76,6 +76,21 @@ export async function post(url, body = {}) {
   return data.result;
 }
 
+/** PATCH JSON to an addon REST action route (e.g. /account/partner/1).
+ *  Returns the parsed `result`; throws Error(body.error) on a 4xx/5xx. */
+export async function patch(url, body = {}) {
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: _headers(),
+    body: JSON.stringify(body),
+  });
+  const data = await _json(res);
+  if (!res.ok || data.error) {
+    throw new Error(data.error ?? `HTTP ${res.status}`);
+  }
+  return data.result;
+}
+
 /** GET JSON from an addon REST route. */
 export async function get(url) {
   const res = await fetch(url, { headers: _headers() });

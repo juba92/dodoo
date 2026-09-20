@@ -25,6 +25,9 @@ _PARTNER_FK_COLUMNS = [
     "ALTER TABLE res_partner ADD COLUMN IF NOT EXISTS property_account_payable_id INTEGER",
     "ALTER TABLE res_partner ADD COLUMN IF NOT EXISTS property_payment_term_id INTEGER",
     "ALTER TABLE res_partner ADD COLUMN IF NOT EXISTS property_supplier_payment_term_id INTEGER",
+    # 009-customer-database, ADR-046: customer designation + per-customer currency override.
+    "ALTER TABLE res_partner ADD COLUMN IF NOT EXISTS customer_rank INTEGER DEFAULT 0",
+    "ALTER TABLE res_partner ADD COLUMN IF NOT EXISTS property_currency_id INTEGER",
 ]
 
 # Fiscal lock dates (FR-031, ADR-039) and realized/unrealized FX gain-loss accounts (FR-025,

@@ -35,11 +35,11 @@ does not block US2's own acceptance scenarios). Almost all work lands inside the
 
 ## Phase 1: Setup
 
-- [ ] T001 [P] File ADR docs from `plan.md`'s embedded ADR text: `docs/adr/046-customer-fields-base-account-split.md`,
+- [X] T001 [P] File ADR docs from `plan.md`'s embedded ADR text: `docs/adr/046-customer-fields-base-account-split.md`,
   `docs/adr/047-ar-ledger-on-demand-computed-endpoint.md`,
   `docs/adr/048-bespoke-customer-views-unlink-guard.md` (title/status/context/decision/consequences
   + one-line threat note each, per Principle V)
-- [ ] T002 [P] Confirm `pyproject.toml`'s ruff/pytest globs already cover the touched paths
+- [X] T002 [P] Confirm `pyproject.toml`'s ruff/pytest globs already cover the touched paths
   (`dodoo/addons/base`, `dodoo/addons/account`, `tests/accounting`) — no new addon, no config
   change expected; run `ruff check` as a sanity check
 
@@ -50,21 +50,25 @@ does not block US2's own acceptance scenarios). Almost all work lands inside the
 **⚠️ CRITICAL**: No user-story work begins until this phase is complete — every story needs the
 schema columns and the shared test fixture created here.
 
-- [ ] T003 [P] Add `street` (`Char(size=256)`), `city` (`Char(size=128)`), `state_id`
+- [X] T003 [P] Add `street` (`Char(size=256)`), `city` (`Char(size=128)`), `state_id`
   (`Many2one("res.country.state")`), `zip` (`Char(size=32)`), `country_id`
   (`Many2one("res.country")`) fields to `ResPartner` in `dodoo/addons/base/models/res_partner.py`
   (ADR-046, data-model.md)
-- [ ] T004 [P] Extend `_PARTNER_FK_COLUMNS` in `dodoo/addons/account/data/account_data.py` with
+- [X] T004 [P] Extend `_PARTNER_FK_COLUMNS` in `dodoo/addons/account/data/account_data.py` with
   `"ALTER TABLE res_partner ADD COLUMN IF NOT EXISTS customer_rank INTEGER DEFAULT 0"` and
   `"ALTER TABLE res_partner ADD COLUMN IF NOT EXISTS property_currency_id INTEGER"` (ADR-046,
   data-model.md)
-- [ ] T005 [P] Add an `idx_account_move_line_partner_account` composite index
-  `(partner_id, account_id)` on `account_move_line` to `dodoo/addons/account/data/indexes.py`'s
-  `PERF_INDEXES` list, wired through the existing `ensure_indexes(env, ddl)` call (PERF-001/002)
-- [ ] T006 [P] Add a `customer_id` fixture to `tests/accounting/conftest.py` (extends the existing
+- [X] T005 [P] Add two indexes to `dodoo/addons/account/data/indexes.py`'s `PERF_INDEXES` list
+  (PERF-001/002), wired through the existing `ensure_indexes(env, ddl)` call:
+  `idx_account_move_partner_type (partner_id, move_type)` on `account_move` (had no `partner_id`
+  index at all) and the partial index `idx_account_move_line_payment_term_move (move_id) WHERE
+  display_type = 'payment_term'` on `account_move_line` for the join — both arrived at via
+  `EXPLAIN ANALYZE` against a real benchmark (see docs/adr/047-*.md's Consequences; a plain
+  composite index on the second table measured *worse* than no index at all)
+- [X] T006 [P] Add a `customer_id` fixture to `tests/accounting/conftest.py` (extends the existing
   `partner_id` fixture: `customer_rank=1`, `street`/`city`/`zip`/`country_id` set,
   `property_payment_term_id` set) for use by all three stories' tests
-- [ ] T007 Extend `tests/accounting/test_migrations.py`: assert `res_partner.street`/`city`/
+- [X] T007 Extend `tests/accounting/test_migrations.py`: assert `res_partner.street`/`city`/
   `state_id`/`zip`/`country_id`/`customer_rank`/`property_currency_id` all exist after `account`
   module install (depends on T003, T004)
 
@@ -85,60 +89,60 @@ ledger stays reachable, confirm delete is blocked once it has a posted invoice.
 
 ### Tests for User Story 1
 
-- [ ] T008 [P] [US1] Integration test: `POST /account/partner` with all fields → `201`-equivalent
+- [X] T008 [P] [US1] Integration test: `POST /account/partner` with all fields → `201`-equivalent
   result, `customer_rank == 1`, fields persist on read-back (FR-001/007), in
   `tests/accounting/test_customer_database.py`
-- [ ] T009 [P] [US1] Integration test: `PATCH /account/partner/{id}` updates a field, confirmed on
+- [X] T009 [P] [US1] Integration test: `PATCH /account/partner/{id}` updates a field, confirmed on
   read-back (FR-002), in `tests/accounting/test_customer_database.py`
-- [ ] T010 [P] [US1] Integration test: `POST /account/partner` with no `name` → `400` naming the
+- [X] T010 [P] [US1] Integration test: `POST /account/partner` with no `name` → `400` naming the
   missing field (FR-001), in `tests/accounting/test_customer_database.py`
-- [ ] T011 [P] [US1] Integration test: `write(active=False)` hides the customer from
+- [X] T011 [P] [US1] Integration test: `write(active=False)` hides the customer from
   `search_read`'s default active-only domain but a direct `read` by id and its AR ledger still work
   (FR-005), in `tests/accounting/test_customer_database.py`
-- [ ] T012 [P] [US1] Integration test: `unlink` on a customer with a posted invoice/payment raises
+- [X] T012 [P] [US1] Integration test: `unlink` on a customer with a posted invoice/payment raises
   `DodooError`; `unlink` on a customer with no financial history succeeds (FR-006), in
   `tests/accounting/test_customer_database.py`
-- [ ] T013 [P] [US1] Integration test: `POST /account/partner` with no `property_currency_id`/
+- [X] T013 [P] [US1] Integration test: `POST /account/partner` with no `property_currency_id`/
   `property_payment_term_id` → both persist as `NULL` (defer-to-company-default, per research.md
   D5); a subsequent `PATCH` setting either explicitly persists the override (FR-011), in
   `tests/accounting/test_customer_database.py`
-- [ ] T014 [P] [US1] Integration test: creating a second customer with a `vat` already used by an
+- [X] T014 [P] [US1] Integration test: creating a second customer with a `vat` already used by an
   existing active customer succeeds (no hard block) — the duplicate-VAT check is UI-side advisory
   only, not a server-side rejection (Edge Cases), in `tests/accounting/test_customer_database.py`
 
 ### Implementation for User Story 1
 
-- [ ] T015 [US1] Add `CustomerCreate`/`CustomerUpdate` Pydantic models to
+- [X] T015 [US1] Add `CustomerCreate`/`CustomerUpdate` Pydantic models to
   `dodoo/addons/account/validators.py`: `extra="forbid"`, `name` required on `CustomerCreate`
   (optional on `CustomerUpdate`), `email` checked by a stdlib-`re` `field_validator` (no `EmailStr`
   — Technical Context, research.md) (SEC-001, FR-001/013, contracts/customer-database.md) (depends
   on T008–T014 existing as failing tests)
-- [ ] T016 [US1] Add a `ResPartner.create`/`write` classmethod override in
+- [X] T016 [US1] Add a `ResPartner.create`/`write` classmethod override in
   `dodoo/addons/base/models/res_partner.py` enforcing non-empty `name` regardless of entry path
   (generic `execute_kw` or the dedicated routes below), matching the existing "override
   create/write, validate, call super()" pattern (FR-001) (depends on T015)
-- [ ] T017 [US1] Add a `ResPartner.unlink` classmethod override in
+- [X] T017 [US1] Add a `ResPartner.unlink` classmethod override in
   `dodoo/addons/base/models/res_partner.py`: reject deletion (raise `DodooError`, same message
   shape as `AccountMove.unlink`) when any id is referenced by `account_move.partner_id` or
   `account_payment.partner_id`; otherwise delegate to `super().unlink()` (FR-006, ADR-048) (depends
   on T016)
-- [ ] T018 [US1] Add `POST /account/partner` and `PATCH /account/partner/{partner_id}` routes to
+- [X] T018 [US1] Add `POST /account/partner` and `PATCH /account/partner/{partner_id}` routes to
   `dodoo/addons/account/http/__init__.py` using `CustomerCreate`/`CustomerUpdate`; set
   `customer_rank=1` on create; structured `_log.info(...)` on create/write/unlink
   (`extra={"model": "res.partner", "record_id": ..., "event": ...}`, Principle IX) (depends on
   T015, T016, T017)
-- [ ] T019 [US1] Create `dodoo/addons/account/static/views/customer-form.js`: field inputs for
+- [X] T019 [US1] Create `dodoo/addons/account/static/views/customer-form.js`: field inputs for
   `name`/`email`/`phone`/`street`/`city`/`state_id`/`zip`/`country_id`/`vat`/
   `property_payment_term_id`/`property_currency_id`, Save/Discard/Delete/Archive actions calling
   the routes above, non-color-only validation errors; before save, if `vat` is set, a
   `search_read` for another active customer with the same `vat` shows a non-blocking warning
   banner (save still proceeds) (ADR-048, Edge Cases) (depends on T018)
-- [ ] T020 [US1] Register `#/accounting/customer/(new|\d+)` → `customer-form.js` in
+- [X] T020 [US1] Register `#/accounting/customer/(new|\d+)` → `customer-form.js` in
   `dodoo/addons/web/static/app.js`'s `_ROUTES`, ahead of the generic
   `#/accounting/model/([^/]+)` patterns (ADR-048) (depends on T019)
-- [ ] T021 [US1] Add a "Customers" item (`hash: '#/accounting/customers'`) to the existing
+- [X] T021 [US1] Add a "Customers" item (`hash: '#/accounting/customers'`) to the existing
   "Customers" section in `dodoo/addons/account/static/account-menu.js`
-- [ ] T022 [US1] Add new UI strings (customer form field labels, archive action, delete-blocked
+- [X] T022 [US1] Add new UI strings (customer form field labels, archive action, delete-blocked
   message, duplicate-VAT warning) to `dodoo/addons/account/data/i18n/{en,ar}.json` per
   `[[i18n-per-addon-catalogs]]`
 
@@ -156,24 +160,25 @@ by partial name, search by exact VAT, search with no matches.
 
 ### Tests for User Story 2
 
-- [ ] T023 [P] [US2] Integration test: partial-name search returns only matching customers
+- [X] T023 [P] [US2] Integration test: partial-name search returns only matching customers
   (FR-004), in `tests/accounting/test_customer_database.py`
-- [ ] T024 [P] [US2] Integration test: exact-VAT search returns the matching customer (FR-004), in
+- [X] T024 [P] [US2] Integration test: exact-VAT search returns the matching customer (FR-004), in
   `tests/accounting/test_customer_database.py`
-- [ ] T025 [P] [US2] Integration test: a search matching nothing returns an empty result, not an
+- [X] T025 [P] [US2] Integration test: a search matching nothing returns an empty result, not an
   error (Edge Cases), in `tests/accounting/test_customer_database.py`
 
 ### Implementation for User Story 2
 
-- [ ] T026 [US2] Create `dodoo/addons/account/static/views/customer-list.js`: fetch `res.partner`
-  rows with `customer_rank > 0` via `search_read`, client-side substring filter on `name`/`vat`
+- [X] T026 [US2] Create `dodoo/addons/account/static/views/customer-list.js`: fetch customers via
+  `GET /account/customers` (not the generic `search_read` — `customer_rank` isn't a declared
+  field, contracts/customer-database.md correction), client-side substring filter on `name`/`vat`
   (the `coa-list.js` pattern), New button, archived toggle, columns name/VAT/balance (balance
   column wired in US3, T037) (ADR-048, FR-003/004) (depends on T019 for row-click navigation
   target)
-- [ ] T027 [US2] Register `#/accounting/customers` → `customer-list.js` in
+- [X] T027 [US2] Register `#/accounting/customers` → `customer-list.js` in
   `dodoo/addons/web/static/app.js`'s `_ROUTES`, ahead of the generic
   `#/accounting/([^/]+)` fallback (depends on T026)
-- [ ] T028 [US2] Add search-box and empty-state UI strings to
+- [X] T028 [US2] Add search-box and empty-state UI strings to
   `dodoo/addons/account/data/i18n/{en,ar}.json`
 
 **Checkpoint**: the customer list is searchable and reachable from the menu.
@@ -193,39 +198,39 @@ listed.
 
 ### Tests for User Story 3
 
-- [ ] T029 [P] [US3] Integration test: two posted invoices + one partial payment → `balance` and
+- [X] T029 [P] [US3] Integration test: two posted invoices + one partial payment → `balance` and
   each line's `status` are correct (FR-008/009), in `tests/accounting/test_customer_database.py`
-- [ ] T030 [P] [US3] Integration test: brand-new customer → `{"balance": "0.00", "lines": []}`, not
+- [X] T030 [P] [US3] Integration test: brand-new customer → `{"balance": "0.00", "lines": []}`, not
   an error (FR-008, Edge Cases), in `tests/accounting/test_customer_database.py`
-- [ ] T031 [P] [US3] Integration test: a cancelled/voided invoice is excluded from `balance` but
+- [X] T031 [P] [US3] Integration test: a cancelled/voided invoice is excluded from `balance` but
   still appears with `status: "cancelled"` (FR-012, Edge Cases), in
   `tests/accounting/test_customer_database.py`
-- [ ] T032 [P] [US3] Unit test (no DB): `_status_and_balance(lines)` against a fixed list of
+- [X] T032 [P] [US3] Unit test (no DB): `_status_and_balance(lines)` against a fixed list of
   invoice/payment/cancellation fixture dicts — confirms balance summation and per-line
   paid/partial/open/cancelled classification in isolation (Principle II), in
   `tests/accounting/test_customer_database.py`
 
 ### Implementation for User Story 3
 
-- [ ] T033 [US3] Create `dodoo/addons/account/models/account_partner.py`: `get_ar_ledger(env,
+- [X] T033 [US3] Create `dodoo/addons/account/models/account_partner.py`: `get_ar_ledger(env,
   partner_id)` — module-level async function that unions posted `out_invoice`/`out_refund`/
   `out_receipt` move lines hitting an `asset_receivable`-type account with `account_payment` rows
   for the partner into one chronological list of plain dicts, then passes that list to a pure
   module-level `_status_and_balance(lines)` function (no DB access) that returns
   `(balance, lines_with_status)`, in the partner's `property_currency_id` (falling back to
   `res_company.currency_id`) (ADR-047, data-model.md) (depends on T003, T004, T006)
-- [ ] T034 [US3] Register the new `account_partner` module in
+- [X] T034 [US3] Register the new `account_partner` module in
   `dodoo/addons/account/models/__init__.py` (depends on T033)
-- [ ] T035 [US3] Add `GET /account/partner/{partner_id}/ar-ledger` to
+- [X] T035 [US3] Add `GET /account/partner/{partner_id}/ar-ledger` to
   `dodoo/addons/account/http/__init__.py`, `400 DodooError` for an unknown `partner_id`, structured
   `_log.info(...)` on read (Principle IX) (depends on T033, T034)
-- [ ] T036 [US3] Extend `customer-form.js` with a read-only AR-ledger panel (date/reference/amount/
+- [X] T036 [US3] Extend `customer-form.js` with a read-only AR-ledger panel (date/reference/amount/
   status table) calling the new route; each row links to `#/accounting/move/{move_id}` (ADR-047/048,
   FR-009/010) (depends on T019, T035)
-- [ ] T037 [US3] Wire `customer-list.js`'s balance column to the `ar-ledger` endpoint, fetched once
+- [X] T037 [US3] Wire `customer-list.js`'s balance column to the `ar-ledger` endpoint, fetched once
   per visible page rather than per keystroke (contracts/customer-database.md's behavior note)
   (depends on T026, T035)
-- [ ] T038 [US3] Add AR-ledger UI strings (paid/partial/open/cancelled status labels, panel
+- [X] T038 [US3] Add AR-ledger UI strings (paid/partial/open/cancelled status labels, panel
   heading) to `dodoo/addons/account/data/i18n/{en,ar}.json`
 
 **Checkpoint**: all three user stories are independently functional — the customer database
@@ -235,29 +240,29 @@ feature is complete end to end.
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T039 [P] Extend `tests/benchmarks/test_accounting_perf.py`: PERF-001 (10,000 customers,
+- [X] T039 [P] Extend `tests/benchmarks/test_accounting_perf.py`: PERF-001 (10,000 customers,
   list-fetch + client-side filter stays interactive), PERF-002 (5,000 AR-ledger lines for one
   customer, `GET .../ar-ledger` < 1s) (depends on T026, T033)
-- [ ] T040 Re-run `tests/benchmarks/test_accounting_perf.py`'s existing invoice/payment posting
+- [X] T040 Re-run `tests/benchmarks/test_accounting_perf.py`'s existing invoice/payment posting
   benchmarks; confirm no regression, since the AR balance is never written at posting time
   (PERF-003) (depends on T039)
-- [ ] T041 [P] Extend `tests/e2e/test_web_ui_a11y.py` for the customer list and form (including the
+- [X] T041 [P] Extend `tests/e2e/test_web_ui_a11y.py` for the customer list and form (including the
   AR-ledger panel): zero WCAG 2.1 AA contrast violations, full keyboard navigation, no color-only
   validation/status indicators (ACC-001…003) (depends on T019, T026, T036)
-- [ ] T042 Run the project's i18n coverage check against the new customer screens' strings, per
+- [X] T042 Run the project's i18n coverage check against the new customer screens' strings, per
   `[[i18n-per-addon-catalogs]]` — confirm Arabic mode shows no English fallback text (depends on
   T022, T028, T038)
-- [ ] T043 Security hardening pass: confirm SEC-001…004 — `CustomerCreate`/`CustomerUpdate`'s
+- [X] T043 Security hardening pass: confirm SEC-001…004 — `CustomerCreate`/`CustomerUpdate`'s
   `extra="forbid"` boundary rejects unexpected fields, every new route requires `auth="session"`,
   `get_ar_ledger` and the customer search use parameterized SQL only (no string-interpolated user
   input) (Principle III) (depends on T015, T018, T033, T035)
-- [ ] T044 [P] Documentation: verify `docs/adr/046…048-*.md` (T001) accurately reflect the final
+- [X] T044 [P] Documentation: verify `docs/adr/046…048-*.md` (T001) accurately reflect the final
   implementation, including the `get_ar_ledger`/`_status_and_balance` split (Principle V)
-- [ ] T045 Run `quickstart.md` end to end against a fresh install; confirm every numbered scenario
+- [X] T045 Run `quickstart.md` end to end against a fresh install; confirm every numbered scenario
   passes (depends on T001–T044)
-- [ ] T046 Run the full pre-existing `tests/accounting/` suite unchanged; confirm 100% pass (no
+- [X] T046 Run the full pre-existing `tests/accounting/` suite unchanged; confirm 100% pass (no
   regression) (depends on T045)
-- [ ] T047 Observability review (Principle IX): confirm customer `create`/`write`/`unlink` and the
+- [X] T047 Observability review (Principle IX): confirm customer `create`/`write`/`unlink` and the
   AR-ledger read each emit a structured `_log.info(...)` entry matching the existing
   `extra={"model": ..., "record_id": ..., "event": ...}` convention; add any missing call sites
   (depends on T018, T035)
