@@ -205,8 +205,9 @@ outstanding balance equals invoiced amount minus paid amount, with each invoice 
   latency (under 1 second) for a customer base of up to 10,000 records.
 - **PERF-002**: A customer's AR ledger view (balance plus history) MUST load within standard
   interactive latency (under 1 second) for a customer with up to 5,000 historical invoices/payments.
-- **PERF-003**: No known regressions permitted in existing invoice/payment posting performance as a
-  result of maintaining the derived AR balance; relevant benchmarks MUST run in CI.
+- **PERF-003**: No known regressions permitted in existing invoice/payment posting performance;
+  since the AR balance is computed on demand (not stored), it MUST NOT add any extra write or
+  lookup to the invoice/payment posting path itself. Relevant benchmarks MUST run in CI.
 
 ### Accessibility Requirements
 
