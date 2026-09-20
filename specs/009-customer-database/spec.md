@@ -8,6 +8,25 @@
 
 **Input**: User description: "Add a customer database to the Accounting module: manage customer master records (name, contact info, billing address, tax/VAT number, payment terms, currency) with create/edit/search/list views, each customer linked to their Accounts Receivable ledger showing outstanding balance and invoice/payment history, following Odoo's res.partner (customer_rank) model scoped to this module's existing partner infrastructure."
 
+## Clarifications
+
+### Session 2026-09-20
+
+- Q: The existing partner model has no field marking a partner as a "customer" yet — how should
+  that designation work? → A: Add an integer `customer_rank` field (default 0) directly on the
+  existing partner model, mirroring Odoo's `res.partner.customer_rank`; a partner counts as a
+  customer when `customer_rank > 0`. Chosen because the user's request explicitly names Odoo's
+  `customer_rank` model, it fits this module's existing flat-field style on the partner record
+  (email/phone/vat already live directly on it), and it avoids introducing a separate
+  customer-type table.
+- Q: Should the per-customer outstanding AR balance be a stored value kept in sync on every
+  posting/reconciliation, or computed on demand? → A: Computed on demand from posted Accounts
+  Receivable move lines at read time (not a stored/maintained column). Chosen to match this
+  module's existing ledger-query pattern (already used for account and partner-style balance
+  reporting) and Odoo's own non-stored `credit`/`debit` compute fields on `res.partner`, and to
+  avoid the extra complexity of keeping a stored balance column consistent across invoice, credit
+  note, payment, and reconciliation flows.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Maintain the customer master list (Priority: P1)
@@ -128,12 +147,13 @@ outstanding balance equals invoiced amount minus paid amount, with each invoice 
   hard deletion, so that historical financial documents referencing that customer remain valid.
 - **FR-006**: System MUST prevent hard deletion of a customer record that has any posted invoice,
   credit note, or payment associated with it; archiving MUST remain available in that case.
-- **FR-007**: System MUST designate a record as a "customer" using the same ranking mechanism the
-  existing partner infrastructure uses to distinguish customers from other partner types (e.g.
-  vendors), so a single partner record can be a customer, a vendor, or both without duplication.
-- **FR-008**: System MUST derive a customer's outstanding Accounts Receivable balance from that
-  customer's posted invoices, credit notes, and payments recorded against Accounts Receivable, and
-  MUST keep this balance current as new documents are posted or reconciled.
+- **FR-007**: System MUST designate a record as a "customer" via a customer-rank marker on the
+  existing partner record (mirroring Odoo's `customer_rank`), rather than a separate customer
+  entity, so a single partner record can be a customer, a vendor, or both without duplication.
+- **FR-008**: System MUST compute a customer's outstanding Accounts Receivable balance on demand
+  from that customer's posted invoices, credit notes, and payments recorded against Accounts
+  Receivable, so the figure is always current as of the moment it is viewed without requiring a
+  separately maintained stored balance.
 - **FR-009**: System MUST display, per customer, a chronological history of that customer's posted
   invoices, credit notes, and payments, each showing date, document reference, amount, and
   paid/partial/open status.
@@ -215,10 +235,9 @@ outstanding balance equals invoiced amount minus paid amount, with each invoice 
 
 ## Assumptions
 
-- The existing `res.partner`-equivalent partner infrastructure in this module (already carrying
-  name, company, email, phone, VAT) is extended with customer-specific fields and a customer
-  ranking marker, rather than introducing a new, parallel "customer" table — mirroring how Odoo
-  layers `customer_rank` and AR fields onto `res.partner` rather than creating a separate model.
+- The existing partner infrastructure in this module (already carrying name, company, email,
+  phone, VAT) is extended with customer-specific fields, per the resolved `customer_rank` approach
+  above, rather than introducing a new, parallel "customer" table.
 - Payment terms and currency are selected from the existing payment-terms and currency reference
   data already present in the accounting module (established in prior feature cycles); this feature
   does not define new payment-term or currency behavior.
