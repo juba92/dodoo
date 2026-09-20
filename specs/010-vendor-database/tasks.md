@@ -106,11 +106,17 @@ ledger stays reachable, confirm delete is blocked once it has a posted bill.
 - [ ] T013 [P] [US1] Integration test: creating a second vendor with a `vat` already used by an
   existing active vendor succeeds (no hard block) — duplicate-VAT is UI-side advisory only, not a
   server-side rejection (Edge Cases), in `tests/accounting/test_vendor_database.py`
-- [ ] T014 [P] [US1] Integration test: an existing customer (`customer_rank > 0`, via the
-  `customer_id` fixture) `PATCH`ed via `/account/vendor/{id}` with `supplier_rank: 1` → the same
-  partner id now satisfies both roles, appears in both `GET /account/customers` and
-  `GET /account/vendors`, with independent, correctly-scoped `ar-ledger`/`ap-ledger` responses
-  (FR-015, Edge Cases dual-role), in `tests/accounting/test_vendor_database.py`
+- [ ] T014 [P] [US1] Integration test: build an ad hoc customer partner inline
+  (`ResPartner.create` + `write_partner_properties(..., {"customer_rank": 1})` — **not** the
+  existing `customer_id` fixture, which silently fails to persist `customer_rank`/
+  `property_payment_term_id`/`property_currency_id` since `BaseModel.create` filters `vals` to
+  `k in cls._fields` and none of those three are declared `Field`s on `ResPartner`; a pre-existing
+  009 fixture bug no current test happens to exercise — confirmed by reading
+  `dodoo/core/models.py::BaseModel.create` and `tests/accounting/conftest.py:177-199` directly),
+  then `PATCH` it via `/account/vendor/{id}` with `supplier_rank: 1` → the same partner id now
+  satisfies both roles, appears in both `GET /account/customers` and `GET /account/vendors`, with
+  independent, correctly-scoped `ar-ledger`/`ap-ledger` responses (FR-014/015, Edge Cases
+  dual-role), in `tests/accounting/test_vendor_database.py`
 
 ### Implementation for User Story 1
 
